@@ -1,0 +1,3 @@
+[submodule "app/addons/frontends/default"]
+	path = app/addons/frontends/default
+	url = git@github.com:Oshkelosh/default_frontend.git
