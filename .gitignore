@@ -1,0 +1,68 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+*.egg
+.eggs/
+build/
+pip-log.txt
+pip-delete-this-directory.txt
+.dmypy.json
+
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Testing & static analysis
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+.mypy_cache/
+.ruff_cache/
+.hypothesis/
+
+# IDE & editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Environment & secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Local runtime data (SQLite, media uploads, addon restart flags)
+data/
+
+# Local databases outside data/
+*.db
+*.sqlite3
+
+# Cloudflare
+.wrangler/
+
+# Node / frontend tooling
+node_modules/
+.svelte-kit/
+.vite/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Addon implementations live under category subdirs; see app/addons/*/.gitignore
+# (category README, base.py, __init__.py stay tracked)

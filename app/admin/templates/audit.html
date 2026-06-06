@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+
+{% block title %}Audit Log{% endblock %}
+
+{% block content %}
+<h2 style="margin-bottom:20px;">Audit Log</h2>
+
+{% if entries %}
+<table class="table">
+  <thead>
+    <tr>
+      <th>When</th>
+      <th>Actor</th>
+      <th>Action</th>
+      <th>Resource</th>
+      <th>IP</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in entries %}
+    <tr>
+      <td>{{ row.created_at }}</td>
+      <td>{{ row.actor_user_id or '—' }}</td>
+      <td>{{ row.action }}</td>
+      <td>{{ row.resource_type }} #{{ row.resource_id or '—' }}</td>
+      <td>{{ row.ip_address or '—' }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% if total_pages > 1 %}
+<nav style="margin-top:16px;display:flex;gap:8px;align-items:center;">
+  {% if page > 1 %}
+  <a href="/admin/audit?page={{ page - 1 }}" class="btn btn--secondary btn--sm">Previous</a>
+  {% endif %}
+  <span style="color:var(--clr-text-muted);">Page {{ page }} of {{ total_pages }}</span>
+  {% if page < total_pages %}
+  <a href="/admin/audit?page={{ page + 1 }}" class="btn btn--secondary btn--sm">Next</a>
+  {% endif %}
+</nav>
+{% endif %}
+{% else %}
+<p style="color:var(--clr-text-muted);">No audit entries yet.</p>
+{% endif %}
+{% endblock %}

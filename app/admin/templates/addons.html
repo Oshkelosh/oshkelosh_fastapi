@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+
+{% block title %}{{ page_heading }}{% endblock %}
+
+{% block content %}
+<h2 style="margin-bottom:20px;">{{ page_heading }}</h2>
+
+<p style="color:var(--clr-text-muted);margin-bottom:24px;">
+  {{ page_description }}
+</p>
+
+{% if addons %}
+<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px;">
+  {% for addon in addons %}
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:12px;">
+      <div>
+        <h3 style="margin:0;font-size:16px;">{{ addon.addon_name }}</h3>
+        <p style="margin:4px 0 0;font-size:13px;color:var(--clr-text-muted);">
+          {{ addon.addon_description }}
+        </p>
+        <p style="margin:8px 0 0;font-size:12px;color:var(--clr-text-muted);">
+          v{{ addon.version }}
+        </p>
+      </div>
+      {% if addon.is_enabled %}
+        <span class="badge badge--success">Enabled</span>
+      {% else %}
+        <span class="badge badge--default">Disabled</span>
+      {% endif %}
+    </div>
+
+    <div style="display:flex;gap:8px;">
+      <a href="{{ addon.configure_url }}" class="btn btn--primary btn--sm">
+        {% if addon.has_config %}Configure{% else %}Setup{% endif %}
+      </a>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="card" style="text-align:center;padding:40px;">
+  <p style="color:var(--clr-text-muted);">No {{ page_heading|lower }} installed.</p>
+</div>
+{% endif %}
+{% endblock %}

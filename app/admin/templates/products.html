@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+
+{% block title %}Products{% endblock %}
+
+{% block content %}
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+  <h2 style="margin:0;">Products</h2>
+  <a href="/admin/products/new" class="btn btn--primary">+ New Product</a>
+</div>
+
+{% if products %}
+<table class="table">
+  <thead>
+    <tr>
+      <th>Name</th>
+      <th>SKU</th>
+      <th>Price</th>
+      <th>Inventory</th>
+      <th>Status</th>
+      <th>Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for product in products %}
+    <tr>
+      <td>
+        <a href="/admin/products/{{ product.id }}">{{ product.name }}</a>
+      </td>
+      <td>{{ product.sku or '—' }}</td>
+      <td>${{ "{:,.2f}".format(product.price_cents / 100) }}</td>
+      <td>{{ product.inventory_quantity }}</td>
+      <td>
+        {% if product.status == 'published' %}
+          <span class="badge badge--success">Published</span>
+        {% elif product.status == 'draft' %}
+          <span class="badge badge--default">Draft</span>
+        {% else %}
+          <span class="badge badge--warning">Archived</span>
+        {% endif %}
+      </td>
+      <td>
+        <a href="/admin/products/{{ product.id }}" class="btn btn--secondary btn--sm">Edit</a>
+        <form action="/admin/products/{{ product.id }}/delete" method="POST" style="display:inline;" onsubmit="return confirm('Delete this product?')">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <button type="submit" class="btn btn--danger btn--sm">Delete</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<div class="card" style="text-align:center;padding:40px;">
+  <p style="color:var(--clr-text-muted);">No products yet. <a href="/admin/products/new">Create your first product</a>.</p>
+</div>
+{% endif %}
+{% endblock %}

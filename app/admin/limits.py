@@ -1,0 +1,12 @@
+"""Max lengths for admin form fields (aligned with SQLModel column sizes)."""
+
+NAME_LEN = 255
+EMAIL_LEN = 255
+SKU_LEN = 100
+COLOR_LEN = 32
+URL_LEN = 2048
+TEXT_LEN = 10_000
+TAGS_JSON_LEN = 2000
+PASSWORD_LEN = 128
+CONFIG_JSON_LEN = 50_000
+ADDON_INSTALL_URL_LEN = 2048

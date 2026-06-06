@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+
+{% block title %}Site Settings{% endblock %}
+
+{% block content %}
+<h2 style="margin-bottom:20px;">Site Settings</h2>
+
+<p style="color:var(--clr-text-muted);margin-bottom:24px;">
+  Site-wide branding used by the storefront, admin header, and order emails.
+  Choose and configure the active storefront under <a href="/admin/frontends">Frontends</a>.
+</p>
+
+<form method="POST" action="/admin/settings">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+
+  <div class="card" style="margin-bottom:16px;">
+    <div class="form-group">
+      <label class="form-label" for="store_name">Store name</label>
+      <input type="text" id="store_name" name="store_name" class="form-input"
+             value="{{ site.store_name }}" required />
+    </div>
+
+    <div class="form-group">
+      <label class="form-label" for="logo_url">Logo URL</label>
+      <input type="url" id="logo_url" name="logo_url" class="form-input"
+             value="{{ site.logo_url or '' }}" placeholder="https://..." />
+    </div>
+
+    <div class="form-group">
+      <label class="form-label" for="favicon_url">Favicon URL</label>
+      <input type="url" id="favicon_url" name="favicon_url" class="form-input"
+             value="{{ site.favicon_url or '' }}" />
+    </div>
+
+    <div class="form-group">
+      <label class="form-label" for="meta_description">Meta description</label>
+      <textarea id="meta_description" name="meta_description" class="form-textarea" rows="2">{{ site.meta_description or '' }}</textarea>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label" for="support_email">Support email</label>
+      <input type="email" id="support_email" name="support_email" class="form-input"
+             value="{{ site.support_email or '' }}" />
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:16px;">
+    <h3 style="margin-top:0;">Theme</h3>
+    <div class="form-group">
+      <label class="form-label" for="primary_color">Primary color</label>
+      <input type="color" id="primary_color" name="primary_color"
+             value="{{ site.primary_color }}" />
+    </div>
+    <div class="form-group">
+      <label class="form-label" for="secondary_color">Secondary color</label>
+      <input type="color" id="secondary_color" name="secondary_color"
+             value="{{ site.secondary_color }}" />
+    </div>
+    <div class="form-group">
+      <label class="form-label" for="font_family">Font family</label>
+      <input type="text" id="font_family" name="font_family" class="form-input"
+             value="{{ site.font_family }}" />
+    </div>
+  </div>
+
+  <button type="submit" class="btn btn--primary">Save site settings</button>
+</form>
+{% endblock %}

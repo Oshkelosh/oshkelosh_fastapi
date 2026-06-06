@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+
+{% block title %}Orders{% endblock %}
+
+{% block content %}
+<h2 style="margin-bottom:20px;">Orders</h2>
+
+<div style="margin-bottom:16px;display:flex;gap:8px;align-items:center;">
+  <form method="GET" style="display:inline;">
+    <select name="status" class="form-select" style="width:auto;">
+      <option value="">All Statuses</option>
+      <option value="pending" {{ 'selected' if status == 'pending' else '' }}>Pending</option>
+      <option value="paid" {{ 'selected' if status == 'paid' else '' }}>Paid</option>
+      <option value="shipped" {{ 'selected' if status == 'shipped' else '' }}>Shipped</option>
+      <option value="delivered" {{ 'selected' if status == 'delivered' else '' }}>Delivered</option>
+      <option value="cancelled" {{ 'selected' if status == 'cancelled' else '' }}>Cancelled</option>
+    </select>
+    <button type="submit" class="btn btn--secondary">Filter</button>
+  </form>
+</div>
+
+{% if orders %}
+<table class="table">
+  <thead>
+    <tr>
+      <th>Order ID</th>
+      <th>Date</th>
+      <th>Total</th>
+      <th>Status</th>
+      <th>Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for order in orders %}
+    <tr>
+      <td>#{{ order.id }}</td>
+      <td>{{ order.created_at.strftime('%Y-%m-%d') if order.created_at else '' }}</td>
+      <td>${{ "{:,.2f}".format(order.total_cents / 100) }}</td>
+      <td>
+        {% if order.status == 'pending' %}
+          <span class="badge badge--warning">Pending</span>
+        {% elif order.status == 'paid' %}
+          <span class="badge badge--info">Paid</span>
+        {% elif order.status == 'shipped' %}
+          <span class="badge badge--default">Shipped</span>
+        {% elif order.status == 'delivered' %}
+          <span class="badge badge--success">Delivered</span>
+        {% else %}
+          <span class="badge badge--danger">Cancelled</span>
+        {% endif %}
+      </td>
+      <td>
+        <a href="/admin/orders/{{ order.id }}" class="btn btn--secondary btn--sm">View</a>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<div class="card" style="text-align:center;padding:40px;">
+  <p style="color:var(--clr-text-muted);">No orders found.</p>
+</div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+
+{% block title %}Configure {{ addon_name }}{% endblock %}
+
+{% block content %}
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+  <h2 style="margin:0;">Configure {{ addon_name }}</h2>
+  <a href="{{ list_path }}" class="btn btn--secondary">← Back to {{ list_label }}</a>
+</div>
+
+<form method="POST" action="/admin/addons/{{ addon_id }}/configure">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <div class="card">
+    <div class="form-group">
+      <label class="form-label">Enabled</label>
+      <label class="toggle" style="margin-top:4px;">
+        <input type="checkbox" name="is_enabled" {% if is_enabled %}checked{% endif %}>
+        <span class="toggle__slider"></span>
+      </label>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Configuration (JSON)</label>
+      <textarea name="config" class="form-textarea" rows="12"
+                style="font-family:var(--font-mono);font-size:13px;">{{ config_json }}</textarea>
+      <small style="color:var(--clr-text-muted);">Edit the JSON configuration for this addon.</small>
+    </div>
+  </div>
+
+  <div style="margin-top:16px;display:flex;gap:8px;">
+    <button type="submit" class="btn btn--primary">Save Configuration</button>
+    <a href="{{ list_path }}" class="btn btn--secondary">Cancel</a>
+  </div>
+</form>
+{% endblock %}

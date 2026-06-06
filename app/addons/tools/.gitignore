@@ -1,0 +1,2 @@
+# Ignore addon packages (e.g. analytics/). Category files in this directory stay tracked.
+*/

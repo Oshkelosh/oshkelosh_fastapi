@@ -1,0 +1,224 @@
+"""Tests for addon ZIP/URL installation."""
+
+from __future__ import annotations
+
+import io
+import json
+import zipfile
+from pathlib import Path
+from unittest.mock import patch
+
+import pytest
+
+from app.config import Settings, reload_settings
+from app.core.exceptions import ValidationError
+from app.services import addon_install
+
+
+MANIFEST = {
+    "addon_id": "test_install",
+    "addon_name": "Test Install",
+    "addon_description": "Test addon for install",
+    "category": "tool",
+    "version": "1.0.0",
+    "min_oshkelosh_version": "0.1.0",
+    "python_requires": ">=3.11",
+}
+
+ADDON_PY = '''
+from pydantic import BaseModel
+
+from app.addons.tools.base import ToolAddon
+
+
+class TestInstallConfig(BaseModel):
+    pass
+
+
+class TestInstallAddon(ToolAddon):
+    addon_id = "test_install"
+    addon_name = "Test Install"
+    addon_description = "Test addon for install"
+    version = "1.0.0"
+
+    @classmethod
+    def config_schema(cls):
+        return TestInstallConfig
+
+    async def initialize(self, config: dict) -> None:
+        pass
+
+    async def shutdown(self) -> None:
+        pass
+'''
+
+
+def _build_addon_zip(
+    *,
+    manifest: dict | None = None,
+    nested: bool = True,
+    extra_files: dict[str, bytes] | None = None,
+) -> bytes:
+    manifest = manifest or MANIFEST
+    category = manifest["category"]
+    addon_id = manifest["addon_id"]
+    prefix = f"{category}/{addon_id}/" if nested else ""
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        zf.writestr(f"{prefix}oshkelosh-addon.json", json.dumps(manifest))
+        zf.writestr(f"{prefix}__init__.py", "")
+        zf.writestr(f"{prefix}addon.py", ADDON_PY)
+        for path, content in (extra_files or {}).items():
+            zf.writestr(path, content)
+    return buf.getvalue()
+
+
+@pytest.fixture
+def install_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    root = tmp_path / "addons"
+    root.mkdir()
+    monkeypatch.setattr(addon_install, "_ADDONS_ROOT", root)
+    monkeypatch.setattr(addon_install, "get_addons_root", lambda: root)
+    return root
+
+
+@pytest.fixture
+def install_settings(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Settings:
+    reload_settings()
+    cfg = Settings(
+        app_version="0.1.0",
+        addon_install_restart_flag_file=str(tmp_path / "restart.flag"),
+        addon_install_restart_flag_format="json",
+    )
+    monkeypatch.setattr(addon_install, "settings", cfg)
+    return cfg
+
+
+def test_install_valid_zip(install_root: Path, install_settings: Settings):
+    data = _build_addon_zip()
+    result = addon_install.install_addon_archive(data, cfg=install_settings)
+
+    target = install_root / "tool" / "test_install"
+    assert target.is_dir()
+    assert (target / "addon.py").is_file()
+    assert result.addon_id == "test_install"
+    assert result.restart_required is True
+    assert result.restart_flag_written is True
+    assert install_settings.addon_install_restart_flag_path is not None
+    flag = json.loads(install_settings.addon_install_restart_flag_path.read_text())
+    assert flag["addon_id"] == "test_install"
+    assert flag["host_version"] == "0.1.0"
+
+
+def test_reject_zip_slip(install_root: Path, install_settings: Settings):
+    data = _build_addon_zip(
+        extra_files={"../evil.txt": b"bad"},
+    )
+    with pytest.raises(ValidationError, match="Unsafe path"):
+        addon_install.install_addon_archive(data, cfg=install_settings)
+
+
+def test_reject_incompatible_host_version(install_root: Path, install_settings: Settings):
+    data = _build_addon_zip(
+        manifest={**MANIFEST, "min_oshkelosh_version": "99.0.0"},
+    )
+    with pytest.raises(ValidationError, match="requires Oshkelosh"):
+        addon_install.install_addon_archive(data, cfg=install_settings)
+
+
+def test_reject_duplicate_without_force(install_root: Path, install_settings: Settings):
+    data = _build_addon_zip()
+    addon_install.install_addon_archive(data, cfg=install_settings)
+    with pytest.raises(ValidationError, match="already exists"):
+        addon_install.install_addon_archive(data, cfg=install_settings)
+
+
+def test_install_with_force_replaces(install_root: Path, install_settings: Settings):
+    data = _build_addon_zip()
+    addon_install.install_addon_archive(data, cfg=install_settings)
+    result = addon_install.install_addon_archive(data, force=True, cfg=install_settings)
+    assert result.addon_id == "test_install"
+    backups = list((install_root / ".backups").iterdir())
+    assert len(backups) == 1
+
+
+def test_reject_manifest_category_mismatch(install_root: Path, install_settings: Settings):
+    data = _build_addon_zip(manifest={**MANIFEST, "category": "payment"})
+    with pytest.raises(ValidationError, match="does not match"):
+        addon_install.install_addon_archive(data, cfg=install_settings)
+
+
+def test_install_root_layout_zip(install_root: Path, install_settings: Settings):
+    data = _build_addon_zip(nested=False)
+    result = addon_install.install_addon_archive(data, cfg=install_settings)
+    assert result.category == "tool"
+    assert (install_root / "tool" / "test_install" / "addon.py").is_file()
+
+
+def test_restart_flag_skipped_when_unconfigured(install_root: Path, monkeypatch: pytest.MonkeyPatch):
+    cfg = Settings(app_version="0.1.0", addon_install_restart_flag_file="")
+    monkeypatch.setattr(addon_install, "settings", cfg)
+    data = _build_addon_zip()
+    result = addon_install.install_addon_archive(data, cfg=cfg)
+    assert result.restart_flag_written is False
+
+
+def test_restart_flag_default_path(install_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    flag_path = tmp_path / "data" / "restart.flag"
+    cfg = Settings(app_version="0.1.0", addon_install_restart_flag_file=str(flag_path))
+    monkeypatch.setattr(addon_install, "settings", cfg)
+    data = _build_addon_zip()
+    result = addon_install.install_addon_archive(data, cfg=cfg)
+    assert result.restart_flag_written is True
+    assert flag_path.is_file()
+    flag = json.loads(flag_path.read_text())
+    assert flag["addon_id"] == "test_install"
+
+
+def test_validate_install_url_rejects_http(install_settings: Settings):
+    with pytest.raises(ValidationError, match="HTTPS"):
+        addon_install.validate_install_url("http://example.com/addon.zip", install_settings)
+
+
+@pytest.mark.asyncio
+async def test_install_from_url(install_root: Path, install_settings: Settings):
+    zip_bytes = _build_addon_zip()
+
+    class FakeResponse:
+        headers = {"content-type": "application/zip"}
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return None
+
+        def raise_for_status(self):
+            return None
+
+        async def aiter_bytes(self, chunk_size: int):
+            yield zip_bytes
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return None
+
+        def stream(self, method: str, url: str):
+            assert method == "GET"
+            return FakeResponse()
+
+    with patch("app.services.addon_install.httpx.AsyncClient", FakeClient):
+        result = await addon_install.install_addon_from_url(
+            "https://example.com/addons/test.zip",
+            cfg=install_settings,
+        )
+
+    assert result.addon_id == "test_install"
+    assert (install_root / "tool" / "test_install").is_dir()

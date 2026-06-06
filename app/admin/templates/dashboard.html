@@ -1,0 +1,145 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1 class="page-header__title">Dashboard</h1>
+    <p class="page-header__subtitle">Welcome back, {{ user.full_name or user.email }}. Here's your store overview.</p>
+</div>
+
+<!-- Stats cards -->
+<div class="stats-grid">
+    <div class="stat-card">
+        <div class="stat-card__metric">{{ total_products }}</div>
+        <div class="stat-card__label">Total Products</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-card__metric">{{ total_orders }}</div>
+        <div class="stat-card__label">Total Orders</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-card__metric">${{ "{:,.2f}".format(total_revenue_cents / 100) }}</div>
+        <div class="stat-card__label">Total Revenue</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-card__metric">{{ pending_orders }}</div>
+        <div class="stat-card__label">Pending Orders</div>
+    </div>
+</div>
+
+<!-- Install addon -->
+<div class="card" style="margin-bottom:24px;">
+    <div class="card__header">
+        <h2 class="card__title">Install addon</h2>
+    </div>
+    <div class="card__body">
+        <p style="color:var(--clr-text-muted);margin:0 0 16px;font-size:14px;">
+            Upload a distributable addon ZIP or install from an HTTPS URL. Packages are written to
+            <code>app/addons/</code> and appear after a <strong>full server restart</strong>.
+            In local dev, <code>uvicorn app.main:app --reload</code> may reload automatically when files change.
+            {% if restart_flag_enabled %}
+            When configured, a restart flag is written to <code>{{ restart_flag_path }}</code> for your process manager or deploy pipeline.
+            {% endif %}
+            Packaging format is documented in <code>app/addons/README.md</code>.
+        </p>
+
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:24px;">
+            <form method="POST" action="/admin/addons/install" enctype="multipart/form-data">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <h3 style="margin:0 0 12px;font-size:15px;">Upload ZIP</h3>
+                <div class="form-group">
+                    <label class="form-label" for="addon_zip">Addon archive (.zip)</label>
+                    <input type="file" id="addon_zip" name="archive" accept=".zip,application/zip" required class="form-input">
+                </div>
+                <label style="display:flex;align-items:center;gap:8px;margin-bottom:12px;font-size:14px;">
+                    <input type="checkbox" name="force" value="on">
+                    Replace if exists
+                </label>
+                <button type="submit" class="btn btn--primary btn--sm">Install from ZIP</button>
+            </form>
+
+            <form method="POST" action="/admin/addons/install/url">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <h3 style="margin:0 0 12px;font-size:15px;">Install from URL</h3>
+                <div class="form-group">
+                    <label class="form-label" for="addon_url">HTTPS URL to .zip</label>
+                    <input type="url" id="addon_url" name="url" required class="form-input"
+                           placeholder="https://example.com/addons/my-addon.zip">
+                </div>
+                <label style="display:flex;align-items:center;gap:8px;margin-bottom:12px;font-size:14px;">
+                    <input type="checkbox" name="force" value="on">
+                    Replace if exists
+                </label>
+                <button type="submit" class="btn btn--primary btn--sm">Install from URL</button>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Recent orders -->
+<div class="card">
+    <div class="card__header">
+        <h2 class="card__title">Recent Orders</h2>
+        <a href="/admin/orders" class="card__action">View all</a>
+    </div>
+    <div class="card__body">
+        {% if recent_orders %}
+        <table class="table table--striped">
+            <thead>
+                <tr>
+                    <th class="table__cell--left">Order</th>
+                    <th>Status</th>
+                    <th>Amount</th>
+                    <th>Product</th>
+                    <th>Date</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for order in recent_orders %}
+                <tr>
+                    <td class="table__cell--left">
+                        <a href="/admin/orders/{{ order.id }}" class="link">
+                            #{{ order.id }}
+                        </a>
+                    </td>
+                    <td>
+                        <span class="badge badge--{{ order.status }}">{{ order.status|title }}</span>
+                    </td>
+                    <td>${{ "{:,.2f}".format(order.total_cents / 100) }}</td>
+                    <td>{{ order.product_name }}</td>
+                    <td class="table__cell--right">{{ order.created_at[:10] }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <div class="empty-state">
+            <p>No orders yet.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Chart placeholder -->
+<div class="card">
+    <div class="card__header">
+        <h2 class="card__title">Revenue Trend</h2>
+    </div>
+    <div class="card__body">
+        <div class="chart-placeholder">
+            <svg viewBox="0 0 800 200" class="chart-placeholder__svg">
+                <line x1="60" y1="180" x2="780" y2="180" stroke="currentColor" stroke-width="1" opacity="0.2"/>
+                <line x1="60" y1="40" x2="60" y2="180" stroke="currentColor" stroke-width="1" opacity="0.2"/>
+                <text x="70" y="45" font-size="12" fill="currentColor" opacity="0.5">Revenue ($)</text>
+                <text x="70" y="195" font-size="12" fill="currentColor" opacity="0.5">Date</text>
+                <path d="M80 150 Q150 120, 220 100 Q290 80, 360 90 Q430 100, 500 60 Q570 20, 640 40 Q710 60, 760 30"
+                      fill="none" stroke="oklch(0.65 0.18 260)" stroke-width="3" stroke-linecap="round"/>
+                <path d="M80 150 Q150 120, 220 100 Q290 80, 360 90 Q430 100, 500 60 Q570 20, 640 40 Q710 60, 760 30 L760 180 L80 180 Z"
+                      fill="oklch(0.65 0.18 260 / 0.1)"/>
+            </svg>
+        </div>
+        <p class="chart-placeholder__caption">Revenue over the last 30 days (placeholder — integrate a charting library for real data).</p>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,2 @@
+# Ignore addon packages (e.g. email/). Category files in this directory stay tracked.
+*/

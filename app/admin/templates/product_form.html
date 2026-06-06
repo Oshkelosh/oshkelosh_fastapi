@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+
+{% block title %}{{ 'Edit Product' if product else 'New Product' }}{% endblock %}
+
+{% block content %}
+<h2 style="margin-bottom:20px;">{{ 'Edit Product' if product else 'New Product' }}</h2>
+
+<form method="POST" action="{{ action_url }}">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+    <div class="form-group" style="grid-column:1 / -1;">
+      <label class="form-label">Product Name *</label>
+      <input type="text" name="name" class="form-input" required
+             value="{{ product.name if product else '' }}">
+    </div>
+
+    <div class="form-group" style="grid-column:1 / -1;">
+      <label class="form-label">Description</label>
+      <textarea name="description" class="form-textarea" rows="4">{{ product.description if product else '' }}</textarea>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Price (cents) *</label>
+      <input type="number" name="price_cents" class="form-input" required min="0"
+             value="{{ product.price_cents if product else '' }}">
+      <small style="color:var(--clr-text-muted);">e.g. 1999 = $19.99</small>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Compare-at Price (cents)</label>
+      <input type="number" name="compare_at_price_cents" class="form-input" min="0"
+             value="{{ product.compare_at_price_cents if product else '' }}">
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">SKU</label>
+      <input type="text" name="sku" class="form-input" maxlength="100"
+             value="{{ product.sku if product else '' }}">
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Inventory Quantity</label>
+      <input type="number" name="inventory_quantity" class="form-input" min="0"
+             value="{{ product.inventory_quantity if product else '0' }}">
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Status</label>
+      <select name="status" class="form-select">
+        <option value="draft" {{ 'selected' if product and product.status == 'draft' else '' }}>Draft</option>
+        <option value="published" {{ 'selected' if product and product.status == 'published' else '' }}>Published</option>
+        <option value="archived" {{ 'selected' if product and product.status == 'archived' else '' }}>Archived</option>
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Category</label>
+      <input type="text" name="category" class="form-input" maxlength="100"
+             value="{{ product.category if product else '' }}">
+    </div>
+
+    <div class="form-group" style="grid-column:1 / -1;">
+      <label class="form-label">Tags (comma-separated)</label>
+      <input type="text" name="tags" class="form-input"
+             value="{{ ', '.join(product.tags) if product and product.tags else '' }}">
+      <small style="color:var(--clr-text-muted);">e.g. tshirt, summer, bestseller</small>
+    </div>
+  </div>
+
+  <div style="margin-top:24px;display:flex;gap:8px;">
+    <button type="submit" class="btn btn--primary">Save Product</button>
+    <a href="/admin/products" class="btn btn--secondary">Cancel</a>
+  </div>
+</form>
+{% endblock %}

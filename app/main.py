@@ -1,0 +1,275 @@
+"""
+FastAPI application factory for Oshkelosh.
+
+Sets up the lifespan (startup / shutdown), mounts the API, admin,
+and SPA static files, and registers middleware.
+"""
+
+import logging
+import sys
+from contextlib import asynccontextmanager
+
+from fastapi import APIRouter, FastAPI
+from fastapi.staticfiles import StaticFiles
+from loguru import logger
+
+from app.config import settings, validate_backends
+from app.core.middleware import register_middleware
+
+# ------------------------------------------------------------------
+# Loguru configuration (overrides default logging)
+# ------------------------------------------------------------------
+
+def _configure_logging() -> None:
+    """Configure loguru as the primary logging backend."""
+    # Remove default handler
+    logger.remove()
+    # Console handler
+    logger.add(
+        sys.stderr,
+        level=settings.log_level,
+        format=(
+            "<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | "
+            "<level>{level: <8}</level> | "
+            "<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - "
+            "<level>{message}</level>"
+        ),
+        colorize=True,
+    )
+    # Bind loguru to the standard ``logging`` module so third-party
+    # libraries can still emit logs.
+    class LoguruHandler(logging.Handler):
+        def emit(self, record: logging.LogRecord) -> None:
+            logger_opt = logger.opt(depth=1, exception=record.exc_info)
+            if record.levelno >= logging.ERROR:
+                logger_opt.error(record.getMessage())
+            elif record.levelno >= logging.WARNING:
+                logger_opt.warning(record.getMessage())
+            elif record.levelno >= logging.INFO:
+                logger_opt.info(record.getMessage())
+            else:
+                logger_opt.debug(record.getMessage())
+
+    logging.getLogger().addHandler(LoguruHandler())
+
+
+# ------------------------------------------------------------------
+# Lifespan
+# ------------------------------------------------------------------
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Application lifecycle: initialise on startup, clean up on shutdown."""
+    # Startup
+    _configure_logging()
+    logger.info("🚀 Starting {} (env={})", settings.app_name, settings.app_env)
+
+    from app.db.base import auto_create_tables_async
+    from app.db.connection import get_d1
+    from app.storage import get_storage
+
+    validate_backends(settings)
+    from app.config import _DEFAULT_JWT_SECRET
+
+    if settings.jwt_secret_key == _DEFAULT_JWT_SECRET and settings.app_env != "production":
+        logger.warning(
+            "JWT_SECRET_KEY is the default placeholder — set a strong secret before production"
+        )
+    logger.info(
+        "Backends: database={} storage={} profile={}",
+        settings.database_backend,
+        settings.storage_backend,
+        settings.deployment_profile,
+    )
+
+    await auto_create_tables_async()
+    from app.db.migrations import apply_migrations_async
+
+    await apply_migrations_async()
+    if settings.database_backend == "d1_http":
+        get_d1()
+    get_storage()
+
+    from app.addons import addon_registry
+    from app.db.connection import session_scope
+    from app.services.bootstrap import has_admin_user
+
+    async with session_scope() as session:
+        app.state.needs_setup = not await has_admin_user(session)
+        await addon_registry.startup(session)
+
+    from app.services.addons import get_frontend_addon
+
+    frontend = get_frontend_addon()
+    if frontend is not None:
+        logger.info(
+            "Active storefront frontend: '{}' (dynamic handler at /)",
+            frontend.addon_id,
+        )
+    else:
+        logger.info("No storefront frontend enabled (dynamic handler at /)")
+
+    if app.state.needs_setup:
+        logger.info("No admin user found — visit /setup to create the first account")
+    logger.info("Application ready")
+
+    yield  # <-- app runs while this is open
+
+    # Shutdown
+    logger.info("🛑 Shutting down {} ...", settings.app_name)
+    from app.addons import addon_registry as _addon_registry
+
+    await _addon_registry.shutdown()
+    from app.db.connection import close_all_connections
+    await close_all_connections()
+    logger.info("👋 Goodbye")
+
+
+# ------------------------------------------------------------------
+# App factory
+# ------------------------------------------------------------------
+
+def create_app() -> FastAPI:
+    """Build and configure the FastAPI application.
+
+    Returns the fully configured ``FastAPI`` instance ready to be
+    served by an ASGI server (e.g. Uvicorn).
+    """
+    from app.openapi import OPENAPI_DESCRIPTION, OPENAPI_TAGS
+
+    openapi_description = OPENAPI_DESCRIPTION
+    openapi_tags = OPENAPI_TAGS
+
+    app = FastAPI(
+        title=settings.app_name,
+        description=openapi_description,
+        version="0.1.0",
+        openapi_tags=openapi_tags,
+        docs_url="/docs" if settings.debug else None,
+        redoc_url="/redoc" if settings.debug else None,
+        lifespan=lifespan,
+    )
+
+    # Middleware (CORS, request-ID, exception handling, timing)
+    register_middleware(app)
+    from app.core.rate_limit import register_rate_limiting
+
+    register_rate_limiting(app)
+
+    # ------------------------------------------------------------------
+    # API routers  –  /api/v1/*
+    # ------------------------------------------------------------------
+    from app.api.v1.router import router as api_v1_router
+    app.include_router(api_v1_router, prefix=settings.api_v1_prefix)
+
+    # ------------------------------------------------------------------
+    # Admin routes  –  /admin/*
+    # ------------------------------------------------------------------
+    try:
+        from app.admin.router import router as admin_router
+        from app.addons.mount import mount_addon_routers
+
+        mount_addon_routers(app, settings.api_v1_prefix, admin_router)
+        app.include_router(admin_router, prefix=settings.admin_prefix)
+    except ImportError:
+        logger.warning("Admin router not found – skipping admin routes")
+        from app.addons.mount import mount_addon_routers
+
+        mount_addon_routers(app, settings.api_v1_prefix, APIRouter())
+
+    # ------------------------------------------------------------------
+    # First-run setup  –  /setup (before SPA catch-all)
+    # ------------------------------------------------------------------
+    from app.setup.routes import router as setup_router
+
+    app.include_router(setup_router)
+
+    # ------------------------------------------------------------------
+    # Local media files (storage_backend=local)
+    # ------------------------------------------------------------------
+    from pathlib import Path
+
+    if settings.storage_backend == "local":
+        media_dir = settings.local_media_path
+        media_dir.mkdir(parents=True, exist_ok=True)
+        app.mount(
+            "/media/files",
+            StaticFiles(directory=str(media_dir)),
+            name="local_media",
+        )
+        logger.info("Local media mounted at /media/files from {}", media_dir)
+
+    # ------------------------------------------------------------------
+    # Health-check endpoint
+    # ------------------------------------------------------------------
+    @app.get("/health", tags=["internal"])
+    async def health_check():
+        if settings.app_env == "production" and not settings.debug:
+            return {"status": "ok"}
+        return {
+            "status": "ok",
+            "app": settings.app_name,
+            "env": settings.app_env,
+            "debug": settings.debug,
+            "deployment_profile": settings.deployment_profile,
+            "database_backend": settings.database_backend,
+            "storage_backend": settings.storage_backend,
+        }
+
+    @app.get("/health/ready", tags=["internal"])
+    async def health_ready():
+        """Readiness probe: database and storage must be reachable."""
+        from fastapi.responses import JSONResponse
+        from sqlalchemy import text
+
+        from app.db.connection import session_scope
+        from app.storage import get_storage
+
+        checks: dict[str, str] = {}
+        ok = True
+
+        try:
+            async with session_scope() as session:
+                if hasattr(session, "execute_raw"):
+                    await session.execute_raw("SELECT 1")
+                else:
+                    await session.execute(text("SELECT 1"))
+            checks["database"] = "ok"
+        except Exception as exc:
+            checks["database"] = f"error: {exc}"
+            ok = False
+
+        try:
+            storage = get_storage()
+            if settings.storage_backend == "local":
+                path = settings.local_media_path
+                path.mkdir(parents=True, exist_ok=True)
+                if not path.exists():
+                    raise OSError(f"media path missing: {path}")
+            elif hasattr(storage, "bucket_name"):
+                checks["storage"] = "ok"
+            else:
+                checks["storage"] = "ok"
+            if "storage" not in checks:
+                checks["storage"] = "ok"
+        except Exception as exc:
+            checks["storage"] = f"error: {exc}"
+            ok = False
+
+        body = {"status": "ready" if ok else "not_ready", "checks": checks}
+        if settings.app_env != "production" or settings.debug:
+            body["database_backend"] = settings.database_backend
+            body["storage_backend"] = settings.storage_backend
+        return JSONResponse(status_code=200 if ok else 503, content=body)
+
+    from app.storefront.static import register_storefront_handler
+
+    register_storefront_handler(app)
+
+    return app
+
+
+# ------------------------------------------------------------------
+# Entry point
+# ------------------------------------------------------------------
+app = create_app()
