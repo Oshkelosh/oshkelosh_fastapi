@@ -23,6 +23,10 @@ _PROFILE_BACKENDS: dict[DeploymentProfile, tuple[DatabaseBackend, StorageBackend
 
 _DEFAULT_JWT_SECRET = "change-me-in-production-use-a-strong-secret"
 _MIN_JWT_SECRET_LEN = 32
+LOCAL_MEDIA_MOUNT_PATH = "media/files"
+SQLITE_DB_PATH = Path("data/oshkelosh.db")
+LOCAL_MEDIA_DIR = Path("data/uploads")
+APP_NAME = "Oshkelosh"
 
 
 class Settings(BaseSettings):
@@ -38,7 +42,6 @@ class Settings(BaseSettings):
     # ------------------------------------------------------------------
     # General
     # ------------------------------------------------------------------
-    app_name: str = "Oshkelosh"
     app_version: str = Field(
         default="0.1.0",
         description="Host application version (keep in sync with pyproject.toml)",
@@ -85,14 +88,6 @@ class Settings(BaseSettings):
         return list(value)
 
     # ------------------------------------------------------------------
-    # SQLite (local database)
-    # ------------------------------------------------------------------
-    d1_local_db_path: str = Field(
-        default="data/oshkelosh.db",
-        description="SQLite database file path (database_backend=sqlite)",
-    )
-
-    # ------------------------------------------------------------------
     # Cloudflare D1 (d1_http / d1_binding)
     # ------------------------------------------------------------------
     d1_account_id: Optional[str] = Field(
@@ -109,15 +104,19 @@ class Settings(BaseSettings):
     )
 
     # ------------------------------------------------------------------
-    # Local object storage
+    # Product image processing
     # ------------------------------------------------------------------
-    local_media_dir: str = Field(
-        default="data/uploads",
-        description="Directory for uploaded media (storage_backend=local)",
+    image_variant_full_max_px: int = Field(
+        default=2000,
+        description="Max longest edge in pixels for full product images",
     )
-    local_media_base_url: str = Field(
-        default="http://localhost:8000/media/files",
-        description="Public base URL for locally stored media",
+    image_variant_card_max_px: int = Field(
+        default=800,
+        description="Max longest edge in pixels for storefront card images",
+    )
+    image_variant_thumb_max_px: int = Field(
+        default=256,
+        description="Max longest edge in pixels for admin list thumbnails",
     )
 
     # ------------------------------------------------------------------
@@ -164,6 +163,22 @@ class Settings(BaseSettings):
         default=None,
         description="Separate secret for refresh tokens (defaults to jwt_secret_key)",
     )
+    public_app_url: Optional[str] = Field(
+        default=None,
+        description="Canonical public storefront URL (links, local media URLs, auth emails)",
+    )
+    require_email_verification: bool = Field(
+        default=True,
+        description="When true, new registrations must verify email before login",
+    )
+    email_verification_expire_hours: int = Field(
+        default=24,
+        description="Hours until an email verification link expires",
+    )
+    password_reset_expire_hours: int = Field(
+        default=1,
+        description="Hours until a password reset link expires",
+    )
     admin_session_secret: Optional[str] = Field(
         default=None,
         description="Secret for admin session cookies (defaults to jwt_secret_key in dev only)",
@@ -187,6 +202,26 @@ class Settings(BaseSettings):
     rate_limit_refresh: str = Field(
         default="10/minute",
         description="slowapi limit string for POST /auth/refresh",
+    )
+    rate_limit_admin_login: str = Field(
+        default="5/minute",
+        description="slowapi limit string for POST /admin/login",
+    )
+    admin_cookie_samesite: Literal["lax", "strict"] = Field(
+        default="lax",
+        description="SameSite attribute for admin session cookies (lax or strict)",
+    )
+    pending_order_expiry_hours: int = Field(
+        default=48,
+        ge=1,
+        le=720,
+        description="Auto-cancel pending orders older than this many hours",
+    )
+    order_idempotency_ttl_hours: int = Field(
+        default=24,
+        ge=1,
+        le=168,
+        description="Hours to honor Idempotency-Key replays for POST /orders",
     )
     flash_cookie_max_age: int = Field(
         default=60,
@@ -294,8 +329,32 @@ class Settings(BaseSettings):
         return self.admin_session_secret or self.jwt_secret_key
 
     @property
+    def app_name(self) -> str:
+        """Fixed application name."""
+        return APP_NAME
+
+    @property
+    def d1_local_db_path(self) -> str:
+        """Fixed SQLite database path (database_backend=sqlite)."""
+        return str(SQLITE_DB_PATH)
+
+    @property
     def local_media_path(self) -> Path:
-        return Path(self.local_media_dir)
+        """Fixed local media upload directory (storage_backend=local)."""
+        return LOCAL_MEDIA_DIR
+
+    def public_app_origin(self) -> str:
+        """Resolve the public app origin used for absolute storefront and media URLs."""
+        if self.public_app_url and self.public_app_url.strip():
+            return self.public_app_url.strip().rstrip("/")
+        if self.cors_origins:
+            return self.cors_origins[0].rstrip("/")
+        return "http://localhost:8000"
+
+    @property
+    def local_media_base_url(self) -> str:
+        """Public base URL for locally stored media (derived from PUBLIC_APP_URL)."""
+        return f"{self.public_app_origin()}/{LOCAL_MEDIA_MOUNT_PATH}"
 
 
 def validate_backends(cfg: Settings) -> None:
@@ -326,7 +385,7 @@ def validate_backends(cfg: Settings) -> None:
             )
 
     if cfg.database_backend == "sqlite":
-        parent = Path(cfg.d1_local_db_path).parent
+        parent = SQLITE_DB_PATH.parent
         if parent != Path(".") and not parent.exists():
             try:
                 parent.mkdir(parents=True, exist_ok=True)
@@ -353,13 +412,11 @@ def validate_backends(cfg: Settings) -> None:
                 )
 
     if cfg.storage_backend == "local":
-        media_dir = cfg.local_media_path
+        media_dir = LOCAL_MEDIA_DIR
         try:
             media_dir.mkdir(parents=True, exist_ok=True)
         except OSError as exc:
-            errors.append(f"Cannot create LOCAL_MEDIA_DIR {media_dir}: {exc}")
-        if not cfg.local_media_base_url.strip():
-            errors.append("LOCAL_MEDIA_BASE_URL is required for storage_backend=local")
+            errors.append(f"Cannot create local media directory {media_dir}: {exc}")
 
     elif cfg.storage_backend == "r2":
         if not cfg.r2_account_id:

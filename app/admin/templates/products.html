@@ -8,12 +8,14 @@
   <a href="/admin/products/new" class="btn btn--primary">+ New Product</a>
 </div>
 
-{% if products %}
+{% if items %}
 <table class="table">
   <thead>
     <tr>
+      <th>Image</th>
       <th>Name</th>
       <th>SKU</th>
+      <th>Supplier</th>
       <th>Price</th>
       <th>Inventory</th>
       <th>Status</th>
@@ -21,12 +23,27 @@
     </tr>
   </thead>
   <tbody>
-    {% for product in products %}
+    {% for product in items %}
     <tr>
+      <td>
+        {% if primary_images.get(product.id) %}
+        <img src="{{ primary_images[product.id] }}" alt="" class="product-thumb">
+        {% else %}
+        <span style="color:var(--clr-text-muted);">—</span>
+        {% endif %}
+      </td>
       <td>
         <a href="/admin/products/{{ product.id }}">{{ product.name }}</a>
       </td>
       <td>{{ product.sku or '—' }}</td>
+      <td>
+        {% set supplier = supplier_labels.get(product.id, '') %}
+        {% if supplier %}
+          <span class="badge badge--default">{{ supplier }}</span>
+        {% else %}
+          <span style="color:var(--clr-text-muted);">Local</span>
+        {% endif %}
+      </td>
       <td>${{ "{:,.2f}".format(product.price_cents / 100) }}</td>
       <td>{{ product.inventory_quantity }}</td>
       <td>

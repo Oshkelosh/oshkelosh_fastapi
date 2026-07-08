@@ -1,2 +1,3 @@
-# Ignore addon packages (e.g. printful/). Category files in this directory stay tracked.
+# Ignore supplier addon packages (printful/, gelato/, etc.). Only built-in manual/ is tracked.
 */
+!manual/

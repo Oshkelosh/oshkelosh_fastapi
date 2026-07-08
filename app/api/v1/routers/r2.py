@@ -1,7 +1,6 @@
 """Media upload endpoints (local filesystem or Cloudflare R2)."""
 
 import logging
-import uuid
 from typing import Optional
 
 from fastapi import APIRouter, Depends, File, Form, UploadFile, status
@@ -11,6 +10,15 @@ from app.config import settings
 from app.core.dependencies import CurrentUser, get_admin_user, get_current_user
 from app.core.exceptions import NotFound, ValidationError
 from app.db.connection import get_session
+from app.services.product_images import (
+    delete_product_image,
+    read_upload_file,
+    storage_key_from_url,
+    upload_product_image,
+    upload_standalone_image,
+    variant_keys_from_primary_key,
+    variant_urls_from_primary_url,
+)
 from app.storage import StorageBackend, get_storage
 from models.product import Product
 from models.product_image import ProductImage
@@ -19,16 +27,7 @@ router = APIRouter(prefix="/media", tags=["media"])
 
 logger = logging.getLogger(__name__)
 
-ALLOWED_CONTENT_TYPES = {
-    "image/jpeg": ".jpg",
-    "image/png": ".png",
-    "image/webp": ".webp",
-    "image/gif": ".gif",
-}
-
-MAX_FILE_SIZE = 5 * 1024 * 1024  # 5 MB
-
-_ALLOWED_KEY_PREFIXES = ("products/", "media/")
+_ALLOWED_KEY_PREFIXES = ("products/", "media/", "branding/")
 
 
 def _validate_media_key(key: str) -> str:
@@ -38,18 +37,6 @@ def _validate_media_key(key: str) -> str:
     if not any(key.startswith(prefix) for prefix in _ALLOWED_KEY_PREFIXES):
         raise ValidationError(message="Media key not allowed")
     return key
-
-
-def _validate_file(file: UploadFile) -> str:
-    """Validate an uploaded file. Returns a unique filename with extension."""
-    content_type = file.content_type or ""
-    if content_type not in ALLOWED_CONTENT_TYPES:
-        raise ValidationError(
-            message=f"Unsupported file type: {content_type}. "
-            f"Allowed: {', '.join(ALLOWED_CONTENT_TYPES.keys())}"
-        )
-    ext = ALLOWED_CONTENT_TYPES[content_type]
-    return f"{uuid.uuid4().hex}{ext}"
 
 
 @router.post(
@@ -71,55 +58,35 @@ async def upload_image(
     storage: StorageBackend = Depends(get_storage),
 ) -> dict:
     """Upload an image file to storage."""
-    file_size = 0
-    content = b""
-    while True:
-        chunk = await file.read(8192)
-        if not chunk:
-            break
-        file_size += len(chunk)
-        content += chunk
-        if file_size > MAX_FILE_SIZE:
-            raise ValidationError(
-                message=f"File too large. Max size is {MAX_FILE_SIZE // (1024 * 1024)} MB"
-            )
-
-    if file_size == 0:
-        raise ValidationError(message="Empty file uploaded")
-
-    unique_name = _validate_file(file)
-    key = f"products/{unique_name}"
-
-    public_url = await storage.upload(
-        key,
-        content,
-        file.content_type or "application/octet-stream",
-    )
+    content, content_type = await read_upload_file(file)
 
     if product_id is not None:
         product = await session.get(Product, product_id)
         if product is None:
             raise NotFound(resource_name="Product", resource_id=product_id)
 
-        image = ProductImage(
-            product_id=product_id,
-            url=public_url,
+        image = await upload_product_image(
+            session,
+            product,
+            content,
+            content_type,
+            storage=storage,
             alt_text=alt_text,
         )
-        session.add(image)
-        await session.flush()
-        await session.refresh(image)
+        key = storage_key_from_url(image.url) or ""
 
         return {
-            "url": public_url,
+            "url": image.url,
             "key": key,
             "image_id": image.id,
+            "variants": variant_urls_from_primary_url(image.url),
             "message": "Image uploaded and associated with product",
         }
 
+    payload = await upload_standalone_image(content, content_type, storage=storage)
+
     return {
-        "url": public_url,
-        "key": key,
+        **payload,
         "message": "Image uploaded",
     }
 
@@ -164,13 +131,17 @@ async def delete_media(
     storage: StorageBackend = Depends(get_storage),
 ) -> dict:
     """Delete a media file from storage."""
+    _validate_media_key(key)
     if "products/" in key:
         result = await session.execute(
-            select(ProductImage).where(col(ProductImage.url).contains(key))
+            select(ProductImage).where(col(ProductImage.url).contains(key.rsplit("/", 1)[0]))
         )
         images = result.scalars().all()
         for img in images:
-            await session.delete(img)
-
-    await storage.delete(key)
+            await delete_product_image(session, img, storage=storage)
+        if not images:
+            for variant_key in variant_keys_from_primary_key(key):
+                await storage.delete(variant_key)
+    else:
+        await storage.delete(key)
     return {"message": f"Media '{key}' deleted"}

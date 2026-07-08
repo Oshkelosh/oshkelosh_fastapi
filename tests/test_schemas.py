@@ -88,7 +88,7 @@ class TestProductSchema:
             "sku": "TEST-001",
             "inventory_quantity": 10,
             "status": "published",
-            "category": None,
+            "category_id": None,
             "tags": [],
             "images": [],
             "created_by": None,

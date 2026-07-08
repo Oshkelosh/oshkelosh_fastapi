@@ -3,7 +3,41 @@
 {% block title %}Audit Log{% endblock %}
 
 {% block content %}
-<h2 style="margin-bottom:20px;">Audit Log</h2>
+<div class="page-header">
+  <h1 class="page-header__title">Audit Log</h1>
+  <p class="page-header__subtitle">
+    {% if total > 0 %}
+      Showing {{ range_start }}–{{ range_end }} of {{ total }} entries
+    {% else %}
+      No audit entries match the current filters
+    {% endif %}
+  </p>
+</div>
+
+<form method="GET" style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:16px;">
+  <select name="action" class="form-select" style="width:auto;">
+    <option value="">All actions</option>
+    {% for opt in action_options %}
+    <option value="{{ opt }}" {{ 'selected' if filter_action == opt else '' }}>{{ opt }}</option>
+    {% endfor %}
+  </select>
+  <select name="resource_type" class="form-select" style="width:auto;">
+    <option value="">All resource types</option>
+    {% for opt in resource_type_options %}
+    <option value="{{ opt }}" {{ 'selected' if filter_resource_type == opt else '' }}>{{ opt }}</option>
+    {% endfor %}
+  </select>
+  <input type="search" name="actor" class="form-input" placeholder="Actor email or name"
+         value="{{ filter_actor }}" style="width:auto;min-width:180px;">
+  <input type="text" name="resource_id" class="form-input" placeholder="Resource ID"
+         value="{{ filter_resource_id }}" style="width:auto;min-width:120px;">
+  <input type="date" name="date_from" class="form-input" value="{{ filter_date_from }}" style="width:auto;">
+  <input type="date" name="date_to" class="form-input" value="{{ filter_date_to }}" style="width:auto;">
+  <button type="submit" class="btn btn--secondary">Filter</button>
+  {% if filter_query %}
+  <a href="/admin/audit" class="btn btn--ghost btn--sm">Clear</a>
+  {% endif %}
+</form>
 
 {% if entries %}
 <table class="table">
@@ -13,29 +47,66 @@
       <th>Actor</th>
       <th>Action</th>
       <th>Resource</th>
+      <th>Summary</th>
       <th>IP</th>
+      <th></th>
     </tr>
   </thead>
   <tbody>
     {% for row in entries %}
+    {% set actor_user = actors.get(row.actor_user_id) if row.actor_user_id else none %}
+    {% set resource_url = resource_urls.get(row.id) %}
     <tr>
-      <td>{{ row.created_at }}</td>
-      <td>{{ row.actor_user_id or '—' }}</td>
-      <td>{{ row.action }}</td>
-      <td>{{ row.resource_type }} #{{ row.resource_id or '—' }}</td>
+      <td>{{ row.created_at.strftime('%Y-%m-%d %H:%M') if row.created_at else '—' }}</td>
+      <td>
+        {% if actor_user %}
+          <a href="/admin/users/{{ actor_user.id }}">{{ actor_user.full_name or actor_user.email }}</a>
+        {% elif row.actor_user_id %}
+          User #{{ row.actor_user_id }}
+        {% else %}
+          —
+        {% endif %}
+      </td>
+      <td>
+        {% if row.action == 'create' %}
+          <span class="badge badge--success">{{ row.action }}</span>
+        {% elif row.action == 'update' %}
+          <span class="badge badge--info">{{ row.action }}</span>
+        {% elif row.action == 'delete' %}
+          <span class="badge badge--danger">{{ row.action }}</span>
+        {% elif row.action == 'reset' %}
+          <span class="badge badge--warning">{{ row.action }}</span>
+        {% else %}
+          <span class="badge badge--default">{{ row.action }}</span>
+        {% endif %}
+      </td>
+      <td>
+        {% if resource_url %}
+          <a href="{{ resource_url }}">{{ row.resource_type }} #{{ row.resource_id or '—' }}</a>
+        {% else %}
+          {{ row.resource_type }}{% if row.resource_id %} #{{ row.resource_id }}{% endif %}
+        {% endif %}
+      </td>
+      <td style="max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+        {{ row.detail or '—' }}
+      </td>
       <td>{{ row.ip_address or '—' }}</td>
+      <td>
+        <a href="/admin/audit/{{ row.id }}?back={{ current_list_url | urlencode }}"
+           class="btn btn--ghost btn--sm">View</a>
+      </td>
     </tr>
     {% endfor %}
   </tbody>
 </table>
 {% if total_pages > 1 %}
 <nav style="margin-top:16px;display:flex;gap:8px;align-items:center;">
-  {% if page > 1 %}
-  <a href="/admin/audit?page={{ page - 1 }}" class="btn btn--secondary btn--sm">Previous</a>
+  {% if prev_url %}
+  <a href="{{ prev_url }}" class="btn btn--secondary btn--sm">Previous</a>
   {% endif %}
   <span style="color:var(--clr-text-muted);">Page {{ page }} of {{ total_pages }}</span>
-  {% if page < total_pages %}
-  <a href="/admin/audit?page={{ page + 1 }}" class="btn btn--secondary btn--sm">Next</a>
+  {% if next_url %}
+  <a href="{{ next_url }}" class="btn btn--secondary btn--sm">Next</a>
   {% endif %}
 </nav>
 {% endif %}

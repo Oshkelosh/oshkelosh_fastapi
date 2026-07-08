@@ -7,7 +7,75 @@
 
 <p style="color:var(--clr-text-muted);margin-bottom:24px;">
   {{ page_description }}
+  {% if is_suppliers_page %}
+  Multiple suppliers can be enabled at the same time. Each addon defines its own product tag rules; assign suppliers on the product edit form.
+  {% elif is_payments_page %}
+  Only one payment processor can be enabled at a time.
+  {% elif is_notifications_page %}
+  Only one provider per channel (email, SMS, push) can be enabled at a time.
+  {% endif %}
 </p>
+
+{% if is_suppliers_page %}
+<div class="card" style="margin-bottom:24px;">
+  <h3 style="margin-top:0;">Global actions</h3>
+  {% if active_sync_job %}
+  <div class="job-progress" style="margin-bottom:16px;">
+    <p style="margin:0 0 8px;font-size:14px;">
+      Sync in progress — {{ active_sync_job.percent }}% complete
+    </p>
+    <div class="job-progress__bar">
+      <div class="job-progress__fill" style="width:{{ active_sync_job.percent }}%;"></div>
+    </div>
+    <p style="margin:8px 0 0;font-size:13px;">
+      <a href="/admin/jobs/{{ active_sync_job.id }}">View sync progress</a>
+    </p>
+  </div>
+  {% elif syncable_count %}
+  <p style="color:var(--clr-text-muted);margin-bottom:12px;font-size:14px;">
+    Sync product catalogs from all {{ syncable_count }} enabled API supplier{{ 's' if syncable_count != 1 else '' }}.
+  </p>
+  <form method="POST" action="/admin/suppliers/sync-all" class="form" style="max-width:480px;margin-bottom:12px;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div class="form-group">
+      <label class="form-label" for="import_status">Import as</label>
+      <select id="import_status" name="import_status" class="form-select">
+        <option value="draft" selected>Draft</option>
+        <option value="published">Published</option>
+      </select>
+    </div>
+    <label style="display:flex;align-items:center;gap:8px;margin-bottom:12px;font-size:14px;">
+      <input type="checkbox" name="archive_missing" value="on">
+      Archive local products missing from supplier catalogs
+    </label>
+    <button type="submit" class="btn btn--primary btn--sm">Sync all catalogs</button>
+  </form>
+  {% else %}
+  <p style="color:var(--clr-text-muted);margin-bottom:12px;font-size:14px;">
+    No syncable supplier addons are enabled.
+  </p>
+  {% endif %}
+  <a href="/admin/audit?action=supplier_catalog_sync" class="btn btn--secondary btn--sm">View sync history</a>
+</div>
+
+<div class="card" style="margin-bottom:24px;">
+  <h3 style="margin-top:0;">Manual suppliers</h3>
+  <p style="color:var(--clr-text-muted);margin-bottom:12px;">
+    Define suppliers you fulfill yourself without an external API.
+  </p>
+  <a href="/admin/suppliers/manual" class="btn btn--secondary btn--sm">Manage manual suppliers</a>
+</div>
+{% endif %}
+
+{% if is_notifications_page %}
+<div class="card" style="margin-bottom:24px;">
+  <h3 style="margin-top:0;">Message templates</h3>
+  <p style="color:var(--clr-text-muted);margin-bottom:12px;">
+    Customize subject lines and body copy for order and account notifications.
+  </p>
+  <a href="/admin/notifications/messages" class="btn btn--secondary btn--sm">Edit message templates</a>
+</div>
+{% endif %}
 
 {% if addons %}
 <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px;">
@@ -22,6 +90,16 @@
         <p style="margin:8px 0 0;font-size:12px;color:var(--clr-text-muted);">
           v{{ addon.version }}
         </p>
+        {% if is_suppliers_page and addon.supports_sync %}
+        <p style="margin:8px 0 0;font-size:12px;color:var(--clr-text-muted);">
+          Last sync:
+          {% if addon.last_sync_at %}
+          {{ addon.last_sync_at.strftime('%Y-%m-%d %H:%M') if addon.last_sync_at.strftime else addon.last_sync_at[:16] }}
+          {% else %}
+          Never
+          {% endif %}
+        </p>
+        {% endif %}
       </div>
       {% if addon.is_enabled %}
         <span class="badge badge--success">Enabled</span>
@@ -30,10 +108,13 @@
       {% endif %}
     </div>
 
-    <div style="display:flex;gap:8px;">
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
       <a href="{{ addon.configure_url }}" class="btn btn--primary btn--sm">
         {% if addon.has_config %}Configure{% else %}Setup{% endif %}
       </a>
+      {% if is_suppliers_page and addon.supports_sync %}
+      <a href="{{ addon.configure_url }}" class="btn btn--secondary btn--sm">Sync</a>
+      {% endif %}
     </div>
   </div>
   {% endfor %}

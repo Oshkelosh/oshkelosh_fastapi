@@ -1,2 +1,2 @@
-# Build artifacts inside frontend addon packages (source stays tracked)
-
+# Ignore frontend addon packages (default/). Category files stay tracked.
+*/

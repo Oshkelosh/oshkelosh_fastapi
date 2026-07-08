@@ -38,6 +38,15 @@ class Cart(ModelBase, table=True):
         default_factory=utc_now,
         sa_column=Column(DateTime(timezone=True), nullable=False, server_default="CURRENT_TIMESTAMP"),
     )
+    abandoned_reminded_at: Optional[datetime] = Field(
+        default=None,
+        sa_column=Column(DateTime(timezone=True), nullable=True),
+    )
+    abandoned_reminder_count: int = Field(
+        default=0,
+        ge=0,
+        sa_column=Column(Integer, nullable=False, server_default="0"),
+    )
 
     # ── Relationships ──────────────────────────────────────────────
     user: Optional["User"] = Relationship(back_populates="carts")

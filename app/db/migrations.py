@@ -125,7 +125,13 @@ def _record_migration_sqlite(conn: sqlite3.Connection, filename: str) -> None:
 
 def _sqlite_exec(conn: sqlite3.Connection, sql: str) -> None:
     for statement in _split_statements(sql):
-        conn.execute(statement)
+        try:
+            conn.execute(statement)
+        except sqlite3.OperationalError as exc:
+            if "duplicate column name" in str(exc).lower():
+                logger.debug("Skipping duplicate column migration: {}", exc)
+                continue
+            raise
 
 
 def _run_sql_file(execute_fn: Callable[[str], None], path: Path) -> None:

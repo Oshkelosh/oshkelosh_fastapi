@@ -1,57 +1,93 @@
 # Notification addon development
 
-Notification addons send email, SMS, or webhooks. The primary integration path for order emails is **core commerce**, not addon HTTP routes.
+Notification addons deliver email, SMS, or push messages. **Core** owns event definitions, merchant-editable templates, rendering, and dispatch; addons implement provider transport only.
+
+## Concern separation
+
+| Core module | Role |
+|---|---|
+| [`app/services/notification_events.py`](../../services/notification_events.py) | Event catalog, default copy, placeholders |
+| [`app/services/notification_templates.py`](../../services/notification_templates.py) | DB template load/save/render |
+| [`app/services/notification_dispatch.py`](../../services/notification_dispatch.py) | Pick addon per channel, call transport |
+| [`app/services/notifications.py`](../../services/notifications.py) | Order status → dispatch |
+| [`app/services/user_accounts.py`](../../services/user_accounts.py) | Verification/reset → dispatch |
+| Admin → Messages | `/admin/notifications/messages` — edit copy per event/channel |
+
+**Notification addons** own credentials and API mapping only (`send_email`, `send_sms`, `send_push`).
 
 ## Policy
 
-- **One active notification addon** recommended (first enabled wins).
-- Emails fire on order status transitions via [`app/services/notifications.py`](../../services/notifications.py).
+- **One enabled provider per channel** (email, SMS, push). Enabling a new email addon disables other email addons.
+- Order notifications fire on status transitions via core commerce (not addon HTTP routes).
+- SMS is for **order lifecycle alerts only** — not 2FA or login OTP.
+- Failures are logged; they **do not** roll back order status changes.
 
-| Transition | Email |
-|------------|-------|
-| `pending` → `paid` | Order confirmation |
-| `paid` → `shipped` | Shipping notice |
-| `shipped` → `delivered` | Delivery confirmation |
+## Events
 
-Subjects are prefixed with `[{store_name}]` from Site Settings.
+| Event key | Trigger | Channels |
+|-----------|---------|----------|
+| `order_confirmation` | `pending` → `paid` | email, sms, push |
+| `order_shipped` | `paid` → `shipped` | email, sms, push |
+| `order_delivered` | `shipped` → `delivered` | email, sms, push |
+| `email_verification` | registration / resend | email |
+| `password_reset` | forgot password | email |
+
+Edit templates at **Admin → Notifications → Edit message templates**.
 
 ## NotificationAddon methods
 
 | Method | Purpose |
 |--------|---------|
+| `supported_channels` | e.g. `["email"]`, `["sms"]`, `["push"]` |
 | `send_email(to, subject, body, html=False)` | Transactional email |
-| `send_sms(to, body)` | SMS (optional / provider-specific) |
-| `send_webhook(url, payload)` | Outbound webhook |
+| `send_sms(to, body)` | SMS (E.164 phone) |
+| `send_push(to, title, body, data=None)` | Push to device token |
+| `send_webhook(url, payload)` | Outbound webhook helper |
 
-Failures are logged; they **do not** roll back order status changes.
+Unsupported channels should return `channel_not_supported()`.
 
 ## Package layout
 
 ```
 app/addons/notifications/<provider>/
+├── README.md
+├── __init__.py
 ├── addon.py
-├── routes.py      # admin config only (optional)
+├── routes.py      # build_notification_routers(...) delegate
 └── templates/
 ```
 
-Email Postmark sets `admin_mount_prefix()` to `/notifications/email` (shorter URL).
+Shared: [`helpers.py`](helpers.py), [`shared_routes.py`](shared_routes.py).
 
 ## Route mounting
 
 | Type | URL pattern | Example |
 |------|-------------|---------|
 | API | `/api/v1/notifications/{addon_id}/...` | Usually empty |
-| Admin | `/admin/notifications/{addon_id}/...` | `GET /admin/notifications/email` |
+| Admin | `/admin/notifications/{addon_id}/...` | `GET /admin/notifications/postmark` |
 
 OpenAPI tag: **`addons-notifications`**
 
-## You typically do NOT need public API routes
+## Configuration
 
-Order emails are triggered automatically. Implement `send_email()` well. API tokens and from-address are set in the admin panel at `/admin/notifications/email` (stored in `addon_configs`), not in `.env`.
+API keys and credentials are configured in the admin panel (stored in `addon_configs`), not in `.env`. Use `SecretStr` for secrets.
 
-## Reference addon
+## Installed notification addons
 
-[`email/`](email/) — Postmark `send_email`, admin config for API token and from-address.
+| Addon ID | Channel | README |
+|----------|---------|--------|
+| `postmark` | email | [postmark/README.md](postmark/README.md) |
+| `smtp` | email | [smtp/README.md](smtp/README.md) |
+| `resend` | email | [resend/README.md](resend/README.md) |
+| `sendgrid` | email | [sendgrid/README.md](sendgrid/README.md) |
+| `mailgun` | email | [mailgun/README.md](mailgun/README.md) |
+| `ses` | email | [ses/README.md](ses/README.md) |
+| `twilio` | sms | [twilio/README.md](twilio/README.md) |
+| `vonage` | sms | [vonage/README.md](vonage/README.md) |
+| `messagebird` | sms | [messagebird/README.md](messagebird/README.md) |
+| `fcm` | push | [fcm/README.md](fcm/README.md) |
+| `onesignal` | push | [onesignal/README.md](onesignal/README.md) |
+| `pusher_beams` | push | [pusher_beams/README.md](pusher_beams/README.md) |
 
 ## OpenAPI
 

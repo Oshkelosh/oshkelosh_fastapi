@@ -34,9 +34,10 @@
           {% endfor %}
         </tbody>
         <tfoot>
+          {% set subtotal_cents = order_items | sum(attribute='total_price_cents') %}
           <tr>
             <td colspan="4" style="text-align:right;font-weight:600;">Subtotal</td>
-            <td>${{ "{:,.2f}".format((order.total_cents - order.tax_cents - order.shipping_cents) / 100) }}</td>
+            <td>${{ "{:,.2f}".format(subtotal_cents / 100) }}</td>
           </tr>
           <tr>
             <td colspan="4" style="text-align:right;">Tax</td>
@@ -58,6 +59,11 @@
   <div>
     <div class="card" style="margin-bottom:16px;">
       <h3 style="margin-top:0;">Status</h3>
+      {% if order.user_id %}
+      <p style="font-size:14px;margin:0 0 12px;">
+        Customer: <a href="/admin/users/{{ order.user_id }}">User #{{ order.user_id }}</a>
+      </p>
+      {% endif %}
       <p>
         {% if order.status == 'pending' %}
           <span class="badge badge--warning">Pending</span>
@@ -72,28 +78,118 @@
         {% endif %}
       </p>
 
+      {% if allowed_statuses %}
       <form method="POST" action="/admin/orders/{{ order.id }}/status">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <label class="form-label">Update Status</label>
-        <select name="status" class="form-select" style="margin-bottom:8px;">
-          <option value="pending" {{ 'selected' if order.status == 'pending' else '' }}>Pending</option>
-          <option value="paid" {{ 'selected' if order.status == 'paid' else '' }}>Paid</option>
-          <option value="shipped" {{ 'selected' if order.status == 'shipped' else '' }}>Shipped</option>
-          <option value="delivered" {{ 'selected' if order.status == 'delivered' else '' }}>Delivered</option>
-          <option value="cancelled" {{ 'selected' if order.status == 'cancelled' else '' }}>Cancelled</option>
+        <select name="status" class="form-select" style="margin-bottom:8px;" id="order-status-select">
+          <option value="{{ order.status }}" selected disabled>{{ order.status | capitalize }} (current)</option>
+          {% for status in allowed_statuses %}
+          <option value="{{ status }}">{{ status | capitalize }}</option>
+          {% endfor %}
         </select>
+        <div id="tracking-fields" style="margin-bottom:12px;{% if 'shipped' not in allowed_statuses %}display:none;{% endif %}">
+          <p style="font-size:13px;color:var(--clr-text-muted);margin:0 0 8px;">
+            Optional when marking shipped — included in the shipped notification email.
+          </p>
+          <label class="form-label" for="tracking_number">Tracking number</label>
+          <input type="text" id="tracking_number" name="tracking_number" class="form-input"
+                 value="{{ order.tracking_number or '' }}" style="margin-bottom:8px;" />
+          <label class="form-label" for="tracking_url">Tracking URL</label>
+          <input type="url" id="tracking_url" name="tracking_url" class="form-input"
+                 value="{{ order.tracking_url or '' }}" placeholder="https://..." style="margin-bottom:8px;" />
+          <label class="form-label" for="carrier">Carrier</label>
+          <input type="text" id="carrier" name="carrier" class="form-input"
+                 value="{{ order.carrier or '' }}" placeholder="USPS, UPS, …" />
+        </div>
         <button type="submit" class="btn btn--primary" style="width:100%;">Update</button>
       </form>
+      <script>
+        (function () {
+          const select = document.getElementById('order-status-select');
+          const tracking = document.getElementById('tracking-fields');
+          if (!select || !tracking) return;
+          function sync() {
+            tracking.style.display = select.value === 'shipped' ? 'block' : 'none';
+          }
+          select.addEventListener('change', sync);
+        })();
+      </script>
+      {% else %}
+      <p style="color:var(--clr-muted);font-size:14px;">No further status changes are available.</p>
+      {% endif %}
     </div>
 
-    {% if order.shipping_address %}
-    <div class="card">
-      <h3 style="margin-top:0;">Shipping Address</h3>
-      <p style="white-space:pre-line;">{{ order.shipping_address | tojson }}</p>
+    {% if order.tracking_url or order.tracking_number %}
+    <div class="card" style="margin-bottom:16px;">
+      <h3 style="margin-top:0;">Shipment tracking</h3>
+      {% if order.carrier %}<p style="margin:0 0 4px;"><strong>Carrier:</strong> {{ order.carrier }}</p>{% endif %}
+      {% if order.tracking_number %}<p style="margin:0 0 4px;"><strong>Number:</strong> {{ order.tracking_number }}</p>{% endif %}
+      {% if order.tracking_url %}
+      <p style="margin:0;"><a href="{{ order.tracking_url }}" target="_blank" rel="noopener">Track shipment</a></p>
+      {% endif %}
     </div>
     {% endif %}
 
-    {% if order.notes %}
+    {% if order.shipping_address %}
+    <div class="card" style="margin-bottom:16px;">
+      <h3 style="margin-top:0;">Shipping Address</h3>
+      {% set addr = order.shipping_address %}
+      <p style="margin:0;line-height:1.6;">
+        {% if addr.name %}{{ addr.name }}<br>{% endif %}
+        {% if addr.line1 %}{{ addr.line1 }}<br>{% endif %}
+        {% if addr.line2 %}{{ addr.line2 }}<br>{% endif %}
+        {% if addr.city or addr.state or addr.postal_code %}
+          {{ addr.city }}{% if addr.city and addr.state %}, {% endif %}{{ addr.state }} {{ addr.postal_code }}<br>
+        {% endif %}
+        {% if addr.country %}{{ addr.country }}<br>{% endif %}
+        {% if addr.email %}<span style="color:var(--clr-text-muted);">{{ addr.email }}</span><br>{% endif %}
+        {% if addr.phone %}<span style="color:var(--clr-text-muted);">{{ addr.phone }}</span>{% endif %}
+      </p>
+    </div>
+    {% endif %}
+
+    {% if order.billing_address %}
+    <div class="card" style="margin-bottom:16px;">
+      <h3 style="margin-top:0;">Billing Address</h3>
+      {% set addr = order.billing_address %}
+      <p style="margin:0;line-height:1.6;">
+        {% if addr.name %}{{ addr.name }}<br>{% endif %}
+        {% if addr.line1 %}{{ addr.line1 }}<br>{% endif %}
+        {% if addr.line2 %}{{ addr.line2 }}<br>{% endif %}
+        {% if addr.city or addr.state or addr.postal_code %}
+          {{ addr.city }}{% if addr.city and addr.state %}, {% endif %}{{ addr.state }} {{ addr.postal_code }}<br>
+        {% endif %}
+        {% if addr.country %}{{ addr.country }}<br>{% endif %}
+        {% if addr.email %}<span style="color:var(--clr-text-muted);">{{ addr.email }}</span><br>{% endif %}
+        {% if addr.phone %}<span style="color:var(--clr-text-muted);">{{ addr.phone }}</span>{% endif %}
+      </p>
+    </div>
+    {% endif %}
+
+    {% if fulfillment_notes %}
+    <div class="card" style="margin-bottom:16px;">
+      <h3 style="margin-top:0;">Supplier fulfillment</h3>
+      {% for note in fulfillment_notes %}
+      <div style="margin-bottom:12px;padding:12px;background:var(--clr-bg-muted, #f8fafc);border-radius:6px;">
+        <strong>{{ note.supplier }}</strong>
+        {% if note.result.success %}
+          <span class="badge badge--success" style="margin-left:8px;">OK</span>
+        {% else %}
+          <span class="badge badge--danger" style="margin-left:8px;">Failed</span>
+        {% endif %}
+        {% if note.result.supplier_name %}
+          <p style="margin:8px 0 0;font-size:13px;">{{ note.result.supplier_name }}</p>
+        {% endif %}
+        {% if note.result.error %}
+          <p style="margin:8px 0 0;color:var(--clr-danger);font-size:13px;">{{ note.result.error }}</p>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if order.notes and not fulfillment_notes %}
     <div class="card">
       <h3 style="margin-top:0;">Notes</h3>
       <p>{{ order.notes }}</p>

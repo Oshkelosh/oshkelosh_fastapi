@@ -83,6 +83,34 @@ class D1Connection:
         """Execute a statement (INSERT / UPDATE / DELETE / DDL)."""
         return await self.query(sql, params)
 
+    async def batch_query(
+        self,
+        statements: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        """Execute multiple SQL statements in one D1 transaction."""
+        if not statements:
+            return []
+        if not self._check_configured():
+            raise RuntimeError("D1 HTTP client is not configured")
+
+        client = self.http_client
+        url = (
+            f"/accounts/{self.account_id}"
+            f"/d1/database/{self.database_id}"
+            "/query"
+        )
+        resp = await client.post(url, json=statements)
+        resp.raise_for_status()
+        data = resp.json()
+
+        if not data.get("success"):
+            raise RuntimeError(f"D1 batch query failed: {data.get('errors')}")
+
+        result = data.get("result")
+        if isinstance(result, list):
+            return result
+        return []
+
     def execute_sync(self, sql: str, params: Optional[list[Any]] = None) -> list[dict[str, Any]]:
         """Execute synchronously — CLI/scripts only (no running event loop).
 

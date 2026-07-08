@@ -16,6 +16,8 @@ class CategoryCreate(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     slug: str = Field(min_length=1, max_length=200)
     description: Optional[str] = Field(default=None, max_length=10000)
+    meta_title: Optional[str] = Field(default=None, max_length=255)
+    meta_description: Optional[str] = Field(default=None, max_length=500)
     parent_id: Optional[int] = Field(default=None, description="ID of parent category (null for root)")
     sort_order: int = Field(default=0, ge=0)
 
@@ -27,6 +29,8 @@ class CategoryUpdate(BaseModel):
     name: Optional[str] = Field(default=None, min_length=1, max_length=200)
     slug: Optional[str] = Field(default=None, min_length=1, max_length=200)
     description: Optional[str] = Field(default=None, max_length=10000)
+    meta_title: Optional[str] = Field(default=None, max_length=255)
+    meta_description: Optional[str] = Field(default=None, max_length=500)
     parent_id: Optional[int] = Field(default=None)
     sort_order: Optional[int] = Field(default=None, ge=0)
 
@@ -39,6 +43,8 @@ class CategoryRead(BaseModel):
     name: str
     slug: str
     description: Optional[str]
+    meta_title: Optional[str] = None
+    meta_description: Optional[str] = None
     parent_id: Optional[int]
     sort_order: int
     created_at: datetime

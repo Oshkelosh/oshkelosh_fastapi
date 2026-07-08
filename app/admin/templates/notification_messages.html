@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+
+{% block title %}Notification Messages{% endblock %}
+
+{% block content %}
+<h2 style="margin-bottom:12px;">Notification Messages</h2>
+
+<p style="color:var(--clr-text-muted);margin-bottom:16px;">
+  Edit copy sent for each event and channel. Placeholders like <code>{order_id}</code> are replaced at send time.
+  <a href="/admin/notifications">← Back to notification providers</a>
+</p>
+
+<h3 style="margin:24px 0 12px;">Orders</h3>
+<div class="card" style="overflow-x:auto;">
+  <table class="table">
+    <thead>
+      <tr>
+        <th>Event</th>
+        <th>Email</th>
+        <th>SMS</th>
+        <th>Push</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in order_events %}
+      <tr>
+        <td>
+          <strong>{{ row.event.label }}</strong>
+          <div style="font-size:12px;color:var(--clr-text-muted);">{{ row.event.description }}</div>
+        </td>
+        {% for ch in ['email', 'sms', 'push'] %}
+        <td>
+          {% if ch in row.channels %}
+            <a href="{{ row.channels[ch].edit_url }}" class="btn btn--sm btn--secondary">Edit</a>
+            {% if row.channels[ch].enabled %}
+              <span class="badge badge--success" style="margin-left:4px;">On</span>
+            {% else %}
+              <span class="badge badge--default" style="margin-left:4px;">Off</span>
+            {% endif %}
+          {% else %}
+            <span style="color:var(--clr-text-muted);">—</span>
+          {% endif %}
+        </td>
+        {% endfor %}
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<h3 style="margin:24px 0 12px;">Account</h3>
+<div class="card" style="overflow-x:auto;">
+  <table class="table">
+    <thead>
+      <tr>
+        <th>Event</th>
+        <th>Email</th>
+        <th>SMS</th>
+        <th>Push</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in account_events %}
+      <tr>
+        <td>
+          <strong>{{ row.event.label }}</strong>
+          <div style="font-size:12px;color:var(--clr-text-muted);">{{ row.event.description }}</div>
+        </td>
+        {% for ch in ['email', 'sms', 'push'] %}
+        <td>
+          {% if ch in row.channels %}
+            <a href="{{ row.channels[ch].edit_url }}" class="btn btn--sm btn--secondary">Edit</a>
+            {% if row.channels[ch].enabled %}
+              <span class="badge badge--success" style="margin-left:4px;">On</span>
+            {% else %}
+              <span class="badge badge--default" style="margin-left:4px;">Off</span>
+            {% endif %}
+          {% else %}
+            <span style="color:var(--clr-text-muted);">—</span>
+          {% endif %}
+        </td>
+        {% endfor %}
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

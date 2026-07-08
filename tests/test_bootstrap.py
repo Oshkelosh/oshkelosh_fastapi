@@ -76,14 +76,16 @@ async def test_setup_post_creates_admin_and_redirects(db_session):
     app.state.needs_setup = True
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
+        form = await _setup_form_data(
+            client,
+            email="bootstrap@example.com",
+            password="SecurePass123!",
+            password_confirm="SecurePass123!",
+            full_name="Bootstrap Admin",
+        )
         response = await client.post(
             "/setup",
-            data={
-                "email": "bootstrap@example.com",
-                "password": "SecurePass123!",
-                "password_confirm": "SecurePass123!",
-                "full_name": "Bootstrap Admin",
-            },
+            data=form,
             follow_redirects=False,
         )
     _teardown_app_state()
@@ -104,13 +106,15 @@ async def test_setup_post_rejected_when_admin_exists(db_session, test_user):
     app.state.needs_setup = False
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
+        form = await _setup_form_data(
+            client,
+            email="other@example.com",
+            password="SecurePass123!",
+            password_confirm="SecurePass123!",
+        )
         response = await client.post(
             "/setup",
-            data={
-                "email": "other@example.com",
-                "password": "SecurePass123!",
-                "password_confirm": "SecurePass123!",
-            },
+            data=form,
             follow_redirects=False,
         )
     _teardown_app_state()
@@ -130,6 +134,13 @@ def _session_override(db_session):
     return override_session
 
 
+async def _setup_form_data(client: AsyncClient, **fields: str) -> dict[str, str]:
+    """Fetch setup CSRF cookie and build POST form data."""
+    await client.get("/setup")
+    csrf = client.cookies.get("_oshkelosh_setup_csrf", "")
+    return {"csrf_token": csrf, **fields}
+
+
 @pytest.mark.asyncio
 async def test_has_admin_user_false_on_empty_db(db_session):
     assert await has_admin_user(db_session) is False
@@ -142,8 +153,7 @@ async def test_has_admin_user_true_with_admin(db_session, test_user):
 
 def test_create_admin_cli_idempotent(tmp_path, monkeypatch):
     """CLI exits 0 when admin already exists (uses isolated sqlite file)."""
-    db_file = tmp_path / "cli_test.db"
-    monkeypatch.setenv("D1_LOCAL_DB_PATH", str(db_file))
+    (tmp_path / "data").mkdir()
     monkeypatch.setenv("DEPLOYMENT_PROFILE", "local")
 
     from app.config import reload_settings
@@ -154,7 +164,6 @@ def test_create_admin_cli_idempotent(tmp_path, monkeypatch):
 
     env = {
         **os.environ,
-        "D1_LOCAL_DB_PATH": str(db_file),
         "DEPLOYMENT_PROFILE": "local",
         "PYTHONPATH": str(PROJECT_ROOT),
     }
@@ -167,7 +176,7 @@ def test_create_admin_cli_idempotent(tmp_path, monkeypatch):
             "--password",
             "SecurePass123!",
         ],
-        cwd=str(PROJECT_ROOT),
+        cwd=str(tmp_path),
         env=env,
         capture_output=True,
         text=True,
@@ -183,7 +192,7 @@ def test_create_admin_cli_idempotent(tmp_path, monkeypatch):
             "--password",
             "SecurePass123!",
         ],
-        cwd=str(PROJECT_ROOT),
+        cwd=str(tmp_path),
         env=env,
         capture_output=True,
         text=True,

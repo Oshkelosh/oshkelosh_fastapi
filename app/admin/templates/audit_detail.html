@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+
+{% block title %}Audit #{{ entry.id }}{% endblock %}
+
+{% block content %}
+<div style="margin-bottom:16px;">
+  <a href="{{ back_url }}" class="btn btn--ghost btn--sm">← Back to audit log</a>
+</div>
+
+<div class="page-header">
+  <h1 class="page-header__title">Audit Entry #{{ entry.id }}</h1>
+  <p class="page-header__subtitle">{{ entry.created_at.strftime('%Y-%m-%d %H:%M:%S UTC') if entry.created_at else '' }}</p>
+</div>
+
+<div class="card">
+  <div class="card__body" style="display:grid;gap:16px;">
+    <div>
+      <strong>Action</strong>
+      <div>{{ entry.action }}</div>
+    </div>
+    <div>
+      <strong>Actor</strong>
+      <div>
+        {% if actor %}
+          <a href="/admin/users/{{ actor.id }}">{{ actor.full_name or actor.email }}</a>
+          <span style="color:var(--clr-text-muted);">({{ actor.email }})</span>
+        {% elif entry.actor_user_id %}
+          User #{{ entry.actor_user_id }}
+        {% else %}
+          —
+        {% endif %}
+      </div>
+    </div>
+    <div>
+      <strong>Resource</strong>
+      <div>
+        {% if resource_url %}
+          <a href="{{ resource_url }}">{{ entry.resource_type }}{% if entry.resource_id %} #{{ entry.resource_id }}{% endif %}</a>
+        {% else %}
+          {{ entry.resource_type }}{% if entry.resource_id %} #{{ entry.resource_id }}{% endif %}
+        {% endif %}
+      </div>
+    </div>
+    <div>
+      <strong>IP address</strong>
+      <div>{{ entry.ip_address or '—' }}</div>
+    </div>
+    {% if entry.detail %}
+    <div>
+      <strong>Summary</strong>
+      <div>{{ entry.detail }}</div>
+    </div>
+    {% endif %}
+    {% if changes_json %}
+    <div>
+      <strong>Changes</strong>
+      <pre style="margin:8px 0 0;padding:12px;background:var(--clr-surface-muted, #f8fafc);border-radius:6px;overflow:auto;font-size:13px;">{{ changes_json }}</pre>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

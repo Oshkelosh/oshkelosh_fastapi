@@ -11,15 +11,24 @@ from app.storage.local import LocalStorageBackend
 
 @pytest.fixture
 def local_storage(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    (tmp_path / "data" / "uploads").mkdir(parents=True)
+    monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("DEPLOYMENT_PROFILE", "local")
-    monkeypatch.setenv("LOCAL_MEDIA_DIR", str(tmp_path / "uploads"))
-    monkeypatch.setenv("LOCAL_MEDIA_BASE_URL", "http://testserver/media/files")
+    monkeypatch.setenv("PUBLIC_APP_URL", "http://testserver")
     reload_settings()
     reset_storage()
     cfg = Settings()
     backend = create_storage(cfg)
     yield backend, tmp_path
     reset_storage()
+    reload_settings()
+
+
+def test_local_media_base_url_derived_from_public_app_url(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("PUBLIC_APP_URL", "https://shop.example.com")
+    reload_settings()
+    cfg = Settings()
+    assert cfg.local_media_base_url == "https://shop.example.com/media/files"
     reload_settings()
 
 
@@ -33,7 +42,7 @@ async def test_local_storage_upload_and_url(local_storage):
     url = await backend.upload(key, content, "image/jpeg")
 
     assert url == "http://testserver/media/files/products/test-image.jpg"
-    file_path = tmp_path / "uploads" / "products" / "test-image.jpg"
+    file_path = tmp_path / "data" / "uploads" / "products" / "test-image.jpg"
     assert file_path.exists()
     assert file_path.read_bytes() == content
 
@@ -47,7 +56,7 @@ async def test_local_storage_delete(local_storage):
     key = "products/remove-me.png"
     await backend.upload(key, b"data", "image/png")
 
-    file_path = tmp_path / "uploads" / "products" / "remove-me.png"
+    file_path = tmp_path / "data" / "uploads" / "products" / "remove-me.png"
     assert file_path.exists()
 
     await backend.delete(key)

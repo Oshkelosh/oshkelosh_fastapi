@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+
+{% block title %}{{ 'Edit User' if user else 'New User' }}{% endblock %}
+
+{% block content %}
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+  <h2 style="margin:0;">{{ 'Edit User' if user else 'New User' }}</h2>
+  <a href="/admin/users" class="btn btn--secondary">← Back to Users</a>
+</div>
+
+{% if form_error %}
+<div class="flash flash--error" style="margin-bottom:16px;">{{ form_error }}</div>
+{% endif %}
+
+<form method="POST" action="{{ action_url }}">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+
+  <div class="card" style="margin-bottom:16px;">
+    <h3 style="margin-top:0;">Account</h3>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+      {% if user %}
+      <div class="form-group" style="grid-column:1 / -1;">
+        <label class="form-label">Email</label>
+        <input type="email" class="form-input" value="{{ user.email }}" disabled>
+      </div>
+      <div class="form-group" style="grid-column:1 / -1;">
+        <label class="form-label">New password</label>
+        <input type="password" name="password" class="form-input" autocomplete="new-password"
+               placeholder="Leave blank to keep current password">
+        <small style="color:var(--clr-text-muted);">Min 8 chars, upper, lower, and digit required.</small>
+      </div>
+      {% else %}
+      <div class="form-group" style="grid-column:1 / -1;">
+        <label class="form-label">Email *</label>
+        <input type="email" name="email" class="form-input" required autocomplete="email"
+               value="{{ draft.email if draft else '' }}">
+      </div>
+      <div class="form-group" style="grid-column:1 / -1;">
+        <label class="form-label">Password *</label>
+        <input type="password" name="password" class="form-input" required autocomplete="new-password">
+        <small style="color:var(--clr-text-muted);">Min 8 chars, upper, lower, and digit required.</small>
+      </div>
+      {% endif %}
+
+      <div class="form-group">
+        <label class="form-label">Full name</label>
+        <input type="text" name="full_name" class="form-input" maxlength="255"
+               value="{{ draft.full_name if draft and draft.full_name is defined else (user.full_name if user else '') }}">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Phone</label>
+        <input type="text" name="phone" class="form-input" maxlength="32"
+               value="{{ draft.phone if draft and draft.phone is defined else (user.phone if user else '') }}">
+      </div>
+
+      <div class="form-group" style="grid-column:1 / -1;display:flex;flex-wrap:wrap;gap:16px;">
+        <label style="display:flex;align-items:center;gap:8px;">
+          <input type="checkbox" name="verified" value="on"
+                 {% if draft and draft.verified is defined %}
+                   {% if draft.verified %}checked{% endif %}
+                 {% elif user %}
+                   {% if user.verified %}checked{% endif %}
+                 {% else %}checked{% endif %}>
+          Verified
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;">
+          <input type="checkbox" name="banned" value="on"
+                 {% if draft and draft.banned is defined %}
+                   {% if draft.banned %}checked{% endif %}
+                 {% elif user and user.banned %}checked{% endif %}>
+          Banned
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;">
+          <input type="checkbox" name="is_admin" value="on"
+                 {% if draft and draft.is_admin is defined %}
+                   {% if draft.is_admin %}checked{% endif %}
+                 {% elif user and user.is_admin %}checked{% endif %}>
+          Admin
+        </label>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:16px;">
+    <h3 style="margin-top:0;">Default shipping address</h3>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+      <div class="form-group" style="grid-column:1 / -1;">
+        <label class="form-label">Address line 1</label>
+        <input type="text" name="line1" class="form-input" value="{{ address.line1 }}">
+      </div>
+      <div class="form-group" style="grid-column:1 / -1;">
+        <label class="form-label">Address line 2</label>
+        <input type="text" name="line2" class="form-input" value="{{ address.line2 }}">
+      </div>
+      <div class="form-group">
+        <label class="form-label">City</label>
+        <input type="text" name="city" class="form-input" value="{{ address.city }}">
+      </div>
+      <div class="form-group">
+        <label class="form-label">State / Province</label>
+        <input type="text" name="state" class="form-input" value="{{ address.state }}">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Postal code</label>
+        <input type="text" name="postal_code" class="form-input" value="{{ address.postal_code }}">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Country</label>
+        <input type="text" name="country" class="form-input" value="{{ address.country }}">
+      </div>
+    </div>
+  </div>
+
+  {% if user %}
+  <p style="color:var(--clr-text-muted);font-size:14px;margin-bottom:16px;">
+    Member since {{ user.created_at.strftime('%Y-%m-%d %H:%M') if user.created_at else '—' }}
+    {% if user.verified_at %} · Verified {{ user.verified_at.strftime('%Y-%m-%d') }}{% endif %}
+  </p>
+  {% endif %}
+
+  <button type="submit" class="btn btn--primary">{{ 'Save changes' if user else 'Create user' }}</button>
+</form>
+{% endblock %}

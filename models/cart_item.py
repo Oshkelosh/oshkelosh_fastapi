@@ -11,6 +11,7 @@ from app.db.base import ModelBase, utc_now
 if TYPE_CHECKING:
     from models.cart import Cart
     from models.product import Product
+    from models.product_variant import ProductVariant
 
 
 class CartItem(ModelBase, table=True):
@@ -23,6 +24,9 @@ class CartItem(ModelBase, table=True):
     )
     product_id: int = Field(
         sa_column=Column(Integer, ForeignKey("products.id", ondelete="CASCADE"), nullable=False),
+    )
+    variant_id: int = Field(
+        sa_column=Column(Integer, ForeignKey("product_variants.id", ondelete="CASCADE"), nullable=False),
     )
     quantity: int = Field(
         default=1,
@@ -42,3 +46,4 @@ class CartItem(ModelBase, table=True):
     # ── Relationships ──────────────────────────────────────────────
     cart: "Cart" = Relationship(back_populates="cart_items")
     product: "Product" = Relationship(back_populates="cart_items")
+    variant: "ProductVariant" = Relationship(back_populates="cart_items")

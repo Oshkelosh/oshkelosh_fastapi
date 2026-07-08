@@ -15,6 +15,9 @@ from typing import Any, Dict, List
 from sqlmodel import select
 
 from app.addons.base import BaseAddon
+from app.addons.compat import check_min_host_version
+from app.addons.config_serialization import dump_addon_config
+from app.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -57,7 +60,7 @@ class AddonRegistry:
                 try:
                     modules_to_scan.append(importlib.import_module(addon_module))
                 except ModuleNotFoundError:
-                    logger.debug("Skipping addon (no package): %s", addon_module)
+                    logger.warning("Skipping addon (no package): %s", addon_module)
                     continue
                 except Exception:
                     logger.exception("Failed to import addon package %s", addon_module)
@@ -116,19 +119,28 @@ class AddonRegistry:
     # Enable / Disable
     # ------------------------------------------------------------------
 
-    def _validate_and_store_config(self, addon: BaseAddon, config: dict) -> dict:
-        """Validate config against the addon schema and store on the instance."""
+    def parse_config(self, addon: BaseAddon, config: dict) -> dict:
+        """Validate config against the addon schema without mutating registry state."""
         schema = addon.config_schema()
         validated = schema(**config)
-        stored = validated.model_dump(mode="json")
+        return dump_addon_config(validated)
+
+    def apply_config(self, addon: BaseAddon, stored: dict) -> dict:
+        """Store a parsed config dict on the addon instance."""
         addon._config = stored  # type: ignore[attr-defined]
         return stored
+
+    def _validate_and_store_config(self, addon: BaseAddon, config: dict) -> dict:
+        """Validate config against the addon schema and store on the instance."""
+        stored = self.parse_config(addon, config)
+        return self.apply_config(addon, stored)
 
     async def enable_async(self, addon_id: str, config: dict) -> None:
         """Validate config, enable, and initialize an addon."""
         addon = self._registry.get(addon_id)
         if addon is None:
             raise KeyError(f"Addon '{addon_id}' not found in registry")
+        check_min_host_version(addon, settings.app_version)
         stored = self._validate_and_store_config(addon, config)
         addon.is_enabled = True
         logger.info("Enabling addon '%s' …", addon_id)
@@ -143,6 +155,9 @@ class AddonRegistry:
             await addon.shutdown()
         addon.is_enabled = False
         logger.info("Disabled addon '%s'", addon_id)
+        from app.services.addons import invalidate_frontend_cache
+
+        invalidate_frontend_cache()
 
     def enable(self, addon_id: str, config: dict) -> None:
         """Sync alias – prefer ``enable_async`` in async contexts."""
@@ -199,7 +214,16 @@ class AddonRegistry:
                 continue
             addon.is_enabled = row.is_enabled
             if row.config:
-                addon._config = row.config  # type: ignore[attr-defined]
+                try:
+                    stored = self._validate_and_store_config(addon, row.config)
+                    addon._config = stored  # type: ignore[attr-defined]
+                except Exception as exc:
+                    logger.warning(
+                        "Invalid stored config for addon '%s': %s",
+                        row.addon_id,
+                        exc,
+                    )
+                    addon._config = row.config  # type: ignore[attr-defined]
 
     async def startup(self, session: Any) -> None:
         """Discover, load DB config, and initialize every enabled addon."""
@@ -209,10 +233,13 @@ class AddonRegistry:
             if addon.is_enabled:
                 config = self.get_config(addon_id)
                 try:
+                    check_min_host_version(addon, settings.app_version)
                     await addon.initialize(config)
                     logger.info("Addon '%s' started", addon_id)
-                except Exception:
-                    logger.exception("Failed to start addon '%s'", addon_id)
+                except Exception as exc:
+                    logger.exception("Failed to start addon '%s': %s", addon_id, exc)
+                    addon.is_enabled = False
+                    logger.warning("Disabled addon '%s' after startup failure", addon_id)
 
     async def shutdown(self) -> None:
         """Shutdown every enabled addon."""
@@ -231,6 +258,10 @@ class AddonRegistry:
     def get(self, addon_id: str) -> BaseAddon | None:
         """Return an addon by id, or None."""
         return self._registry.get(addon_id)
+
+    def iter_addons(self) -> List[BaseAddon]:
+        """Return all registered addon instances."""
+        return list(self._registry.values())
 
     def get_enabled(self, category: str) -> List[BaseAddon]:
         """Return all enabled addons in a category."""

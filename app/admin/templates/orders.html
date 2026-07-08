@@ -7,19 +7,19 @@
 
 <div style="margin-bottom:16px;display:flex;gap:8px;align-items:center;">
   <form method="GET" style="display:inline;">
-    <select name="status" class="form-select" style="width:auto;">
+    <select name="status_filter" class="form-select" style="width:auto;">
       <option value="">All Statuses</option>
-      <option value="pending" {{ 'selected' if status == 'pending' else '' }}>Pending</option>
-      <option value="paid" {{ 'selected' if status == 'paid' else '' }}>Paid</option>
-      <option value="shipped" {{ 'selected' if status == 'shipped' else '' }}>Shipped</option>
-      <option value="delivered" {{ 'selected' if status == 'delivered' else '' }}>Delivered</option>
-      <option value="cancelled" {{ 'selected' if status == 'cancelled' else '' }}>Cancelled</option>
+      <option value="pending" {{ 'selected' if status_filter == 'pending' else '' }}>Pending</option>
+      <option value="paid" {{ 'selected' if status_filter == 'paid' else '' }}>Paid</option>
+      <option value="shipped" {{ 'selected' if status_filter == 'shipped' else '' }}>Shipped</option>
+      <option value="delivered" {{ 'selected' if status_filter == 'delivered' else '' }}>Delivered</option>
+      <option value="cancelled" {{ 'selected' if status_filter == 'cancelled' else '' }}>Cancelled</option>
     </select>
     <button type="submit" class="btn btn--secondary">Filter</button>
   </form>
 </div>
 
-{% if orders %}
+{% if items %}
 <table class="table">
   <thead>
     <tr>
@@ -31,7 +31,7 @@
     </tr>
   </thead>
   <tbody>
-    {% for order in orders %}
+    {% for order in items %}
     <tr>
       <td>#{{ order.id }}</td>
       <td>{{ order.created_at.strftime('%Y-%m-%d') if order.created_at else '' }}</td>
@@ -56,6 +56,17 @@
     {% endfor %}
   </tbody>
 </table>
+{% if total_pages > 1 %}
+<nav style="margin-top:16px;display:flex;gap:8px;align-items:center;">
+  {% if page > 1 %}
+  <a href="/admin/orders?page={{ page - 1 }}{% if status_filter %}&status_filter={{ status_filter }}{% endif %}" class="btn btn--secondary btn--sm">Previous</a>
+  {% endif %}
+  <span style="color:var(--clr-text-muted);">Page {{ page }} of {{ total_pages }} ({{ total }} orders)</span>
+  {% if page < total_pages %}
+  <a href="/admin/orders?page={{ page + 1 }}{% if status_filter %}&status_filter={{ status_filter }}{% endif %}" class="btn btn--secondary btn--sm">Next</a>
+  {% endif %}
+</nav>
+{% endif %}
 {% else %}
 <div class="card" style="text-align:center;padding:40px;">
   <p style="color:var(--clr-text-muted);">No orders found.</p>

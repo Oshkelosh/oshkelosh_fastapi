@@ -8,6 +8,7 @@
 <p style="color:var(--clr-text-muted);margin-bottom:24px;">
   Site-wide branding used by the storefront, admin header, and order emails.
   Choose and configure the active storefront under <a href="/admin/frontends">Frontends</a>.
+  The public storefront URL is set via <code>PUBLIC_APP_URL</code> in your server environment.
 </p>
 
 <form method="POST" action="/admin/settings">
@@ -18,18 +19,6 @@
       <label class="form-label" for="store_name">Store name</label>
       <input type="text" id="store_name" name="store_name" class="form-input"
              value="{{ site.store_name }}" required />
-    </div>
-
-    <div class="form-group">
-      <label class="form-label" for="logo_url">Logo URL</label>
-      <input type="url" id="logo_url" name="logo_url" class="form-input"
-             value="{{ site.logo_url or '' }}" placeholder="https://..." />
-    </div>
-
-    <div class="form-group">
-      <label class="form-label" for="favicon_url">Favicon URL</label>
-      <input type="url" id="favicon_url" name="favicon_url" class="form-input"
-             value="{{ site.favicon_url or '' }}" />
     </div>
 
     <div class="form-group">
@@ -63,6 +52,148 @@
     </div>
   </div>
 
+  <div class="card" style="margin-bottom:16px;">
+    <h3 style="margin-top:0;">Tax</h3>
+    <p style="color:var(--clr-text-muted);font-size:0.875rem;margin-bottom:16px;">
+      Built-in tax rules applied at checkout. Third-party tax APIs (TaxJar, Avalara) are configured under
+      <a href="/admin/tools">Tools</a> when installed.
+    </p>
+    <div class="form-group">
+      <label class="form-label">
+        <input type="checkbox" name="tax_enabled" value="1"
+               {% if site.tax_enabled %}checked{% endif %} />
+        Enable tax at checkout
+      </label>
+    </div>
+    <div class="form-group">
+      <label class="form-label">
+        <input type="checkbox" name="tax_inclusive" value="1"
+               {% if site.tax_inclusive %}checked{% endif %} />
+        Prices include tax (tax-inclusive display)
+      </label>
+    </div>
+    <div class="form-group">
+      <label class="form-label" for="tax_rate_bps">Default tax rate (basis points)</label>
+      <input type="number" id="tax_rate_bps" name="tax_rate_bps" class="form-input"
+             min="0" max="10000" value="{{ site.tax_rate_bps }}" />
+      <small style="color:var(--clr-text-muted);">800 = 8%. Used when no country zone matches.</small>
+    </div>
+    <div class="form-group">
+      <label class="form-label" for="tax_zones_json">Tax zones (JSON)</label>
+      <textarea id="tax_zones_json" name="tax_zones_json" class="form-textarea" rows="4"
+                placeholder='[{"countries": ["US"], "rate_bps": 800}]'>{{ tax_zones_json }}</textarea>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:16px;">
+    <h3 style="margin-top:0;">Shipping</h3>
+    <p style="color:var(--clr-text-muted);font-size:0.875rem;margin-bottom:16px;">
+      Default shipping for untagged products. Supplier-tagged products may use provider quotes when supported.
+    </p>
+    <div class="form-group">
+      <label class="form-label" for="shipping_mode">Shipping mode</label>
+      <select id="shipping_mode" name="shipping_mode" class="form-input">
+        <option value="flat" {% if site.shipping_mode == 'flat' %}selected{% endif %}>Flat rate</option>
+        <option value="free" {% if site.shipping_mode == 'free' %}selected{% endif %}>Always free</option>
+        <option value="free_over_threshold" {% if site.shipping_mode == 'free_over_threshold' %}selected{% endif %}>Free over subtotal threshold</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label" for="shipping_flat_cents">Flat shipping (cents)</label>
+      <input type="number" id="shipping_flat_cents" name="shipping_flat_cents" class="form-input"
+             min="0" value="{{ site.shipping_flat_cents }}" />
+      <small style="color:var(--clr-text-muted);">500 = $5.00. Used for flat mode and as zone fallback.</small>
+    </div>
+    <div class="form-group">
+      <label class="form-label" for="shipping_free_threshold_cents">Free shipping threshold (cents)</label>
+      <input type="number" id="shipping_free_threshold_cents" name="shipping_free_threshold_cents" class="form-input"
+             min="0" value="{{ site.shipping_free_threshold_cents or '' }}" placeholder="Optional" />
+      <small style="color:var(--clr-text-muted);">Required for &ldquo;free over threshold&rdquo; mode.</small>
+    </div>
+    <div class="form-group">
+      <label class="form-label" for="shipping_zones_json">Shipping zones (JSON)</label>
+      <textarea id="shipping_zones_json" name="shipping_zones_json" class="form-textarea" rows="4"
+                placeholder='[{"countries": ["US"], "flat_cents": 500}]'>{{ shipping_zones_json }}</textarea>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:16px;">
+    <h3 style="margin-top:0;">Abandoned cart</h3>
+    <p style="color:var(--clr-text-muted);font-size:0.875rem;margin-bottom:16px;">
+      Native recovery emails for logged-in shoppers with items left in cart.
+      Run via cron: <code>POST /api/v1/admin/jobs/abandoned-cart</code>.
+      External ESP flows (Klaviyo, Brevo) can subscribe to the <code>cart.abandoned</code> lifecycle event via tool addons.
+    </p>
+    <div class="form-group">
+      <label class="form-label">
+        <input type="checkbox" name="abandoned_cart_enabled" value="1"
+               {% if site.abandoned_cart_enabled %}checked{% endif %} />
+        Enable abandoned cart reminders
+      </label>
+    </div>
+    <div class="form-group">
+      <label class="form-label" for="abandoned_cart_delay_hours">Delay (hours)</label>
+      <input type="number" id="abandoned_cart_delay_hours" name="abandoned_cart_delay_hours" class="form-input"
+             min="1" value="{{ site.abandoned_cart_delay_hours }}" />
+      <small style="color:var(--clr-text-muted);">Hours of cart inactivity before the first reminder.</small>
+    </div>
+    <div class="form-group">
+      <label class="form-label" for="abandoned_cart_max_reminders">Max reminders</label>
+      <input type="number" id="abandoned_cart_max_reminders" name="abandoned_cart_max_reminders" class="form-input"
+             min="1" value="{{ site.abandoned_cart_max_reminders }}" />
+    </div>
+  </div>
+
   <button type="submit" class="btn btn--primary">Save site settings</button>
 </form>
+
+<div class="card" style="margin-top:16px;">
+  <h3 style="margin-top:0;">Logo</h3>
+  {% if site.logo_url %}
+  <div style="margin-bottom:16px;">
+    <img src="{{ site.logo_url }}" alt="Current logo" style="max-height:80px;max-width:240px;object-fit:contain;">
+  </div>
+  <form method="POST" action="/admin/settings/logo/clear" style="margin-bottom:16px;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <button type="submit" class="btn btn--danger btn--sm" onclick="return confirm('Remove the logo?')">Remove logo</button>
+  </form>
+  {% else %}
+  <p style="color:var(--clr-text-muted);margin:0 0 16px;">No logo uploaded yet.</p>
+  {% endif %}
+  <form method="POST" action="/admin/settings/logo" enctype="multipart/form-data">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <p style="color:var(--clr-text-muted);font-size:14px;margin:0 0 12px;">JPG, PNG, WebP, or GIF — max 5 MB.</p>
+    <div class="form-group">
+      <label class="form-label" for="logo_file">Logo file</label>
+      <input type="file" id="logo_file" name="file" class="form-input"
+             accept="image/jpeg,image/png,image/webp,image/gif" required>
+    </div>
+    <button type="submit" class="btn btn--secondary">Upload logo</button>
+  </form>
+</div>
+
+<div class="card" style="margin-top:16px;">
+  <h3 style="margin-top:0;">Favicon</h3>
+  {% if site.favicon_url %}
+  <div style="margin-bottom:16px;">
+    <img src="{{ site.favicon_url }}" alt="Current favicon" style="width:32px;height:32px;object-fit:contain;">
+  </div>
+  <form method="POST" action="/admin/settings/favicon/clear" style="margin-bottom:16px;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <button type="submit" class="btn btn--danger btn--sm" onclick="return confirm('Remove the favicon?')">Remove favicon</button>
+  </form>
+  {% else %}
+  <p style="color:var(--clr-text-muted);margin:0 0 16px;">No favicon uploaded yet.</p>
+  {% endif %}
+  <form method="POST" action="/admin/settings/favicon" enctype="multipart/form-data">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <p style="color:var(--clr-text-muted);font-size:14px;margin:0 0 12px;">JPG, PNG, WebP, or GIF — max 5 MB.</p>
+    <div class="form-group">
+      <label class="form-label" for="favicon_file">Favicon file</label>
+      <input type="file" id="favicon_file" name="file" class="form-input"
+             accept="image/jpeg,image/png,image/webp,image/gif" required>
+    </div>
+    <button type="submit" class="btn btn--secondary">Upload favicon</button>
+  </form>
+</div>
 {% endblock %}

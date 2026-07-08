@@ -186,6 +186,7 @@ async def test_install_from_url(install_root: Path, install_settings: Settings):
     zip_bytes = _build_addon_zip()
 
     class FakeResponse:
+        status_code = 200
         headers = {"content-type": "application/zip"}
 
         async def __aenter__(self):
@@ -214,11 +215,29 @@ async def test_install_from_url(install_root: Path, install_settings: Settings):
             assert method == "GET"
             return FakeResponse()
 
-    with patch("app.services.addon_install.httpx.AsyncClient", FakeClient):
-        result = await addon_install.install_addon_from_url(
-            "https://example.com/addons/test.zip",
-            cfg=install_settings,
-        )
+    url = "https://example.com/addons/test.zip"
+    with patch("app.services.addon_install.validate_install_url", return_value=url):
+        with patch("app.services.addon_install.httpx.AsyncClient", FakeClient):
+            result = await addon_install.install_addon_from_url(
+                url,
+                cfg=install_settings,
+            )
 
     assert result.addon_id == "test_install"
     assert (install_root / "tool" / "test_install").is_dir()
+
+
+def test_install_archive_respects_write_restart_flag_false(
+    install_root: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    cfg = Settings(
+        app_version="0.1.0",
+        addon_install_restart_flag_file=str(tmp_path / "restart.flag"),
+    )
+    monkeypatch.setattr(addon_install, "settings", cfg)
+    data = _build_addon_zip()
+    result = addon_install.install_addon_archive(data, cfg=cfg, write_restart_flag=False)
+    assert result.restart_flag_written is False
+    assert not (tmp_path / "restart.flag").exists()

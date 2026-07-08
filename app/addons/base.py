@@ -6,10 +6,20 @@ addon must inherit from.
 """
 
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from typing import List, Type
 
 from fastapi import APIRouter
 from pydantic import BaseModel
+
+
+@dataclass(frozen=True)
+class AdminNavItem:
+    """Sidebar link contributed by an enabled addon."""
+
+    label: str
+    url: str
+    section: str = "addon"
 
 
 class AddonConfig(BaseModel):
@@ -41,6 +51,8 @@ class BaseAddon(ABC):
     addon_description: str = ""
     addon_category: str = "supplier"
     version: str = "0.1.0"
+    min_host_version: str = "0.0.0"
+    log_label: str = ""
     is_enabled: bool = False
 
     @classmethod
@@ -63,12 +75,24 @@ class BaseAddon(ABC):
         """Cleanup resources when the addon is disabled or the app shuts down."""
         ...
 
+    async def validate_config(self, config: dict) -> None:
+        """Raise ``ValidationError`` when credentials are invalid or lack required permissions.
+
+        Called by core when a ``SecretStr`` config field changes. Override in addons
+        that store API keys, tokens, or other secrets.
+        """
+        return
+
     def get_routers(self) -> List[APIRouter]:
         """Return API routers contributed by this addon (mounted at ``/api/v1/...``)."""
         return []
 
     def get_admin_routes(self) -> List[APIRouter]:
         """Return admin sub-routes (mounted at ``/admin/...``)."""
+        return []
+
+    def get_admin_nav_items(self) -> List[AdminNavItem]:
+        """Return sidebar links for the admin panel (shown when enabled)."""
         return []
 
     def get_admin_templates(self) -> str:

@@ -1,50 +1,332 @@
 {% extends "base.html" %}
 
-{% block title %}{{ 'Edit Product' if product else 'New Product' }}{% endblock %}
+{% block title %}{{ 'Edit Product' if product and product.id else 'New Product' }}{% endblock %}
 
 {% block content %}
-<h2 style="margin-bottom:20px;">{{ 'Edit Product' if product else 'New Product' }}</h2>
+{% set is_edit = product and product.id %}
+
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+  <h2 style="margin:0;">{{ product.name if is_edit else 'New Product' }}</h2>
+  <a href="/admin/products" class="btn btn--secondary btn--sm">← Back to Products</a>
+</div>
+
+{% if is_edit %}
+<div class="card" style="margin-bottom:16px;">
+  <h3 style="margin-top:0;">Images</h3>
+  <p style="color:var(--clr-text-muted);font-size:14px;margin:0 0 16px;">
+    Photos shown on the storefront. The first image is used as the thumbnail in listings.
+  </p>
+  {% if product_images %}
+  <div class="product-image-grid">
+    {% for image in product_images %}
+    {% set filename = image.url.rsplit('/', 1)[-1].split('?')[0] or image.url %}
+    <div class="product-image-card">
+      <div class="product-image-card__header">
+        <span class="product-image-card__position">Image {{ loop.index }} of {{ product_images | length }}</span>
+        {% if loop.first %}<span class="badge badge--success">Primary</span>{% endif %}
+      </div>
+      <a href="{{ image.url }}" target="_blank" rel="noopener noreferrer" class="product-image-card__thumb-link">
+        <img src="{{ image.url }}" alt="{{ image.alt_text or product.name }}" class="product-image-card__thumb">
+      </a>
+      <dl class="product-image-card__details">
+        <div class="product-image-card__detail">
+          <dt>Alt text</dt>
+          <dd>{{ image.alt_text or '—' }}</dd>
+        </div>
+        <div class="product-image-card__detail">
+          <dt>Sort order</dt>
+          <dd>{{ image.sort_order }}</dd>
+        </div>
+        <div class="product-image-card__detail">
+          <dt>Image ID</dt>
+          <dd>{{ image.id }}</dd>
+        </div>
+        <div class="product-image-card__detail">
+          <dt>Filename</dt>
+          <dd class="product-image-card__filename" title="{{ image.url }}">{{ filename }}</dd>
+        </div>
+        <div class="product-image-card__detail">
+          <dt>Added</dt>
+          <dd>{% if image.created_at %}{{ image.created_at.strftime('%Y-%m-%d %H:%M') }}{% else %}—{% endif %}</dd>
+        </div>
+      </dl>
+      <div class="product-image-card__actions">
+        <a href="{{ image.url }}" target="_blank" rel="noopener noreferrer" class="btn btn--ghost btn--sm">Open</a>
+        <form method="POST" action="/admin/products/{{ product.id }}/images/{{ image.id }}/delete">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <button type="submit" class="btn btn--danger btn--sm" onclick="return confirm('Delete this image?')">Delete</button>
+        </form>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p style="color:var(--clr-text-muted);margin:0;">No images yet. Upload one below.</p>
+  {% endif %}
+</div>
+{% endif %}
 
 <form method="POST" action="{{ action_url }}">
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
-    <div class="form-group" style="grid-column:1 / -1;">
-      <label class="form-label">Product Name *</label>
-      <input type="text" name="name" class="form-input" required
-             value="{{ product.name if product else '' }}">
+
+  <div class="card" style="margin-bottom:16px;">
+    <h3 style="margin-top:0;">Product details</h3>
+    <p style="color:var(--clr-text-muted);font-size:14px;margin:0 0 16px;">
+      Core information shown on the product page.
+    </p>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+      <div class="form-group" style="grid-column:1 / -1;margin-bottom:0;">
+        <label class="form-label">Product name *</label>
+        <input type="text" name="name" class="form-input" required
+               value="{{ product.name if product else '' }}">
+      </div>
+      <div class="form-group" style="grid-column:1 / -1;margin-bottom:0;">
+        <label class="form-label">Description</label>
+        <textarea name="description" class="form-textarea" rows="4">{{ product.description if product else '' }}</textarea>
+      </div>
+    </div>
+    {% if not is_edit %}
+    <p style="color:var(--clr-text-muted);font-size:14px;margin:16px 0 0;padding-top:16px;border-top:1px solid var(--clr-border);">
+      Save the product first, then upload images on the edit page.
+    </p>
+    {% endif %}
+  </div>
+
+  <div class="card" style="margin-bottom:16px;">
+    <h3 style="margin-top:0;">SEO</h3>
+    <p style="color:var(--clr-text-muted);font-size:14px;margin:0 0 16px;">
+      How this product appears in search results and social previews.
+    </p>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+      <div class="form-group" style="margin-bottom:0;">
+        <label class="form-label">URL slug</label>
+        <input type="text" name="slug" class="form-input" maxlength="255"
+               value="{{ product.slug if product else '' }}"
+               placeholder="Auto-generated from name if left empty">
+        <small style="color:var(--clr-text-muted);">Public URL: /products/your-slug</small>
+      </div>
+      <div class="form-group" style="margin-bottom:0;">
+        <label class="form-label">Meta title</label>
+        <input type="text" name="meta_title" class="form-input" maxlength="255"
+               value="{{ product.meta_title if product else '' }}"
+               placeholder="Auto-generated from product name if left empty">
+        <small style="color:var(--clr-text-muted);">~60 characters recommended</small>
+      </div>
+      <div class="form-group" style="grid-column:1 / -1;margin-bottom:0;">
+        <label class="form-label">Meta description</label>
+        <textarea name="meta_description" class="form-textarea" rows="2"
+                  placeholder="Auto-generated from description if left empty">{{ product.meta_description if product else '' }}</textarea>
+        <small style="color:var(--clr-text-muted);">~160 characters recommended</small>
+      </div>
+      <div class="form-group" style="grid-column:1 / -1;margin-bottom:0;background:var(--clr-surface-alt, #f8fafc);padding:12px;border-radius:8px;">
+        <strong style="font-size:13px;">Search preview</strong>
+        <p id="seo-preview-title" style="margin:8px 0 4px;color:#1a0dab;font-size:1.1rem;"></p>
+        <p id="seo-preview-url" style="margin:0 0 4px;color:#006621;font-size:0.875rem;"></p>
+        <p id="seo-preview-description" style="margin:0;color:#545454;font-size:0.875rem;"></p>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:16px;">
+    <h3 style="margin-top:0;">Additional info (creator options)</h3>
+    <p style="color:var(--clr-text-muted);font-size:14px;margin:0 0 16px;">
+      Optional read-only specs shown on the product page (material, care, dimensions). Not linked to variants or checkout.
+    </p>
+    <div class="form-group" style="margin-bottom:0;">
+      <label class="form-label">Options JSON</label>
+      <textarea name="product_options" class="form-textarea" rows="4"
+                placeholder='{"Material": "100% cotton", "Care": "Machine wash cold"}'>{{ product_options_json | default('{}') }}</textarea>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:16px;">
+    <h3 style="margin-top:0;">{% if is_edit %}Variants{% else %}Default variant{% endif %}</h3>
+    <p style="color:var(--clr-text-muted);font-size:14px;margin:0 0 16px;">
+      {% if is_edit and product_is_sync_imported %}
+      Variants are managed by supplier catalog sync.
+      {% elif is_edit %}
+      Edit sellable variants — price, stock, and supplier linkage live on each variant.
+      {% else %}
+      Every product needs at least one variant. You can add more variants after saving.
+      {% endif %}
+    </p>
+
+    {% if is_edit and product_variants %}
+    <div style="overflow-x:auto;">
+      <table class="admin-table" style="width:100%;margin-bottom:16px;">
+        <thead>
+          <tr>
+            <th>Title</th>
+            <th>Price (¢)</th>
+            <th>Compare (¢)</th>
+            <th>Stock</th>
+            <th>SKU</th>
+            <th>Status</th>
+            <th>Supplier</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for variant in product_variants %}
+          <tr>
+            <td>
+              {% if product_is_sync_imported %}
+              {{ variant.title }}
+              {% else %}
+              <input type="text" name="variant_{{ variant.id }}_title" class="form-input"
+                     value="{{ variant.title }}" maxlength="255">
+              {% endif %}
+            </td>
+            <td>
+              {% if product_is_sync_imported %}
+              {{ variant.price_cents }}
+              {% else %}
+              <input type="number" name="variant_{{ variant.id }}_price_cents" class="form-input" min="0"
+                     value="{{ variant.price_cents }}">
+              {% endif %}
+            </td>
+            <td>
+              {% if product_is_sync_imported %}
+              {{ variant.compare_at_price_cents or '—' }}
+              {% else %}
+              <input type="number" name="variant_{{ variant.id }}_compare_at_price_cents" class="form-input" min="0"
+                     value="{{ variant.compare_at_price_cents or '' }}">
+              {% endif %}
+            </td>
+            <td>
+              {% if product_is_sync_imported %}
+              {{ variant.inventory_quantity }}
+              {% else %}
+              <input type="number" name="variant_{{ variant.id }}_inventory_quantity" class="form-input" min="0"
+                     value="{{ variant.inventory_quantity }}">
+              {% endif %}
+            </td>
+            <td>{{ variant.sku or '—' }}</td>
+            <td>
+              {% if product_is_sync_imported %}
+              {{ variant.status }}
+              {% else %}
+              <select name="variant_{{ variant.id }}_status" class="form-select">
+                <option value="active" {% if variant.status == 'active' %}selected{% endif %}>Active</option>
+                <option value="archived" {% if variant.status == 'archived' %}selected{% endif %}>Archived</option>
+              </select>
+              {% endif %}
+            </td>
+            <td style="font-size:13px;color:var(--clr-text-muted);">
+              {% if variant.supplier_addon_id %}
+              {{ variant.supplier_addon_id }}
+              {% if variant.supplier_product_id %}/ {{ variant.supplier_product_id }}{% endif %}
+              {% if variant.supplier_variant_id %}/ {{ variant.supplier_variant_id }}{% endif %}
+              {% else %}
+              Local inventory
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </table>
+    </div>
+    {% else %}
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+      <div class="form-group" style="margin-bottom:0;">
+        <label class="form-label">Price (cents) *</label>
+        <input type="number" name="price_cents" class="form-input" required min="0"
+               value="{{ product.price_cents if product else '' }}">
+        <small style="color:var(--clr-text-muted);">e.g. 1999 = $19.99</small>
+      </div>
+      <div class="form-group" style="margin-bottom:0;">
+        <label class="form-label">Compare-at price (cents)</label>
+        <input type="number" name="compare_at_price_cents" class="form-input" min="0"
+               value="{{ product.compare_at_price_cents if product else '' }}">
+      </div>
+      <div class="form-group" style="margin-bottom:0;">
+        <label class="form-label">SKU{% if not is_edit %} *{% endif %}</label>
+        {% if is_edit %}
+        <input type="text" class="form-input" maxlength="100" value="{{ product.sku or '' }}" readonly>
+        <input type="hidden" name="sku" value="{{ product.sku or '' }}">
+        {% else %}
+        <input type="text" name="sku" class="form-input" maxlength="100" required
+               value="{{ product.sku if product else '' }}">
+        {% endif %}
+      </div>
+      <div class="form-group" style="margin-bottom:0;">
+        <label class="form-label">Inventory quantity</label>
+        <input type="number" name="inventory_quantity" class="form-input" min="0"
+               value="{{ product.inventory_quantity if product else '0' }}">
+      </div>
+      <div class="form-group" style="margin-bottom:0;">
+        <label class="form-label">Status</label>
+        <select name="status" class="form-select">
+          <option value="draft" {{ 'selected' if product and product.status == 'draft' else '' }}>Draft</option>
+          <option value="published" {{ 'selected' if product and product.status == 'published' else '' }}>Published</option>
+          <option value="archived" {{ 'selected' if product and product.status == 'archived' else '' }}>Archived</option>
+        </select>
+      </div>
+      <div class="form-group" style="margin-bottom:0;">
+        <label class="form-label">Category</label>
+        {% if is_edit and product_is_sync_imported %}
+        {% set ns = namespace(label='') %}
+        {% for cat in categories %}
+          {% if product.category_id == cat.id %}{% set ns.label = cat.name %}{% endif %}
+        {% endfor %}
+        <input type="text" class="form-input" value="{{ ns.label }}" readonly>
+        <input type="hidden" name="category_id" value="{{ product.category_id or '' }}">
+        {% else %}
+        <select name="category_id" class="form-select">
+          <option value="">— None —</option>
+          {% for cat in categories %}
+          <option value="{{ cat.id }}" {% if product and product.category_id == cat.id %}selected{% endif %}>
+            {{ cat.name }}
+          </option>
+          {% endfor %}
+        </select>
+        {% endif %}
+      </div>
     </div>
 
-    <div class="form-group" style="grid-column:1 / -1;">
-      <label class="form-label">Description</label>
-      <textarea name="description" class="form-textarea" rows="4">{{ product.description if product else '' }}</textarea>
+    {% if not is_edit %}
+    <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--clr-border);">
+      <h4 style="margin:0 0 12px;">Supplier (optional)</h4>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+        <div class="form-group" style="grid-column:1 / -1;margin-bottom:0;">
+          <label class="form-label">Supplier</label>
+          <select name="supplier_value" id="supplier_value" class="form-select">
+            <option value="" {% if not supplier_value %}selected{% endif %}>None (local inventory only)</option>
+            {% for opt in supplier_options %}
+            <option value="{{ opt.value }}" {% if supplier_value == opt.value %}selected{% endif %}>
+              {{ opt.label }}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group" style="margin-bottom:0;">
+          <label class="form-label">Supplier product ID</label>
+          <input type="text" name="supplier_product_id" id="supplier_product_id" class="form-input" maxlength="255"
+                 value="{{ supplier_product_id or '' }}" placeholder="Supplier product ID">
+          <small id="supplier_product_id_help" style="color:var(--clr-text-muted);">Select a supplier to see field requirements</small>
+        </div>
+        <div class="form-group" id="supplier_variant_group" style="margin-bottom:0;">
+          <label class="form-label">Supplier variant ID</label>
+          <input type="text" name="supplier_variant_id" id="supplier_variant_id" class="form-input" maxlength="255"
+                 value="{{ supplier_variant_id or '' }}" placeholder="Supplier variant ID">
+          <small id="supplier_variant_id_help" style="color:var(--clr-text-muted);"></small>
+        </div>
+      </div>
     </div>
+    {% endif %}
+    {% endif %}
+  </div>
 
-    <div class="form-group">
-      <label class="form-label">Price (cents) *</label>
-      <input type="number" name="price_cents" class="form-input" required min="0"
-             value="{{ product.price_cents if product else '' }}">
-      <small style="color:var(--clr-text-muted);">e.g. 1999 = $19.99</small>
-    </div>
-
-    <div class="form-group">
-      <label class="form-label">Compare-at Price (cents)</label>
-      <input type="number" name="compare_at_price_cents" class="form-input" min="0"
-             value="{{ product.compare_at_price_cents if product else '' }}">
-    </div>
-
-    <div class="form-group">
-      <label class="form-label">SKU</label>
-      <input type="text" name="sku" class="form-input" maxlength="100"
-             value="{{ product.sku if product else '' }}">
-    </div>
-
-    <div class="form-group">
-      <label class="form-label">Inventory Quantity</label>
-      <input type="number" name="inventory_quantity" class="form-input" min="0"
-             value="{{ product.inventory_quantity if product else '0' }}">
-    </div>
-
-    <div class="form-group">
+  {% if is_edit %}
+  <div class="card" style="margin-bottom:16px;">
+    <h3 style="margin-top:0;">Listing status</h3>
+    <input type="hidden" name="price_cents" value="{{ product.price_cents }}">
+    <input type="hidden" name="compare_at_price_cents" value="{{ product.compare_at_price_cents or '' }}">
+    <input type="hidden" name="inventory_quantity" value="{{ product.inventory_quantity }}">
+    <input type="hidden" name="sku" value="{{ product.sku or '' }}">
+    <input type="hidden" name="supplier_value" value="{{ supplier_value or '' }}">
+    <input type="hidden" name="supplier_product_id" value="{{ supplier_product_id or '' }}">
+    <input type="hidden" name="supplier_variant_id" value="{{ supplier_variant_id or '' }}">
+    <input type="hidden" name="category_id" value="{{ product.category_id or '' }}">
+    <div class="form-group" style="margin-bottom:0;">
       <label class="form-label">Status</label>
       <select name="status" class="form-select">
         <option value="draft" {{ 'selected' if product and product.status == 'draft' else '' }}>Draft</option>
@@ -52,24 +334,136 @@
         <option value="archived" {{ 'selected' if product and product.status == 'archived' else '' }}>Archived</option>
       </select>
     </div>
+  </div>
+  {% endif %}
 
-    <div class="form-group">
-      <label class="form-label">Category</label>
-      <input type="text" name="category" class="form-input" maxlength="100"
-             value="{{ product.category if product else '' }}">
-    </div>
-
-    <div class="form-group" style="grid-column:1 / -1;">
-      <label class="form-label">Tags (comma-separated)</label>
+  <div class="card" style="margin-bottom:16px;">
+    <h3 style="margin-top:0;">Advanced</h3>
+    <p style="color:var(--clr-text-muted);font-size:14px;margin:0 0 16px;">
+      Non-supplier tags as a JSON array. Most stores can leave this empty.
+    </p>
+    <div class="form-group" style="margin-bottom:0;">
+      <label class="form-label">Other tags</label>
       <input type="text" name="tags" class="form-input"
-             value="{{ ', '.join(product.tags) if product and product.tags else '' }}">
-      <small style="color:var(--clr-text-muted);">e.g. tshirt, summer, bestseller</small>
+             value="{{ other_tags_json | default('[]') }}">
     </div>
   </div>
 
-  <div style="margin-top:24px;display:flex;gap:8px;">
+  <div style="display:flex;gap:8px;">
     <button type="submit" class="btn btn--primary">Save Product</button>
     <a href="/admin/products" class="btn btn--secondary">Cancel</a>
   </div>
 </form>
+
+{% if is_edit %}
+<form method="POST" action="/admin/products/{{ product.id }}/images" enctype="multipart/form-data"
+      class="card" style="margin-top:16px;">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <h3 style="margin-top:0;">Upload image</h3>
+  <p style="color:var(--clr-text-muted);font-size:14px;margin:0 0 16px;">
+    JPG, PNG, WebP, or GIF — max 5 MB.
+  </p>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:end;">
+    <div class="form-group" style="margin-bottom:0;">
+      <label class="form-label">Image file</label>
+      <input type="file" name="file" class="form-input" accept="image/jpeg,image/png,image/webp,image/gif" required>
+    </div>
+    <div class="form-group" style="margin-bottom:0;">
+      <label class="form-label">Alt text (optional)</label>
+      <input type="text" name="alt_text" class="form-input" maxlength="500" placeholder="{{ product.name }}">
+    </div>
+  </div>
+  <button type="submit" class="btn btn--secondary" style="margin-top:12px;">Upload image</button>
+</form>
+
+<form method="POST" action="/admin/products/{{ product.id }}/delete"
+      class="card" style="margin-top:16px;border-color:var(--clr-danger);"
+      onsubmit="return confirm('Delete this product permanently? This cannot be undone.')">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <h3 style="margin-top:0;">Delete product</h3>
+  <p style="color:var(--clr-text-muted);font-size:14px;margin:0 0 16px;">
+    Permanently remove this product from the catalogue. Products that appear on existing orders cannot be deleted.
+  </p>
+  <button type="submit" class="btn btn--danger">Delete product</button>
+</form>
+{% endif %}
+
+<script type="application/json" id="supplier-form-meta">{{ supplier_form_meta_json | safe }}</script>
+{% if not is_edit %}
+<script>
+(function () {
+  var select = document.getElementById('supplier_value');
+  var variantGroup = document.getElementById('supplier_variant_group');
+  var productHelp = document.getElementById('supplier_product_id_help');
+  var variantHelp = document.getElementById('supplier_variant_id_help');
+  var metaEl = document.getElementById('supplier-form-meta');
+  if (!select || !variantGroup || !metaEl) return;
+
+  var meta = {};
+  try {
+    meta = JSON.parse(metaEl.textContent || '{}');
+  } catch (e) {
+    meta = {};
+  }
+
+  var defaultMeta = {
+    requires_variant_id: false,
+    product_id_help: 'Select a supplier to see field requirements.',
+    variant_id_help: ''
+  };
+
+  function metaForValue(value) {
+    if (!value) return defaultMeta;
+    if (value.indexOf('manual:') === 0) {
+      return meta['manual:'] || defaultMeta;
+    }
+    return meta[value] || defaultMeta;
+  }
+
+  function updateSupplierFields() {
+    var value = select.value;
+    var hints = metaForValue(value);
+    var showVariant = !!hints.requires_variant_id;
+    variantGroup.style.display = showVariant ? '' : 'none';
+    productHelp.textContent = hints.product_id_help || defaultMeta.product_id_help;
+    variantHelp.textContent = hints.variant_id_help || '';
+  }
+
+  select.addEventListener('change', updateSupplierFields);
+  updateSupplierFields();
+})();
+</script>
+{% endif %}
+<script>
+(function () {
+  var nameInput = document.querySelector('input[name="name"]');
+  var slugInput = document.querySelector('input[name="slug"]');
+  var titleInput = document.querySelector('input[name="meta_title"]');
+  var descriptionInput = document.querySelector('textarea[name="meta_description"]');
+  var bodyDescription = document.querySelector('textarea[name="description"]');
+  var titleEl = document.getElementById('seo-preview-title');
+  var urlEl = document.getElementById('seo-preview-url');
+  var descriptionEl = document.getElementById('seo-preview-description');
+  if (!nameInput || !titleEl || !urlEl || !descriptionEl) return;
+
+  function truncate(text, max) {
+    if (!text) return '';
+    return text.length <= max ? text : text.slice(0, max - 3).trim() + '...';
+  }
+
+  function updatePreview() {
+    var slug = (slugInput && slugInput.value) || (nameInput.value || 'product').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    var title = (titleInput && titleInput.value) || nameInput.value || 'Product title';
+    var description = (descriptionInput && descriptionInput.value) || (bodyDescription && bodyDescription.value) || 'Product description preview';
+    titleEl.textContent = truncate(title, 60);
+    urlEl.textContent = window.location.origin + '/products/' + slug;
+    descriptionEl.textContent = truncate(description, 160);
+  }
+
+  [nameInput, slugInput, titleInput, descriptionInput, bodyDescription].forEach(function (el) {
+    if (el) el.addEventListener('input', updatePreview);
+  });
+  updatePreview();
+})();
+</script>
 {% endblock %}

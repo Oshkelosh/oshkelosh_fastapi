@@ -37,7 +37,7 @@ def mount_addon_routers(
     """Include every registered addon's public and admin routers."""
     addon_registry.register_all()
 
-    for addon in addon_registry._registry.values():
+    for addon in addon_registry.iter_addons():
         tag = _ADDON_OPENAPI_TAGS.get(addon.addon_category, f"addons-{addon.addon_category}")
         api_mount = addon.api_mount_prefix()
 

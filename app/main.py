@@ -187,17 +187,17 @@ def create_app() -> FastAPI:
     # ------------------------------------------------------------------
     # Local media files (storage_backend=local)
     # ------------------------------------------------------------------
-    from pathlib import Path
+    from app.config import LOCAL_MEDIA_MOUNT_PATH
 
     if settings.storage_backend == "local":
         media_dir = settings.local_media_path
         media_dir.mkdir(parents=True, exist_ok=True)
         app.mount(
-            "/media/files",
+            f"/{LOCAL_MEDIA_MOUNT_PATH}",
             StaticFiles(directory=str(media_dir)),
             name="local_media",
         )
-        logger.info("Local media mounted at /media/files from {}", media_dir)
+        logger.info("Local media mounted at /{} from {}", LOCAL_MEDIA_MOUNT_PATH, media_dir)
 
     # ------------------------------------------------------------------
     # Health-check endpoint
@@ -220,50 +220,30 @@ def create_app() -> FastAPI:
     async def health_ready():
         """Readiness probe: database and storage must be reachable."""
         from fastapi.responses import JSONResponse
-        from sqlalchemy import text
 
-        from app.db.connection import session_scope
-        from app.storage import get_storage
+        from app.services.system_health import run_infrastructure_checks
 
-        checks: dict[str, str] = {}
-        ok = True
-
-        try:
-            async with session_scope() as session:
-                if hasattr(session, "execute_raw"):
-                    await session.execute_raw("SELECT 1")
-                else:
-                    await session.execute(text("SELECT 1"))
-            checks["database"] = "ok"
-        except Exception as exc:
-            checks["database"] = f"error: {exc}"
-            ok = False
-
-        try:
-            storage = get_storage()
-            if settings.storage_backend == "local":
-                path = settings.local_media_path
-                path.mkdir(parents=True, exist_ok=True)
-                if not path.exists():
-                    raise OSError(f"media path missing: {path}")
-            elif hasattr(storage, "bucket_name"):
-                checks["storage"] = "ok"
-            else:
-                checks["storage"] = "ok"
-            if "storage" not in checks:
-                checks["storage"] = "ok"
-        except Exception as exc:
-            checks["storage"] = f"error: {exc}"
-            ok = False
-
+        checks, ok = await run_infrastructure_checks()
         body = {"status": "ready" if ok else "not_ready", "checks": checks}
         if settings.app_env != "production" or settings.debug:
             body["database_backend"] = settings.database_backend
             body["storage_backend"] = settings.storage_backend
         return JSONResponse(status_code=200 if ok else 503, content=body)
 
+    @app.get("/firebase-messaging-sw.js", include_in_schema=False)
+    async def firebase_messaging_service_worker():
+        from app.services.push_discovery import build_fcm_service_worker_js
+        from fastapi.responses import Response
+
+        js = build_fcm_service_worker_js()
+        if js is None:
+            return Response(status_code=404, content="Not found", media_type="text/plain")
+        return Response(content=js, media_type="application/javascript")
+
+    from app.storefront.seo_routes import register_seo_routes
     from app.storefront.static import register_storefront_handler
 
+    register_seo_routes(app)
     register_storefront_handler(app)
 
     return app

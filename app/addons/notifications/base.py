@@ -1,12 +1,12 @@
 """
 Notification addon abstract class.
 
-All notification integrations (email, SMS, webhooks) must inherit from
-``NotificationAddon`` and implement the sending methods.
+All notification integrations (email, SMS, push, webhooks) must inherit from
+``NotificationAddon`` and implement the sending methods for their channel(s).
 """
 
 from abc import abstractmethod
-from typing import Any, Dict
+from typing import Any, ClassVar, Dict
 
 from app.addons.base import BaseAddon
 
@@ -15,6 +15,7 @@ class NotificationAddon(BaseAddon):
     """Abstract base for notification-channel integrations."""
 
     addon_category: str = "notification"
+    supported_channels: ClassVar[list[str]] = ["email"]
 
     @abstractmethod
     async def send_email(
@@ -24,32 +25,39 @@ class NotificationAddon(BaseAddon):
         body: str,
         html: bool = False,
     ) -> Dict[str, Any]:
-        """Send an email notification.
-
-        Args:
-            to:       Recipient email address.
-            subject:  Email subject line.
-            body:     Plain-text body.
-            html:     When ``True``, ``body`` is treated as HTML.
-        """
+        """Send an email notification."""
         ...
 
     @abstractmethod
     async def send_sms(self, to: str, body: str) -> Dict[str, Any]:
-        """Send an SMS notification.
+        """Send an SMS notification."""
+        ...
 
-        Args:
-            to:   Recipient phone number (E.164 format).
-            body: SMS message body.
-        """
+    @abstractmethod
+    async def send_push(
+        self,
+        to: str,
+        title: str,
+        body: str,
+        data: Dict[str, Any] | None = None,
+    ) -> Dict[str, Any]:
+        """Send a push notification to a device token or provider user id."""
         ...
 
     @abstractmethod
     async def send_webhook(self, url: str, payload: Dict[str, Any]) -> Dict[str, Any]:
-        """Send a POST request to a webhook URL.
-
-        Args:
-            url:     Target webhook URL.
-            payload: JSON-serialisable dict to send in the request body.
-        """
+        """Send a POST request to a webhook URL."""
         ...
+
+    def list_public_push_config(self) -> dict[str, Any] | None:
+        """Return public web push client config for the storefront, or None."""
+        return None
+
+    @classmethod
+    def channel_not_supported(cls, channel: str, to: str = "") -> Dict[str, Any]:
+        return {
+            "success": False,
+            "message_id": "",
+            "error": f"{channel} not supported by {cls.addon_id}",
+            "to": to,
+        }

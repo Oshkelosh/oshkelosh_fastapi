@@ -48,6 +48,9 @@ class TestSiteSettings:
         site = await get_site_settings(db_session)
         assert site.store_name == "Oshkelosh"
         assert site.primary_color == "#2563eb"
+        assert site.tax_rate_bps == 800
+        assert site.shipping_flat_cents == 500
+        assert site.shipping_mode == "flat"
 
     async def test_update_site_settings(self, db_session):
         await update_site_settings(
@@ -60,6 +63,14 @@ class TestSiteSettings:
 
 
 class TestFrontendAddon:
+    def test_default_frontend_config_defaults(self):
+        from app.addons.frontends.default.addon import DefaultFrontendConfig
+
+        config = DefaultFrontendConfig()
+        assert config.products_per_page == 12
+        assert config.hero_products == 5
+        assert config.category_products == 8
+
     def test_default_frontend_discovered(self):
         registry = AddonRegistry()
         registry.discover()
@@ -283,6 +294,41 @@ class TestFrontendAdminConfigure:
         assert resp.status_code == 200
         assert "Default Storefront" in resp.text
         assert "Enable this storefront" in resp.text
+        assert "Main page" in resp.text
+        assert "Hero products" in resp.text
+        assert "Category products" in resp.text
+        assert 'name="csrf_token"' in resp.text
+        import re
+
+        match = re.search(r'name="csrf_token"\s+value="([^"]+)"', resp.text)
+        assert match is not None, "csrf_token input missing from form"
+        assert len(match.group(1)) > 10, "csrf_token rendered empty"
+
+    async def test_save_config_with_valid_csrf_redirects(
+        self, client: AsyncClient, test_user
+    ):
+        from app.admin.session import SESSION_COOKIE_NAME, decode_session, encode_session
+        from app.main import app
+
+        app.state.needs_setup = False
+        token = encode_session(test_user.id)
+        csrf = decode_session(token)["csrf"]
+        resp = await client.post(
+            "/admin/frontends/default/save",
+            cookies={SESSION_COOKIE_NAME: token},
+            data={
+                "csrf_token": csrf,
+                "layout": "list",
+                "products_per_page": "12",
+                "hero_products": "5",
+                "category_products": "8",
+                "show_category_nav": "on",
+            },
+            follow_redirects=False,
+        )
+        assert resp.status_code == 302
+        assert resp.headers["location"] == "/admin/frontends/default"
+        assert "Invalid CSRF token" not in resp.text
 
     async def test_trailing_slash_redirects_to_configure_url(
         self, client: AsyncClient, test_user

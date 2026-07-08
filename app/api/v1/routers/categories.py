@@ -22,6 +22,22 @@ router = APIRouter(prefix="/categories", tags=["categories"])
 # Helpers
 # ------------------------------------------------------------------
 
+def _category_read(cat: Category, *, children: list[CategoryRead] | None = None) -> CategoryRead:
+    """Build CategoryRead without triggering async relationship loads."""
+    return CategoryRead(**{**cat.model_dump(), "children": children or []})
+
+
+async def _load_category_read(session, category: Category) -> CategoryRead:
+    """Return a category with direct children loaded explicitly."""
+    result = await session.execute(
+        select(Category)
+        .where(col(Category.parent_id) == category.id)
+        .order_by(Category.sort_order.asc(), Category.name.asc())
+    )
+    children = [_category_read(child) for child in result.scalars().all()]
+    return _category_read(category, children=children)
+
+
 def _build_tree(categories: List[Category]) -> List[dict]:
     """Build a nested parent/children tree from a flat list of categories."""
     by_id: dict[int, dict] = {}
@@ -81,7 +97,7 @@ async def list_categories(
 async def get_category(
     category_slug: str,
     session=Depends(get_session),
-) -> Category:
+) -> CategoryRead:
     """Return a single category's detail."""
     result = await session.execute(
         select(Category).where(col(Category.slug) == category_slug)
@@ -89,7 +105,7 @@ async def get_category(
     category = result.scalar_one_or_none()
     if category is None:
         raise NotFound(resource_name="Category", resource_id=category_slug)
-    return category
+    return await _load_category_read(session, category)
 
 
 # ------------------------------------------------------------------
@@ -107,7 +123,7 @@ async def create_category(
     body: CategoryCreate,
     current_user: CurrentUser = Depends(get_admin_user),
     session=Depends(get_session),
-) -> Category:
+) -> CategoryRead:
     """Create a new category."""
     # Check for duplicate slug
     existing = await session.execute(
@@ -126,13 +142,22 @@ async def create_category(
         name=body.name,
         slug=body.slug,
         description=body.description,
+        meta_title=body.meta_title,
+        meta_description=body.meta_description,
         parent_id=body.parent_id,
         sort_order=body.sort_order,
     )
     session.add(category)
     await session.flush()
+    from app.services.category_defaults import apply_category_creation_defaults
+    from app.services.site_settings import get_site_settings
+
+    site_settings = await get_site_settings(session)
+    store_name = site_settings.store_name or "Store"
+    await apply_category_creation_defaults(session, category, store_name=store_name)
+    await session.flush()
     await session.refresh(category)
-    return category
+    return _category_read(category)
 
 
 @router.patch(
@@ -146,7 +171,7 @@ async def update_category(
     body: CategoryUpdate,
     current_user: CurrentUser = Depends(get_admin_user),
     session=Depends(get_session),
-) -> Category:
+) -> CategoryRead:
     """Update an existing category."""
     result = await session.execute(
         select(Category).where(col(Category.slug) == category_slug)
@@ -179,7 +204,7 @@ async def update_category(
 
     await session.flush()
     await session.refresh(category)
-    return category
+    return _category_read(category)
 
 
 @router.delete(

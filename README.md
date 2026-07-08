@@ -60,6 +60,8 @@ python scripts/export_openapi.py   # → docs/api/openapi.json
    (SQLite compat)   (Object store)  (Stripe, Printful)
 ```
 
+Core commerce code **orchestrates** checkout, fulfillment, and catalog sync at fixed seams; each provider addon **implements** API clients, webhooks, tag rules, and admin UI. See [Core vs addon responsibilities](app/addons/README.md#core-vs-addon-responsibilities).
+
 ## Tech Stack
 
 - **Framework**: FastAPI (ASGI)
@@ -130,7 +132,15 @@ cp .env.example .env
 
 At minimum, set `JWT_SECRET_KEY`. Use `DEPLOYMENT_PROFILE=local` (default) for SQLite + on-disk media with no Cloudflare account.
 
-**Postmark, Printful, and Stripe** credentials are **not** `.env` variables — configure them in the admin panel after the server is running (see step 5 below).
+**Postmark, Printful, and Stripe** credentials are **not** `.env` variables — configure them in the admin panel after the server is running (see step 6 below).
+
+**Local development (optional):** To work on addon packages without installing via the admin panel, initialize Git submodules:
+
+```bash
+git submodule update --init --recursive
+```
+
+Submodules are for development only. Production installs addons through the admin panel.
 
 ### 3. Create the first admin
 
@@ -148,6 +158,7 @@ Or set `ADMIN_EMAIL` and `ADMIN_PASSWORD` in `.env` and run `python scripts/crea
 
 ```bash
 uvicorn app.main:app --reload --port 8000
+# or: ./scripts/run_dev.sh
 ```
 
 The API is available at `http://localhost:8000/api/v1/health`.
@@ -156,25 +167,24 @@ The admin panel is at `http://localhost:8000/admin`.
 
 The SPA static files are served at `http://localhost:8000/`.
 
-### 5. Log in and configure integrations
+### 5. Install and configure addons (admin)
 
 Sign in at `/admin` with the account you created in step 3.
 
-### 6. Configure integrations (admin)
+Install addon packages from **Dashboard → Install addon** (ZIP upload or HTTPS URL). Built-in addons (`manual` supplier, `sso` tool) ship with the host repo; everything else is installed this way. Installed packages require a **server restart** before they appear. By default, a restart flag is written to `data/restart.flag`; run `scripts/watch_addon_restart.py` alongside the server to restart automatically (see [Addon docs](app/addons/README.md)).
 
-Log in at `/admin`, open the category tabs (Suppliers, Payments, Frontends, Tools), enable each integration, then save its API keys.
-
-You can also install third-party addons from **Dashboard → Install addon** (ZIP or HTTPS URL). Installed packages require a **server restart** before they appear. By default, a restart flag is written to `data/restart.flag`; run `scripts/watch_addon_restart.py` alongside the server to restart automatically (see [Addon docs](app/addons/README.md)).
+Then open the category tabs (Suppliers, Payments, **Notifications**, Frontends, Tools), enable each integration, and save its API keys.
 
 | Integration | Admin URL |
 |-------------|-----------|
 | Stripe | `/admin/payments/stripe` |
 | Printful | `/admin/suppliers/printful` |
-| Email (Postmark) | `/admin/notifications/email` |
+| Postmark | `/admin/notifications/postmark` |
+| Message templates | `/admin/notifications/messages` |
 
 Settings are stored in the database (`addon_configs`), not in `.env`.
 
-### 7. Open API docs
+### 6. Open API docs
 
 - Swagger UI: `http://localhost:8000/docs`
 - ReDoc: `http://localhost:8000/redoc`
@@ -202,13 +212,11 @@ Backends are selected explicitly via `DEPLOYMENT_PROFILE` (or individual `DATABA
 
 ```env
 DEPLOYMENT_PROFILE=local
-D1_LOCAL_DB_PATH=data/oshkelosh.db
-LOCAL_MEDIA_DIR=data/uploads
-LOCAL_MEDIA_BASE_URL=http://localhost:8000/media/files
+PUBLIC_APP_URL=http://localhost:8000
 ```
 
 - SQLite database at `data/oshkelosh.db` (auto-created on startup).
-- Uploaded images stored under `LOCAL_MEDIA_DIR` and served at `/media/files/...`.
+- Uploaded images stored under `data/uploads` and served at `{PUBLIC_APP_URL}/media/files/...`.
 
 ### Cloudflare remote (`DEPLOYMENT_PROFILE=cloudflare_remote`)
 
@@ -234,11 +242,11 @@ Not yet implemented. The app exposes `app.db.backends.d1_binding.set_d1_binding(
 ### Running migrations
 
 ```bash
-# SQLite (local profile)
-python -c "from app.db.base import auto_create_tables; auto_create_tables()"
+# SQLite (local profile) — tables are created on startup; supplements run once:
+python -c "from app.db.migrations import apply_migrations; apply_migrations()"
 
 # D1 (tables also auto-created on startup for cloudflare_remote)
-wrangler d1 execute <database-name> --file=migrations/001_init.sql
+wrangler d1 execute <database-name> --file=migrations/d1/000_initial.sql
 ```
 
 Check active backends: `GET /health` returns `database_backend` and `storage_backend`.
@@ -282,6 +290,8 @@ RUN pip install --no-cache-dir .
 COPY . .
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
 ```
+
+After the container starts, complete setup at `/setup`, then install addons (storefront, payments, suppliers, etc.) from **Dashboard → Install addon** in the admin panel.
 
 ```bash
 docker build -t oshkelosh .

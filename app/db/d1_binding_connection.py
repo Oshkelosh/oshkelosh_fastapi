@@ -57,6 +57,20 @@ class D1BindingConnection:
             "register a compatible Workers env.DB binding"
         )
 
+    async def batch_query(
+        self,
+        statements: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        """Execute multiple statements sequentially (Workers binding)."""
+        results: list[dict[str, Any]] = []
+        for statement in statements:
+            result = await self.execute(
+                statement["sql"],
+                statement.get("params"),
+            )
+            results.append({"results": result} if result else {})
+        return results
+
     async def close(self) -> None:
         return None
 

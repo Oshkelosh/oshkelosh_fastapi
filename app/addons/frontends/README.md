@@ -90,11 +90,24 @@ Reference implementation: [`default/dist/assets/app.js`](default/dist/assets/app
 
 ## CSS variables
 
+### Base (from site settings)
+
 | Variable | Source | Set by |
 |----------|--------|--------|
 | `--color-primary` | `site.primary_color` | `theme.css` or JS |
 | `--color-secondary` | `site.secondary_color` | `theme.css` or JS |
 | `--font-sans` | `site.font_family` | `theme.css` or JS |
+| `--color-on-primary` | contrast text for primary | JS (`+layout.svelte`) |
+| `--color-on-secondary` | contrast text for secondary | JS (`+layout.svelte`) |
+
+### Derived (computed in CSS via `color-mix`)
+
+| Variable | Role |
+|----------|------|
+| `--color-primary-muted` / `--color-primary-subtle` / `--color-primary-hover` / `--color-primary-border` | Primary (action) tints and hover |
+| `--color-secondary-muted` / `--color-secondary-subtle` / `--color-secondary-hover` / `--color-secondary-border` | Secondary (structure) tints and borders |
+
+**Color roles:** use **primary** for actions (CTAs, prices, active states, link hover). Use **secondary** for structure chrome only — borders, subtle backgrounds, outline button borders — not body copy, headings, or default link text. Keep readable text on `--clr-text` and `--clr-muted`; neutrals are lightly harmonized with secondary.
 
 Use these names in your stylesheets for consistency with the default theme.
 
@@ -144,6 +157,7 @@ The app mounts this folder at `/` with SPA fallback (`html=True`).
 
 ```
 app/addons/frontends/my_theme/
+├── .gitignore
 ├── __init__.py
 ├── addon.py
 ├── routes.py              # optional admin config form
@@ -189,10 +203,20 @@ Full reference: [docs/api/OPENAPI.md](../../../docs/api/OPENAPI.md).
 | Area | Endpoints |
 |------|-----------|
 | Auth | `POST /api/v1/auth/register`, `login`, `refresh` |
-| Catalog | `GET /api/v1/products`, `GET /api/v1/categories` |
-| Cart | `POST/GET/DELETE /api/v1/cart/...` (auth) |
+| Catalog | `GET /api/v1/products`, `GET /api/v1/products/by-slug/{slug}`, `GET /api/v1/categories` |
+| Cart | `POST/GET/PATCH/DELETE /api/v1/cart/...` (auth) — **`variant_id` required** when adding items |
 | Orders | `POST /api/v1/orders`, `GET /api/v1/orders/{id}` |
 | Checkout | `POST /api/v1/orders/{id}/checkout` |
+
+### Product variants (storefront contract)
+
+- **List views** use `ProductRead` — `price` is the minimum active variant price; `has_variants: true` means show “From $X”.
+- **Detail views** use `ProductDetailRead` — includes `variants[]` with per-variant price, stock, `attributes` (Size, Color), and images.
+- **`options`** on the product are creator specs (material, care) — display-only, not a purchase picker.
+- **Add to cart** always sends `{ product_id, variant_id, quantity }`. Single-variant products still have one row in `variants[]`.
+- **Cart display** uses `variant_title` from enriched cart responses.
+
+After hosted payment, customers return to `/orders/{id}?payment=return`. Handle that query param on the order detail page while the payment webhook confirms the order.
 
 Browse Swagger at `/docs` when `DEBUG=true`.
 
@@ -202,4 +226,4 @@ If no frontend addon is enabled, the app serves `frontend/dist/` at the repo roo
 
 ## Reference addon
 
-See [`default/`](default/) — minimal placeholder with grid/list layout toggle and full bootstrap example.
+See [`default/README.md`](default/README.md) — SvelteKit storefront with catalog, auth, cart, checkout, orders, and SSO callback. Includes full bootstrap example and admin layout options.

@@ -88,10 +88,23 @@ Documented under tag **`storefront`**:
 Typical authenticated checkout path:
 
 1. `POST /api/v1/auth/login` → `access_token`
-2. `POST /api/v1/cart/items` → add products
-3. `POST /api/v1/orders` → create pending order
-4. `POST /api/v1/orders/{order_id}/checkout` → payment session (requires enabled **payment** addon)
-5. Payment provider webhook → order status `paid` (addon-specific path, e.g. Stripe)
+2. `GET /api/v1/products/{id}` or `GET /api/v1/products/by-slug/{slug}` → `ProductDetailRead` with `variants[]`
+3. `POST /api/v1/cart/items` → add a line with `{ product_id, variant_id, quantity }`
+4. `POST /api/v1/orders` → create pending order (line items carry `variant_id`)
+5. `POST /api/v1/orders/{order_id}/checkout` → payment session (requires enabled **payment** addon)
+6. Payment provider webhook → order status `paid` (addon-specific path, e.g. Stripe)
+
+### Product and cart schemas
+
+| Schema | Notes |
+|--------|-------|
+| `ProductRead` | List view — denormalized `price_cents`, `has_variants`, `options` (creator specs) |
+| `ProductDetailRead` | Extends `ProductRead` with `variants: ProductVariantRead[]` |
+| `ProductVariantRead` | `title`, `price`, `inventory_quantity`, `attributes`, per-variant `images` |
+| `CartItemAdd` | Requires **`variant_id`** (not just `product_id`) |
+| `CartItemWithPrice` | Includes `variant_title` for display |
+
+Order line items include `variant_id` and a `variant_snapshot` object for historical display.
 
 ## Addon route naming
 

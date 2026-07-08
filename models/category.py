@@ -12,7 +12,7 @@ from sqlmodel import Field, Relationship
 from app.db.base import ModelBase, utc_now
 
 if TYPE_CHECKING:
-    pass
+    from models.product import Product
 
 
 class Category(ModelBase, table=True):
@@ -25,6 +25,8 @@ class Category(ModelBase, table=True):
         sa_column=Column(String(200), unique=True, nullable=False, index=True),
     )
     description: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
+    meta_title: Optional[str] = Field(default=None, sa_column=Column(String(255), nullable=True))
+    meta_description: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
     parent_id: Optional[int] = Field(
         default=None,
         sa_column=Column(Integer, ForeignKey("categories.id", ondelete="SET NULL"), nullable=True),
@@ -49,3 +51,4 @@ class Category(ModelBase, table=True):
         sa_relationship_kwargs={"remote_side": "Category.id"},
     )
     children: List["Category"] = Relationship(back_populates="parent")
+    products: List["Product"] = Relationship(back_populates="category_rel")

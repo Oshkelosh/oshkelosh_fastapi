@@ -4,15 +4,12 @@ Stores configuration for pluggable addons / extensions.
 """
 
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any, Dict, Optional
+from typing import Any, Dict
 
 from sqlalchemy import Boolean, Column, DateTime, JSON, String
 from sqlmodel import Field
 
 from app.db.base import ModelBase, utc_now
-
-if TYPE_CHECKING:
-    from models.webhook import Webhook
 
 
 class AddonConfig(ModelBase, table=True):

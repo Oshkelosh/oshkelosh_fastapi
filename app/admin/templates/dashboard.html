@@ -8,6 +8,64 @@
     <p class="page-header__subtitle">Welcome back, {{ user.full_name or user.email }}. Here's your store overview.</p>
 </div>
 
+{% if health %}
+<details class="card health-banner" style="margin-bottom:24px;">
+    <summary class="health-banner__summary">
+        <h2 class="card__title health-banner__title">System health</h2>
+        {% if health.overall == 'healthy' %}
+        <span class="badge badge--success">Healthy</span>
+        {% elif health.overall == 'degraded' %}
+        <span class="badge badge--warning">Degraded</span>
+        {% else %}
+        <span class="badge badge--danger">Unhealthy</span>
+        {% endif %}
+        <span class="health-banner__toggle" aria-hidden="true"></span>
+    </summary>
+    <div class="health-banner__body">
+        <div class="health-checks-section">
+            <h3 class="health-checks-section__title">Infrastructure</h3>
+            <div class="health-checks">
+                {% for check in health.checks if check.id in ('database', 'storage') %}
+                <div class="health-check">
+                    <div class="health-check__head">
+                        <span class="health-check__label">{{ check.label }}</span>
+                        {% if check.status == 'ok' %}
+                        <span class="badge badge--success">OK</span>
+                        {% elif check.status == 'warning' %}
+                        <span class="badge badge--warning">Warning</span>
+                        {% else %}
+                        <span class="badge badge--danger">Error</span>
+                        {% endif %}
+                    </div>
+                    <p class="health-check__detail">{{ check.detail }}</p>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        <div class="health-checks-section">
+            <h3 class="health-checks-section__title">Store integrations</h3>
+            <div class="health-checks">
+                {% for check in health.checks if check.id not in ('database', 'storage') %}
+                <div class="health-check">
+                    <div class="health-check__head">
+                        <span class="health-check__label">{{ check.label }}</span>
+                        {% if check.status == 'ok' %}
+                        <span class="badge badge--success">OK</span>
+                        {% elif check.status == 'warning' %}
+                        <span class="badge badge--warning">Warning</span>
+                        {% else %}
+                        <span class="badge badge--danger">Error</span>
+                        {% endif %}
+                    </div>
+                    <p class="health-check__detail">{{ check.detail }}</p>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</details>
+{% endif %}
+
 <!-- Stats cards -->
 <div class="stats-grid">
     <div class="stat-card">
@@ -20,11 +78,150 @@
     </div>
     <div class="stat-card">
         <div class="stat-card__metric">${{ "{:,.2f}".format(total_revenue_cents / 100) }}</div>
-        <div class="stat-card__label">Total Revenue</div>
+        <div class="stat-card__label">Collected Revenue</div>
     </div>
     <div class="stat-card">
         <div class="stat-card__metric">{{ pending_orders }}</div>
         <div class="stat-card__label">Pending Orders</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-card__metric">{{ total_users }}</div>
+        <div class="stat-card__label">Total Users</div>
+    </div>
+</div>
+
+<!-- Recent orders -->
+<div class="card" style="margin-bottom:24px;">
+    <div class="card__header">
+        <h2 class="card__title">Recent Orders</h2>
+        <a href="/admin/orders" class="card__action">View all</a>
+    </div>
+    <div class="card__body">
+        {% if recent_orders %}
+        <table class="table table--striped">
+            <thead>
+                <tr>
+                    <th class="table__cell--left">Order</th>
+                    <th>Status</th>
+                    <th>Amount</th>
+                    <th>Product</th>
+                    <th>Date</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for order in recent_orders %}
+                <tr>
+                    <td class="table__cell--left">
+                        <a href="/admin/orders/{{ order.id }}" class="link">
+                            #{{ order.id }}
+                        </a>
+                    </td>
+                    <td>
+                        <span class="badge badge--{{ order.status }}">{{ order.status|title }}</span>
+                    </td>
+                    <td>${{ "{:,.2f}".format(order.total_cents / 100) }}</td>
+                    <td>{{ order.product_name }}</td>
+                    <td class="table__cell--right">{{ order.created_at[:10] }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <div class="empty-state">
+            <p>No orders yet.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Chart placeholder -->
+<div class="card" style="margin-bottom:24px;">
+    <div class="card__header">
+        <h2 class="card__title">Revenue Trend</h2>
+    </div>
+    <div class="card__body">
+        <div class="chart-placeholder">
+            <svg viewBox="0 0 800 200" class="chart-placeholder__svg">
+                <line x1="60" y1="180" x2="780" y2="180" stroke="currentColor" stroke-width="1" opacity="0.2"/>
+                <line x1="60" y1="40" x2="60" y2="180" stroke="currentColor" stroke-width="1" opacity="0.2"/>
+                <text x="70" y="45" font-size="12" fill="currentColor" opacity="0.5">Revenue ($)</text>
+                <text x="70" y="195" font-size="12" fill="currentColor" opacity="0.5">Date</text>
+                <path d="M80 150 Q150 120, 220 100 Q290 80, 360 90 Q430 100, 500 60 Q570 20, 640 40 Q710 60, 760 30"
+                      fill="none" stroke="oklch(0.65 0.18 260)" stroke-width="3" stroke-linecap="round"/>
+                <path d="M80 150 Q150 120, 220 100 Q290 80, 360 90 Q430 100, 500 60 Q570 20, 640 40 Q710 60, 760 30 L760 180 L80 180 Z"
+                      fill="oklch(0.65 0.18 260 / 0.1)"/>
+            </svg>
+        </div>
+        <p class="chart-placeholder__caption">Revenue over the last 30 days (placeholder — integrate a charting library for real data).</p>
+    </div>
+</div>
+
+<div class="card" style="margin-bottom:24px;">
+    <div class="card__header">
+        <h2 class="card__title">Supplier catalog sync</h2>
+        <a href="/admin/audit?action=supplier_catalog_sync" class="card__action">Sync history</a>
+    </div>
+    <div class="card__body">
+        {% if active_sync_job %}
+        <div class="job-progress" style="margin-bottom:16px;">
+            <p style="margin:0 0 8px;font-size:14px;">
+                Sync in progress — {{ active_sync_job.percent }}% complete
+            </p>
+            <div class="job-progress__bar">
+                <div class="job-progress__fill" style="width:{{ active_sync_job.percent }}%;"></div>
+            </div>
+            <p style="margin:8px 0 0;font-size:13px;">
+                <a href="/admin/jobs/{{ active_sync_job.id }}">View sync progress</a>
+            </p>
+        </div>
+        {% endif %}
+
+        {% if syncable_suppliers %}
+        <table class="table table--striped" style="margin-bottom:16px;">
+            <thead>
+                <tr>
+                    <th class="table__cell--left">Supplier</th>
+                    <th>Last sync</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for supplier in syncable_suppliers %}
+                <tr>
+                    <td class="table__cell--left">{{ supplier.addon_name }}</td>
+                    <td>
+                        {% if supplier.last_sync_at %}
+                        {{ supplier.last_sync_at.strftime('%Y-%m-%d %H:%M') if supplier.last_sync_at.strftime else supplier.last_sync_at[:16] }}
+                        {% else %}
+                        <span style="color:var(--clr-text-muted);">Never</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p style="color:var(--clr-text-muted);margin:0 0 16px;font-size:14px;">
+            No syncable supplier addons are enabled.
+        </p>
+        {% endif %}
+
+        {% if syncable_suppliers and not active_sync_job %}
+        <form method="POST" action="/admin/suppliers/sync-all" class="form" style="max-width:480px;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <div class="form-group">
+                <label class="form-label" for="import_status">Import as</label>
+                <select id="import_status" name="import_status" class="form-select">
+                    <option value="draft" selected>Draft</option>
+                    <option value="published">Published</option>
+                </select>
+            </div>
+            <label style="display:flex;align-items:center;gap:8px;margin-bottom:12px;font-size:14px;">
+                <input type="checkbox" name="archive_missing" value="on">
+                Archive local products missing from supplier catalogs
+            </label>
+            <button type="submit" class="btn btn--primary btn--sm">Sync all catalogs</button>
+        </form>
+        {% endif %}
     </div>
 </div>
 
@@ -74,72 +271,6 @@
                 <button type="submit" class="btn btn--primary btn--sm">Install from URL</button>
             </form>
         </div>
-    </div>
-</div>
-
-<!-- Recent orders -->
-<div class="card">
-    <div class="card__header">
-        <h2 class="card__title">Recent Orders</h2>
-        <a href="/admin/orders" class="card__action">View all</a>
-    </div>
-    <div class="card__body">
-        {% if recent_orders %}
-        <table class="table table--striped">
-            <thead>
-                <tr>
-                    <th class="table__cell--left">Order</th>
-                    <th>Status</th>
-                    <th>Amount</th>
-                    <th>Product</th>
-                    <th>Date</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for order in recent_orders %}
-                <tr>
-                    <td class="table__cell--left">
-                        <a href="/admin/orders/{{ order.id }}" class="link">
-                            #{{ order.id }}
-                        </a>
-                    </td>
-                    <td>
-                        <span class="badge badge--{{ order.status }}">{{ order.status|title }}</span>
-                    </td>
-                    <td>${{ "{:,.2f}".format(order.total_cents / 100) }}</td>
-                    <td>{{ order.product_name }}</td>
-                    <td class="table__cell--right">{{ order.created_at[:10] }}</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-        {% else %}
-        <div class="empty-state">
-            <p>No orders yet.</p>
-        </div>
-        {% endif %}
-    </div>
-</div>
-
-<!-- Chart placeholder -->
-<div class="card">
-    <div class="card__header">
-        <h2 class="card__title">Revenue Trend</h2>
-    </div>
-    <div class="card__body">
-        <div class="chart-placeholder">
-            <svg viewBox="0 0 800 200" class="chart-placeholder__svg">
-                <line x1="60" y1="180" x2="780" y2="180" stroke="currentColor" stroke-width="1" opacity="0.2"/>
-                <line x1="60" y1="40" x2="60" y2="180" stroke="currentColor" stroke-width="1" opacity="0.2"/>
-                <text x="70" y="45" font-size="12" fill="currentColor" opacity="0.5">Revenue ($)</text>
-                <text x="70" y="195" font-size="12" fill="currentColor" opacity="0.5">Date</text>
-                <path d="M80 150 Q150 120, 220 100 Q290 80, 360 90 Q430 100, 500 60 Q570 20, 640 40 Q710 60, 760 30"
-                      fill="none" stroke="oklch(0.65 0.18 260)" stroke-width="3" stroke-linecap="round"/>
-                <path d="M80 150 Q150 120, 220 100 Q290 80, 360 90 Q430 100, 500 60 Q570 20, 640 40 Q710 60, 760 30 L760 180 L80 180 Z"
-                      fill="oklch(0.65 0.18 260 / 0.1)"/>
-            </svg>
-        </div>
-        <p class="chart-placeholder__caption">Revenue over the last 30 days (placeholder — integrate a charting library for real data).</p>
     </div>
 </div>
 {% endblock %}

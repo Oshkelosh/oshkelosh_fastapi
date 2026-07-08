@@ -42,6 +42,7 @@ class Order(ModelBase, table=True):
     )
     total_cents: int = Field(
         ge=0,
+        description="Grand total in cents (merchandise + tax + shipping).",
         sa_column=Column(Integer, nullable=False),
     )
     tax_cents: int = Field(
@@ -57,6 +58,19 @@ class Order(ModelBase, table=True):
         sa_column=Column(String(10), nullable=False, server_default="usd"),
     )
 
+    payment_processor_id: Optional[str] = Field(
+        default=None,
+        sa_column=Column(String(50), nullable=True),
+    )
+    payment_id: Optional[str] = Field(
+        default=None,
+        sa_column=Column(String(255), nullable=True),
+    )
+    payment_charge_id: Optional[str] = Field(
+        default=None,
+        sa_column=Column(String(255), nullable=True),
+    )
+
     shipping_address: Optional[Dict[str, Any]] = Field(
         default=None,
         sa_column=Column(JSON, nullable=True),
@@ -68,6 +82,19 @@ class Order(ModelBase, table=True):
     notes: Optional[str] = Field(
         default=None,
         sa_column=Column(Text, nullable=True),
+    )
+
+    tracking_number: Optional[str] = Field(
+        default=None,
+        sa_column=Column(String(128), nullable=True),
+    )
+    tracking_url: Optional[str] = Field(
+        default=None,
+        sa_column=Column(String(2048), nullable=True),
+    )
+    carrier: Optional[str] = Field(
+        default=None,
+        sa_column=Column(String(128), nullable=True),
     )
 
     created_at: datetime = Field(

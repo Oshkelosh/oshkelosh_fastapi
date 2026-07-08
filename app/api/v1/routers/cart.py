@@ -13,12 +13,23 @@ from sqlmodel import col, select
 
 from app.core.dependencies import CurrentUser, get_current_user
 from app.core.exceptions import NotFound, ValidationError
-from app.services.commerce import ensure_product_purchasable, load_cart_items, load_user_cart
+from app.services.commerce import (
+    ensure_product_in_stock,
+    ensure_product_purchasable,
+    load_cart_items,
+    load_products_for_cart_items,
+    load_user_cart,
+    load_variants_for_cart_items,
+)
 from app.db.connection import get_session
 from models.cart import Cart
 from models.cart_item import CartItem
 from models.product import Product
-from schemas.cart import CartItemAdd, CartItemUpdate, CartReadWithItems, CartItemWithPrice
+from models.product_variant import ProductVariant
+from app.services.product_variants import ensure_variant_purchasable, get_variant_for_product
+from app.services.checkout_pricing import quote_order_charges
+from app.services.site_settings import get_site_settings
+from schemas.cart import CartItemAdd, CartItemUpdate, CartQuoteRequest, CartQuoteResponse, CartReadWithItems, CartItemWithPrice
 
 router = APIRouter(prefix="/cart", tags=["cart"])
 
@@ -46,29 +57,39 @@ async def _get_or_create_cart(
     return cart
 
 
-def _compute_cart_totals(cart: Cart) -> dict:
+def _compute_cart_totals(
+    cart_items: list[CartItem],
+    products: dict[int, Product],
+    variants: dict[int, ProductVariant],
+) -> dict:
     """Compute subtotal and line totals for a cart."""
     items_with_price: list[CartItemWithPrice] = []
     subtotal_cents = 0
 
-    for item in cart.cart_items:
-        if item.product is not None:
-            line_total = item.product.price_cents * item.quantity
-            subtotal_cents += line_total
-            items_with_price.append(
-                CartItemWithPrice(
-                    id=item.id,
-                    cart_id=item.cart_id,
-                    product_id=item.product_id,
-                    quantity=item.quantity,
-                    created_at=item.created_at,
-                    updated_at=item.updated_at,
-                    unit_price_cents=item.product.price_cents,
-                    unit_price=Decimal(item.product.price_cents) / Decimal(100),
-                    line_total_cents=line_total,
-                    line_total=Decimal(line_total) / Decimal(100),
-                )
+    for item in cart_items:
+        product = products.get(item.product_id)
+        variant = variants.get(item.variant_id)
+        if product is None or variant is None:
+            continue
+        line_total = variant.price_cents * item.quantity
+        subtotal_cents += line_total
+        items_with_price.append(
+            CartItemWithPrice(
+                id=item.id,
+                cart_id=item.cart_id,
+                product_id=item.product_id,
+                variant_id=item.variant_id,
+                quantity=item.quantity,
+                created_at=item.created_at,
+                updated_at=item.updated_at,
+                product_name=product.name,
+                variant_title=variant.title,
+                unit_price_cents=variant.price_cents,
+                unit_price=Decimal(variant.price_cents) / Decimal(100),
+                line_total_cents=line_total,
+                line_total=Decimal(line_total) / Decimal(100),
             )
+        )
 
     return {
         "items": [i.model_dump() for i in items_with_price],
@@ -93,8 +114,10 @@ async def get_cart(
 ) -> dict:
     """Get or create the current user's cart."""
     cart = await _get_or_create_cart(session, current_user.id)
-    cart.cart_items = await load_cart_items(session, cart.id)
-    totals = _compute_cart_totals(cart)
+    cart_items = await load_cart_items(session, cart.id)
+    products = await load_products_for_cart_items(session, cart_items)
+    variants = await load_variants_for_cart_items(session, cart_items)
+    totals = _compute_cart_totals(cart_items, products, variants)
     result = {
         "id": cart.id,
         "session_id": cart.session_id,
@@ -104,6 +127,46 @@ async def get_cart(
     }
     result.update(totals)
     return result
+
+
+@router.post(
+    "/quote",
+    response_model=CartQuoteResponse,
+    summary="Quote cart tax and shipping",
+    description=(
+        "Return estimated tax and shipping for the current cart using Site Settings "
+        "rules, optional supplier shipping quotes, and any enabled tax tool addon."
+    ),
+)
+async def quote_cart(
+    body: CartQuoteRequest | None = None,
+    current_user: CurrentUser = Depends(get_current_user),
+    session=Depends(get_session),
+) -> CartQuoteResponse:
+    """Preview checkout charges before order creation."""
+    payload = body or CartQuoteRequest()
+    cart, cart_items = await load_user_cart(session, current_user.id)
+    if cart is None or not cart_items:
+        raise ValidationError(message="Cart is empty")
+
+    products = await load_products_for_cart_items(session, cart_items)
+    variants = await load_variants_for_cart_items(session, cart_items)
+    totals = _compute_cart_totals(cart_items, products, variants)
+    site = await get_site_settings(session)
+    charges = await quote_order_charges(
+        cart_items,
+        products,
+        payload.shipping_address,
+        site,
+        variants,
+    )
+    return CartQuoteResponse(
+        subtotal_cents=totals["subtotal_cents"],
+        tax_cents=charges.tax_cents,
+        shipping_cents=charges.shipping_cents,
+        tax_source=charges.tax_source,
+        shipping_breakdown=charges.shipping_breakdown,
+    )
 
 
 @router.post(
@@ -124,20 +187,23 @@ async def add_item(
     if product is None:
         raise NotFound(resource_name="Product", resource_id=body.product_id)
     ensure_product_purchasable(product)
+    variant = await get_variant_for_product(session, body.product_id, body.variant_id)
+    ensure_variant_purchasable(product, variant, body.quantity)
 
     cart = await _get_or_create_cart(session, current_user.id)
 
-    # Check if item already exists
     result = await session.execute(
         select(CartItem).where(
             (col(CartItem.cart_id) == cart.id)
-            & (col(CartItem.product_id) == body.product_id)
+            & (col(CartItem.variant_id) == body.variant_id)
         )
     )
     existing = result.scalar_one_or_none()
 
     if existing is not None:
-        existing.quantity += body.quantity
+        new_quantity = existing.quantity + body.quantity
+        ensure_variant_purchasable(product, variant, new_quantity)
+        existing.quantity = new_quantity
         await session.flush()
         await session.refresh(existing)
         if hasattr(session, "mark_dirty"):
@@ -147,6 +213,7 @@ async def add_item(
     item = CartItem(
         cart_id=cart.id,
         product_id=body.product_id,
+        variant_id=body.variant_id,
         quantity=body.quantity,
     )
     session.add(item)
@@ -179,6 +246,11 @@ async def update_item(
     item = result.scalar_one_or_none()
     if item is None:
         raise NotFound(resource_name="CartItem", resource_id=item_id)
+
+    product = await session.get(Product, item.product_id)
+    variant = await session.get(ProductVariant, item.variant_id)
+    if product is not None and variant is not None:
+        ensure_variant_purchasable(product, variant, body.quantity)
 
     item.quantity = body.quantity
     await session.flush()
@@ -237,85 +309,3 @@ async def clear_cart(
         await session.delete(item)
 
     return {"message": "Cart cleared"}
-
-
-@router.post(
-    "/merge",
-    response_model=dict,
-    summary="Merge session cart with user cart",
-    description="Merge items from an anonymous (session) cart into the authenticated user's cart.",
-)
-async def merge_cart(
-    body: "MergeRequest",
-    current_user: CurrentUser = Depends(get_current_user),
-    session=Depends(get_session),
-) -> dict:
-    """Merge a session cart's items into the user's cart."""
-    session_id = body.session_id
-
-    # Find the session cart
-    result = await session.execute(
-        select(Cart).where(col(Cart.session_id) == session_id)
-    )
-    session_cart = result.scalar_one_or_none()
-    if session_cart is None:
-        return await get_cart(current_user, session)  # type: ignore[misc]
-
-    session_cart.cart_items = await load_cart_items(session, session_cart.id)
-
-    user_cart = await _get_or_create_cart(session, current_user.id)
-
-    for session_item in session_cart.cart_items:
-        product = await session.get(Product, session_item.product_id)
-        if product is None:
-            continue
-        try:
-            ensure_product_purchasable(product)
-        except ValidationError:
-            continue
-
-        # Check if user already has this item
-        result = await session.execute(
-            select(CartItem).where(
-                (col(CartItem.cart_id) == user_cart.id)
-                & (col(CartItem.product_id) == product.id)
-            )
-        )
-        existing = result.scalar_one_or_none()
-        if existing is not None:
-            existing.quantity += session_item.quantity
-            if hasattr(session, "mark_dirty"):
-                session.mark_dirty(existing)
-        else:
-            new_item = CartItem(
-                cart_id=user_cart.id,
-                product_id=product.id,
-                quantity=session_item.quantity,
-            )
-            session.add(new_item)
-
-        # Remove from session cart
-        await session.delete(session_item)
-
-    await session.delete(session_cart)
-
-    # Return merged cart
-    user_cart.cart_items = await load_cart_items(session, user_cart.id)
-    totals = _compute_cart_totals(user_cart)
-    result_data = {
-        "id": user_cart.id,
-        "session_id": user_cart.session_id,
-        "user_id": user_cart.user_id,
-        "created_at": user_cart.created_at,
-        "updated_at": user_cart.updated_at,
-    }
-    result_data.update(totals)
-    return result_data
-
-
-# ------------------------------------------------------------------
-# Request body for merge
-# ------------------------------------------------------------------
-
-class MergeRequest(BaseModel):
-    session_id: str

@@ -2,36 +2,11 @@
 
 from datetime import datetime
 from decimal import Decimal
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from schemas.base import PaginatedResponse
-
-
-# ── Helpers ─────────────────────────────────────────────────────────
-
-def cents_to_decimal(value: Optional[int]) -> Optional[Decimal]:
-    if value is None:
-        return None
-    return Decimal(value) / Decimal(100)
-
-
-# ── Create ──────────────────────────────────────────────────────────
-
-
-class CartCreate(BaseModel):
-    session_id: Optional[str] = Field(default=None, max_length=255)
-    user_id: Optional[int] = Field(default=None)
-
-    @field_validator("session_id")
-    @classmethod
-    def validate_session_id(cls, v: str | None) -> str | None:
-        if v is None:
-            return v
-        if len(v) > 255:
-            raise ValueError("session_id must be at most 255 characters")
-        return v
+from schemas.base import PaginatedResponse, cents_to_decimal
 
 
 # ── Item operations ─────────────────────────────────────────────────
@@ -39,11 +14,12 @@ class CartCreate(BaseModel):
 
 class CartItemAdd(BaseModel):
     product_id: int = Field(gt=0)
-    quantity: int = Field(gt=0, default=1)
+    variant_id: int = Field(gt=0)
+    quantity: int = Field(gt=0, le=999, default=1)
 
 
 class CartItemUpdate(BaseModel):
-    quantity: int = Field(gt=0)
+    quantity: int = Field(gt=0, le=999)
 
 
 # ── Read ────────────────────────────────────────────────────────────
@@ -53,6 +29,7 @@ class CartItemRead(BaseModel):
     id: int
     cart_id: int
     product_id: int
+    variant_id: int
     quantity: int
     created_at: datetime
     updated_at: datetime
@@ -72,8 +49,10 @@ class CartRead(BaseModel):
 
 
 class CartItemWithPrice(CartItemRead):
-    """CartItem enriched with computed price from the product."""
+    """CartItem enriched with computed price from the variant."""
 
+    product_name: str = ""
+    variant_title: str = ""
     unit_price_cents: int
     unit_price: Decimal = Field(default=Decimal("0.00"))
     line_total_cents: int = Field(default=0)
@@ -111,3 +90,19 @@ class CartReadWithItems(BaseModel):
 
 class CartList(PaginatedResponse["CartRead"]):
     """Paginated cart list (admin use)."""
+
+
+class CartQuoteRequest(BaseModel):
+    """Optional shipping address for checkout tax/shipping preview."""
+
+    shipping_address: dict | None = None
+
+
+class CartQuoteResponse(BaseModel):
+    """Estimated tax and shipping for the current cart."""
+
+    subtotal_cents: int
+    tax_cents: int
+    shipping_cents: int
+    tax_source: str
+    shipping_breakdown: list[dict] = Field(default_factory=list)

@@ -1,6 +1,12 @@
 """Tests for product CRUD endpoints."""
 
+import pytest
 from httpx import AsyncClient
+
+from models.category import Category
+from models.product import Product
+from models.product_variant import ProductVariant
+from app.services.product_variants import refresh_product_listing_cache
 
 
 class TestProductListing:
@@ -43,11 +49,87 @@ class TestProductListing:
         response = await client.get("/api/v1/products/999999")
         assert response.status_code == 404
 
+    @pytest.mark.asyncio
+    async def test_list_products_filter_by_category_slug(self, client: AsyncClient, db_session):
+        thin = Category(name="Canvas (in) | Thin", slug="canvas-in-thin")
+        framed = Category(name="Canvas (in) | Framed", slug="canvas-in-framed")
+        db_session.add(thin)
+        db_session.add(framed)
+        await db_session.flush()
+
+        thin_product = Product(
+            name="Amaryllis Thin",
+            slug="amaryllis-thin",
+            price_cents=1000,
+            sku="THIN-1",
+            inventory_quantity=1,
+            status="published",
+            category_id=thin.id,
+        )
+        framed_product = Product(
+            name="Amaryllis Framed",
+            slug="amaryllis-framed",
+            price_cents=2000,
+            sku="FRAMED-1",
+            inventory_quantity=1,
+            status="published",
+            category_id=framed.id,
+        )
+        db_session.add(thin_product)
+        db_session.add(framed_product)
+        await db_session.flush()
+
+        for product in (thin_product, framed_product):
+            variant = ProductVariant(
+                product_id=product.id,
+                title=product.name,
+                position=0,
+                price_cents=product.price_cents,
+                inventory_quantity=product.inventory_quantity,
+                sku=product.sku,
+                status="active",
+            )
+            db_session.add(variant)
+            await db_session.flush()
+            refresh_product_listing_cache(product, [variant])
+
+        await db_session.commit()
+
+        thin_response = await client.get("/api/v1/products?category=canvas-in-thin")
+        assert thin_response.status_code == 200
+        thin_data = thin_response.json()
+        assert thin_data["total"] == 1
+        assert thin_data["items"][0]["slug"] == "amaryllis-thin"
+
+        framed_response = await client.get("/api/v1/products?category=canvas-in-framed")
+        assert framed_response.status_code == 200
+        framed_data = framed_response.json()
+        assert framed_data["total"] == 1
+        assert framed_data["items"][0]["slug"] == "amaryllis-framed"
+
+    @pytest.mark.asyncio
+    async def test_list_products_filter_by_category_id(self, client: AsyncClient, test_product):
+        response = await client.get(
+            f"/api/v1/products?category_id={test_product.category_id}"
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["total"] == 1
+        assert data["items"][0]["id"] == test_product.id
+
+    @pytest.mark.asyncio
+    async def test_list_products_unknown_category_slug_returns_empty(self, client: AsyncClient):
+        response = await client.get("/api/v1/products?category=does-not-exist")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["items"] == []
+        assert data["total"] == 0
+
 
 class TestProductAdminCRUD:
     """Test admin product CRUD endpoints."""
 
-    async def test_create_product(self, client: AsyncClient, test_user):
+    async def test_create_product(self, client: AsyncClient, test_user, test_category):
         """Test creating a product as admin."""
         # Login as admin
         login = await client.post("/api/v1/auth/login", json={
@@ -65,7 +147,7 @@ class TestProductAdminCRUD:
                 "sku": "NEW-001",
                 "inventory_quantity": 50,
                 "status": "draft",
-                "category": "Electronics",
+                "category_id": test_category.id,
             },
             headers={"Authorization": f"Bearer {token}"},
         )

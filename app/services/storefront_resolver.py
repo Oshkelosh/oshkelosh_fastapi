@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 from starlette.requests import Request
 
@@ -10,6 +11,20 @@ from app.addons.frontends.base import FrontendAddon
 from app.services.addons import get_frontend_addon
 
 _LEGACY_DIST = Path(__file__).resolve().parent.parent.parent / "frontend" / "dist"
+
+
+def get_public_frontend_config(frontend: object) -> dict[str, Any]:
+    """Return storefront-safe frontend addon configuration (secrets stripped)."""
+    raw: dict[str, Any] = {}
+    if hasattr(frontend, "_config") and frontend._config:
+        raw = dict(frontend._config)
+
+    secret_markers = ("secret", "token", "password", "api_key", "private_key")
+    return {
+        key: value
+        for key, value in raw.items()
+        if not any(marker in key.lower() for marker in secret_markers)
+    }
 
 
 def resolve_frontend_addon(request: Request | None = None) -> FrontendAddon | None:

@@ -200,36 +200,24 @@ class D1HTTPAsyncSession:
     async def delete(self, instance: SQLModel) -> None:
         self._deleted.append(instance)
 
-    async def flush(self) -> None:
-        for obj in self._new:
-            await self._insert(obj)
-        for obj in self._dirty:
-            await self._update(obj)
-        for obj in self._deleted:
-            await self._delete_row(obj)
-        self._new.clear()
-        self._dirty.clear()
-        self._deleted.clear()
-
-    async def _insert(self, obj: SQLModel) -> None:
+    def _compile_insert(self, obj: SQLModel) -> tuple[str, list[Any]]:
         mapper = sa_inspect(obj.__class__)
         table = mapper.local_table
         data = obj.model_dump()
         cols = [c.name for c in table.columns if c.name in data and data[c.name] is not None]
         if not cols:
-            cols = [c.name for c in table.columns if c.name != "id" or data.get("id") is not None]
+            cols = [
+                c.name
+                for c in table.columns
+                if c.name != "id" or data.get("id") is not None
+            ]
         placeholders = ", ".join("?" for _ in cols)
         col_names = ", ".join(cols)
         values = [data[c] for c in cols]
         sql = f"INSERT INTO {table.name} ({col_names}) VALUES ({placeholders})"
-        await self._d1.execute(sql, values)
-        if obj.id is None:
-            last_id = await self._d1.query("SELECT last_insert_rowid() as id")
-            rows = _rows_from_d1_response(last_id)
-            if rows:
-                obj.id = rows[0].get("id")
+        return sql, values
 
-    async def _update(self, obj: SQLModel) -> None:
+    def _compile_update(self, obj: SQLModel) -> tuple[str, list[Any]]:
         mapper = sa_inspect(obj.__class__)
         table = mapper.local_table
         pk_cols = list(table.primary_key.columns)
@@ -242,16 +230,68 @@ class D1HTTPAsyncSession:
         values = [data[k] for k in data if k != pk_name and data[k] is not None]
         values.append(pk_val)
         sql = f"UPDATE {table.name} SET {', '.join(sets)} WHERE {pk_name} = ?"
-        await self._d1.execute(sql, values)
+        return sql, values
 
-    async def _delete_row(self, obj: SQLModel) -> None:
+    def _compile_delete(self, obj: SQLModel) -> tuple[str, list[Any]]:
         mapper = sa_inspect(obj.__class__)
         table = mapper.local_table
         pk_cols = list(table.primary_key.columns)
         pk_name = pk_cols[0].name
         pk_val = getattr(obj, pk_name)
         sql = f"DELETE FROM {table.name} WHERE {pk_name} = ?"
-        await self._d1.execute(sql, [pk_val])
+        return sql, [pk_val]
+
+    async def flush(self) -> None:
+        new_objs = list(self._new)
+        dirty_objs = list(self._dirty)
+        deleted_objs = list(self._deleted)
+        if not new_objs and not dirty_objs and not deleted_objs:
+            return
+
+        statements: list[dict[str, Any]] = []
+        insert_objs: list[SQLModel] = []
+
+        for obj in new_objs:
+            sql, values = self._compile_insert(obj)
+            statements.append({"sql": f"{sql} RETURNING id", "params": values})
+            insert_objs.append(obj)
+        for obj in dirty_objs:
+            sql, values = self._compile_update(obj)
+            statements.append({"sql": sql, "params": values})
+        for obj in deleted_objs:
+            sql, values = self._compile_delete(obj)
+            statements.append({"sql": sql, "params": values})
+
+        results = await self._d1.batch_query(statements)
+        insert_idx = 0
+        for batch in results:
+            rows = _rows_from_d1_response(
+                batch if isinstance(batch, dict) else [batch]
+            )
+            if insert_idx < len(insert_objs) and rows:
+                obj = insert_objs[insert_idx]
+                if getattr(obj, "id", None) is None and "id" in rows[0]:
+                    obj.id = rows[0]["id"]
+                insert_idx += 1
+
+        self._new.clear()
+        self._dirty.clear()
+        self._deleted.clear()
+
+    async def _insert(self, obj: SQLModel) -> None:
+        sql, values = self._compile_insert(obj)
+        response = await self._d1.query(f"{sql} RETURNING id", values)
+        rows = _rows_from_d1_response(response)
+        if rows and getattr(obj, "id", None) is None:
+            obj.id = rows[0].get("id")
+
+    async def _update(self, obj: SQLModel) -> None:
+        sql, values = self._compile_update(obj)
+        await self._d1.execute(sql, values)
+
+    async def _delete_row(self, obj: SQLModel) -> None:
+        sql, values = self._compile_delete(obj)
+        await self._d1.execute(sql, values)
 
     async def commit(self) -> None:
         await self.flush()

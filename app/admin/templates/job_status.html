@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+
+{% block title %}Background job{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1 class="page-header__title">Supplier catalog sync</h1>
+    <p class="page-header__subtitle">Job {{ job.id }}</p>
+</div>
+
+{% if auto_refresh %}
+<meta http-equiv="refresh" content="2">
+{% endif %}
+
+<div class="card" style="margin-bottom:24px;">
+    <div class="card__header">
+        <h2 class="card__title">Progress</h2>
+        {% if job.status == 'completed' %}
+        <span class="badge badge--success">Completed</span>
+        {% elif job.status == 'failed' %}
+        <span class="badge badge--danger">Failed</span>
+        {% elif job.status == 'running' %}
+        <span class="badge badge--info">Running</span>
+        {% else %}
+        <span class="badge badge--warning">Pending</span>
+        {% endif %}
+    </div>
+    <div class="card__body">
+        <div class="job-progress" style="margin-bottom:16px;">
+            <p style="margin:0 0 8px;font-size:14px;">{{ percent }}% complete</p>
+            <div class="job-progress__bar">
+                <div class="job-progress__fill" style="width:{{ percent }}%;"></div>
+            </div>
+        </div>
+        {% if job.error %}
+        <p style="color:var(--clr-danger);font-size:14px;">{{ job.error }}</p>
+        {% endif %}
+        {% if auto_refresh %}
+        <p style="color:var(--clr-text-muted);font-size:13px;margin:8px 0 0;">
+            Processing suppliers… this page refreshes automatically.
+        </p>
+        {% endif %}
+    </div>
+</div>
+
+<div class="card">
+    <div class="card__header">
+        <h2 class="card__title">Per-supplier results</h2>
+        <a href="/admin/suppliers" class="card__action">Back to suppliers</a>
+    </div>
+    <div class="card__body">
+        {% if result_rows %}
+        <table class="table table--striped">
+            <thead>
+                <tr>
+                    <th class="table__cell--left">Supplier</th>
+                    <th>Status</th>
+                    <th class="table__cell--left">Details</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in result_rows %}
+                <tr>
+                    <td class="table__cell--left">{{ row.addon_name }}</td>
+                    <td>
+                        {% if row.done and not row.errors %}
+                        <span class="badge badge--success">Done</span>
+                        {% elif row.done and row.errors %}
+                        <span class="badge badge--danger">Failed</span>
+                        {% elif job.progress and job.progress.get('current_addon_id') == row.addon_id %}
+                        <span class="badge badge--info">Running</span>
+                        {% else %}
+                        <span class="badge badge--default">Pending</span>
+                        {% endif %}
+                    </td>
+                    <td class="table__cell--left" style="font-size:13px;">
+                        {% if row.done %}{{ row.message }}{% else %}—{% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p style="color:var(--clr-text-muted);">No suppliers in this job.</p>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

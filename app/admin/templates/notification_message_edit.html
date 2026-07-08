@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+
+{% block title %}Edit {{ event.label }}{% endblock %}
+
+{% block content %}
+<h2 style="margin-bottom:12px;">Edit: {{ event.label }} ({{ channel }})</h2>
+
+<p style="color:var(--clr-text-muted);margin-bottom:16px;">
+  {{ event.description }}
+  <a href="/admin/notifications/messages">← Back to all messages</a>
+</p>
+
+<div style="display:grid;grid-template-columns:1fr 280px;gap:24px;align-items:start;">
+  <form method="POST" action="/admin/notifications/messages/{{ event.key }}/{{ channel }}" class="card">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="action" value="save">
+
+    {% if channel in ('email', 'push') %}
+    <div class="form-group">
+      <label class="form-label" for="subject">Subject / title</label>
+      <input type="text" id="subject" name="subject" class="form-input" maxlength="512"
+             value="{{ subject }}" required />
+    </div>
+    {% else %}
+    <input type="hidden" name="subject" value="{{ subject }}" />
+    {% endif %}
+
+    <div class="form-group">
+      <label class="form-label" for="body">Message body</label>
+      <textarea id="body" name="body" class="form-input" rows="10" required>{{ body }}</textarea>
+    </div>
+
+    <div class="form-group">
+      <label>
+        <input type="checkbox" name="is_enabled" {% if is_enabled %}checked{% endif %} />
+        Enabled for this channel
+      </label>
+    </div>
+
+    <div class="form-actions" style="display:flex;gap:8px;">
+      <button type="submit" class="btn btn--primary">Save</button>
+    </div>
+  </form>
+
+  <div class="card">
+    <h3 style="margin-top:0;">Placeholders</h3>
+    <ul style="margin:0;padding-left:18px;font-size:14px;">
+      {% for key in event.placeholders %}
+      <li><code>{ {{ key }} }</code></li>
+      {% endfor %}
+    </ul>
+    <p style="font-size:13px;color:var(--clr-text-muted);margin-top:12px;">
+      Email and push subjects are prefixed with <code>[Store name]</code> when store name is set.
+    </p>
+  </div>
+</div>
+
+<form method="POST" action="/admin/notifications/messages/{{ event.key }}/{{ channel }}"
+      style="margin-top:16px;"
+      onsubmit="return confirm('Reset this template to the default copy?');">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <input type="hidden" name="action" value="reset">
+  <input type="hidden" name="subject" value="">
+  <input type="hidden" name="body" value="">
+  <button type="submit" class="btn btn--secondary btn--sm">Reset to default</button>
+</form>
+{% endblock %}

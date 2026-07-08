@@ -122,28 +122,47 @@ def validate_install_url(url: str, cfg: Settings) -> str:
 
 async def download_addon_archive(url: str, cfg: Settings | None = None) -> bytes:
     cfg = cfg or settings
-    validated = validate_install_url(url, cfg)
+    from urllib.parse import urljoin
+
+    current_url = validate_install_url(url, cfg)
+    max_redirects = 10
+
     try:
-        async with httpx.AsyncClient(follow_redirects=True, timeout=60.0) as client:
-            async with client.stream("GET", validated) as response:
-                response.raise_for_status()
-                content_type = (response.headers.get("content-type") or "").lower()
-                if content_type and "zip" not in content_type and "octet-stream" not in content_type:
-                    raise ValidationError(
-                        message=f"URL did not return a ZIP archive (content-type: {content_type})"
-                    )
-                data = bytearray()
-                async for chunk in response.aiter_bytes(8192):
-                    data.extend(chunk)
-                    if len(data) > cfg.addon_install_max_bytes:
-                        raise ValidationError(
-                            message=f"Addon archive exceeds {cfg.addon_install_max_bytes} bytes"
+        async with httpx.AsyncClient(follow_redirects=False, timeout=60.0) as client:
+            for _ in range(max_redirects + 1):
+                async with client.stream("GET", current_url) as response:
+                    if response.status_code in (301, 302, 303, 307, 308):
+                        location = response.headers.get("location")
+                        if not location:
+                            raise ValidationError(
+                                message="Redirect response missing Location header"
+                            )
+                        current_url = validate_install_url(
+                            urljoin(str(response.url), location),
+                            cfg,
                         )
+                        continue
+
+                    response.raise_for_status()
+                    content_type = (response.headers.get("content-type") or "").lower()
+                    if content_type and "zip" not in content_type and "octet-stream" not in content_type:
+                        raise ValidationError(
+                            message=f"URL did not return a ZIP archive (content-type: {content_type})"
+                        )
+                    data = bytearray()
+                    async for chunk in response.aiter_bytes(8192):
+                        data.extend(chunk)
+                        if len(data) > cfg.addon_install_max_bytes:
+                            raise ValidationError(
+                                message=f"Addon archive exceeds {cfg.addon_install_max_bytes} bytes"
+                            )
+                    if not data:
+                        raise ValidationError(message="Downloaded addon archive is empty")
+                    return bytes(data)
+
+            raise ValidationError(message="Too many redirects while downloading addon")
     except httpx.HTTPError as exc:
         raise ValidationError(message=f"Failed to download addon: {exc}") from exc
-    if not data:
-        raise ValidationError(message="Downloaded addon archive is empty")
-    return bytes(data)
 
 
 def read_limited_stream(source: BinaryIO, max_bytes: int) -> bytes:
@@ -334,6 +353,7 @@ def install_addon_archive(
     archive_bytes: bytes,
     *,
     force: bool = False,
+    write_restart_flag: bool = True,
     cfg: Settings | None = None,
 ) -> AddonInstallResult:
     """Validate and install an addon ZIP archive."""
@@ -351,7 +371,7 @@ def install_addon_archive(
         _verify_addon_class(addon_root, manifest)
         _install_tree(addon_root, manifest, force=force)
 
-    flag_path = _write_restart_flag(manifest, cfg)
+    flag_path = _write_restart_flag(manifest, cfg) if write_restart_flag else None
     return AddonInstallResult(
         addon_id=manifest.addon_id,
         addon_name=manifest.addon_name,
@@ -367,8 +387,14 @@ async def install_addon_from_url(
     url: str,
     *,
     force: bool = False,
+    write_restart_flag: bool = True,
     cfg: Settings | None = None,
 ) -> AddonInstallResult:
     cfg = cfg or settings
     archive_bytes = await download_addon_archive(url, cfg)
-    return install_addon_archive(archive_bytes, force=force, cfg=cfg)
+    return install_addon_archive(
+        archive_bytes,
+        force=force,
+        write_restart_flag=write_restart_flag,
+        cfg=cfg,
+    )

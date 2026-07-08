@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+
+{% block title %}Users{% endblock %}
+
+{% block content %}
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+  <h2 style="margin:0;">Users</h2>
+  <a href="/admin/users/new" class="btn btn--primary">+ New User</a>
+</div>
+
+<form method="GET" style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:16px;">
+  <input type="search" name="search" class="form-input" placeholder="Search email or name"
+         value="{{ search }}" style="width:auto;min-width:200px;">
+  <select name="verified" class="form-select" style="width:auto;">
+    <option value="">All verification</option>
+    <option value="true" {{ 'selected' if verified_filter == 'true' else '' }}>Verified</option>
+    <option value="false" {{ 'selected' if verified_filter == 'false' else '' }}>Unverified</option>
+  </select>
+  <select name="banned" class="form-select" style="width:auto;">
+    <option value="">All accounts</option>
+    <option value="false" {{ 'selected' if banned_filter == 'false' else '' }}>Active</option>
+    <option value="true" {{ 'selected' if banned_filter == 'true' else '' }}>Banned</option>
+  </select>
+  <button type="submit" class="btn btn--secondary">Filter</button>
+</form>
+
+{% if items %}
+<table class="table">
+  <thead>
+    <tr>
+      <th>Email</th>
+      <th>Name</th>
+      <th>Verified</th>
+      <th>Status</th>
+      <th>Role</th>
+      <th>Joined</th>
+      <th>Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for u in items %}
+    <tr>
+      <td><a href="/admin/users/{{ u.id }}">{{ u.email }}</a></td>
+      <td>{{ u.full_name or '—' }}</td>
+      <td>
+        {% if u.verified %}
+          <span class="badge badge--success">Verified</span>
+        {% else %}
+          <span class="badge badge--warning">Unverified</span>
+        {% endif %}
+      </td>
+      <td>
+        {% if u.banned %}
+          <span class="badge badge--danger">Banned</span>
+        {% else %}
+          <span class="badge badge--default">Active</span>
+        {% endif %}
+      </td>
+      <td>
+        {% if u.is_admin %}
+          <span class="badge badge--info">Admin</span>
+        {% else %}
+          <span class="badge badge--default">Customer</span>
+        {% endif %}
+      </td>
+      <td>{{ u.created_at.strftime('%Y-%m-%d') if u.created_at else '' }}</td>
+      <td>
+        <a href="/admin/users/{{ u.id }}" class="btn btn--secondary btn--sm">Edit</a>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% if total_pages > 1 %}
+<nav style="margin-top:16px;display:flex;gap:8px;align-items:center;">
+  {% if page > 1 %}
+  <a href="/admin/users?page={{ page - 1 }}{% if search %}&search={{ search }}{% endif %}{% if verified_filter %}&verified={{ verified_filter }}{% endif %}{% if banned_filter %}&banned={{ banned_filter }}{% endif %}" class="btn btn--secondary btn--sm">Previous</a>
+  {% endif %}
+  <span style="color:var(--clr-text-muted);">Page {{ page }} of {{ total_pages }} ({{ total }} users)</span>
+  {% if page < total_pages %}
+  <a href="/admin/users?page={{ page + 1 }}{% if search %}&search={{ search }}{% endif %}{% if verified_filter %}&verified={{ verified_filter }}{% endif %}{% if banned_filter %}&banned={{ banned_filter }}{% endif %}" class="btn btn--secondary btn--sm">Next</a>
+  {% endif %}
+</nav>
+{% endif %}
+{% else %}
+<div class="card" style="text-align:center;padding:40px;">
+  <p style="color:var(--clr-text-muted);">No users found. <a href="/admin/users/new">Create a user</a>.</p>
+</div>
+{% endif %}
+{% endblock %}

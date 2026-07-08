@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+
+{% block title %}{{ 'Edit Category' if category else 'New Category' }}{% endblock %}
+
+{% block content %}
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+  <h2 style="margin:0;">{{ 'Edit Category' if category else 'New Category' }}</h2>
+  <a href="/admin/categories" class="btn btn--secondary">← Back to Categories</a>
+</div>
+
+{% if form_error %}
+<div class="flash flash--error" style="margin-bottom:16px;">{{ form_error }}</div>
+{% endif %}
+
+<form method="POST" action="{{ action_url }}">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+
+  <div class="card" style="margin-bottom:16px;">
+    <h3 style="margin-top:0;">Details</h3>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+      <div class="form-group">
+        <label class="form-label">Name *</label>
+        <input type="text" name="name" class="form-input" required maxlength="200"
+               value="{{ draft.name if draft and draft.name is defined else (category.name if category else '') }}">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Slug *</label>
+        <input type="text" name="slug" class="form-input" required maxlength="200"
+               value="{{ draft.slug if draft and draft.slug is defined else (category.slug if category else '') }}">
+      </div>
+      <div class="form-group" style="grid-column:1 / -1;">
+        <label class="form-label">Description</label>
+        <textarea name="description" class="form-input" rows="3" maxlength="10000">{{ draft.description if draft and draft.description is defined else (category.description if category and category.description else '') }}</textarea>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Parent category</label>
+        <select name="parent_id" class="form-input">
+          <option value="">— None (root) —</option>
+          {% for cat in parent_options %}
+          <option value="{{ cat.id }}"
+            {% if draft and draft.parent_id is defined %}
+              {% if draft.parent_id == cat.id %}selected{% endif %}
+            {% elif category and category.parent_id == cat.id %}
+              selected
+            {% endif %}>
+            {{ cat.name }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Sort order</label>
+        <input type="number" name="sort_order" class="form-input" min="0"
+               value="{{ draft.sort_order if draft and draft.sort_order is defined else (category.sort_order if category else 0) }}">
+      </div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:16px;">
+    <h3 style="margin-top:0;">SEO</h3>
+    <p style="color:var(--clr-text-muted);font-size:14px;margin:0 0 16px;">
+      Leave blank to auto-generate from name and description on save.
+    </p>
+    <div style="display:grid;grid-template-columns:1fr;gap:16px;">
+      <div class="form-group">
+        <label class="form-label">Meta title</label>
+        <input type="text" name="meta_title" class="form-input" maxlength="255"
+               value="{{ draft.meta_title if draft and draft.meta_title is defined else (category.meta_title if category and category.meta_title else '') }}">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Meta description</label>
+        <textarea name="meta_description" class="form-input" rows="2" maxlength="500">{{ draft.meta_description if draft and draft.meta_description is defined else (category.meta_description if category and category.meta_description else '') }}</textarea>
+      </div>
+    </div>
+  </div>
+
+  <div style="display:flex;gap:12px;">
+    <button type="submit" class="btn btn--primary">{{ 'Save Changes' if category else 'Create Category' }}</button>
+    <a href="/admin/categories" class="btn btn--secondary">Cancel</a>
+  </div>
+</form>
+{% endblock %}

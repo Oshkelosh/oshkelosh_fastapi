@@ -33,6 +33,9 @@ class _MockAddon(BaseAddon):
         self.initialized = True
         self._config = config
 
+    async def validate_config(self, config: dict) -> None:
+        return
+
     async def shutdown(self) -> None:
         self.shut_down = True
         self.is_enabled = False
@@ -73,6 +76,8 @@ class TestPersistAddonConfig:
         assert addon_registry.get("mock_addon").is_enabled is True
         assert addon_registry.get_config("mock_addon")["api_key"] == "persisted"
 
+        await addon_registry.disable_async("mock_addon")
+
 
 class TestMountAddonRouters:
     def test_openapi_includes_printful_products_route(self):
@@ -84,7 +89,7 @@ class TestMountAddonRouters:
 
 class TestCheckoutRequiresPaymentAddon:
     async def test_checkout_without_payment_addon_fails(
-        self, client, test_user, test_product, db_session
+        self, client, test_user, test_product, test_variant, db_session
     ):
         login = await client.post(
             "/api/v1/auth/login",
@@ -95,7 +100,7 @@ class TestCheckoutRequiresPaymentAddon:
         await client.post(
             "/api/v1/cart/items",
             headers=headers,
-            json={"product_id": test_product.id, "quantity": 1},
+            json={"product_id": test_product.id, "variant_id": test_variant.id, "quantity": 1},
         )
         order_resp = await client.post("/api/v1/orders", headers=headers)
         order_id = order_resp.json()["id"]
@@ -117,6 +122,7 @@ class TestOrderPaidNotification:
             addon_name = "Notify Test"
             addon_description = "Test"
             version = "0.0.1"
+            supported_channels = ["email"]
             send_email = AsyncMock(return_value={"success": True})
 
             @classmethod
@@ -130,6 +136,11 @@ class TestOrderPaidNotification:
                 pass
 
             async def send_sms(self, to: str, body: str) -> dict:
+                return {"success": False}
+
+            async def send_push(
+                self, to: str, title: str, body: str, data: dict | None = None
+            ) -> dict:
                 return {"success": False}
 
             async def send_webhook(self, url: str, payload: dict) -> dict:
@@ -152,7 +163,7 @@ class TestOrderPaidNotification:
         await db_session.refresh(order)
 
         with patch(
-            "app.services.notifications.get_notification_addon",
+            "app.services.notification_dispatch.get_notification_addon_for_channel",
             return_value=notify,
         ):
             await apply_order_status_change(db_session, order, "paid")

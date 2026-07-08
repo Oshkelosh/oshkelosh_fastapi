@@ -4,13 +4,21 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse, Response
 
 from app.db.connection import get_session
-from app.services.storefront_resolver import resolve_frontend_addon
-from app.services.site_settings import get_site_settings, site_settings_to_dict
+from app.services.storefront_resolver import get_public_frontend_config, resolve_frontend_addon
+from app.services.push_discovery import build_fcm_service_worker_js, get_public_push_config
+from app.services.site_settings import get_site_settings, site_settings_to_public_dict
+from app.services.sso_discovery import get_public_sso_providers
+from app.services.tool_discovery import list_storefront_scripts
 from schemas.storefront import (
     ActiveFrontendInfo,
+    AuthConfigPublic,
+    NotificationsConfigPublic,
+    PushConfigPublic,
     SiteSettingsPublic,
+    SsoProviderPublic,
     StorefrontConfigResponse,
     StorefrontUnavailableResponse,
+    ToolsConfigPublic,
 )
 
 router = APIRouter(prefix="/storefront", tags=["storefront"])
@@ -46,18 +54,24 @@ async def get_storefront_config(
         return JSONResponse(status_code=503, content=body.model_dump())
 
     site = await get_site_settings(session)
+    sso_providers = [
+        SsoProviderPublic.model_validate(item) for item in get_public_sso_providers()
+    ]
+    push_raw = get_public_push_config()
+    push_config = PushConfigPublic.model_validate(push_raw) if push_raw else None
     return StorefrontConfigResponse(
-        site=SiteSettingsPublic.model_validate(site_settings_to_dict(site)),
+        site=SiteSettingsPublic.model_validate(
+            site_settings_to_public_dict(site, request=request)
+        ),
         frontend=ActiveFrontendInfo(
             addon_id=frontend.addon_id,
             addon_name=frontend.addon_name,
             version=frontend.version,
-            config=(
-                frontend._config
-                if hasattr(frontend, "_config") and frontend._config
-                else {}
-            ),
+            config=get_public_frontend_config(frontend),
         ),
+        auth=AuthConfigPublic(sso_providers=sso_providers),
+        notifications=NotificationsConfigPublic(push=push_config),
+        tools=ToolsConfigPublic(scripts=list_storefront_scripts()),
     )
 
 
@@ -87,3 +101,19 @@ async def get_storefront_theme_css(session=Depends(get_session)) -> Response:
         f"}}\n"
     )
     return Response(content=css, media_type="text/css")
+
+
+@router.get(
+    "/push-sw.js",
+    response_class=Response,
+    summary="Firebase Cloud Messaging service worker",
+    description="""
+Returns a generated service worker for FCM web push when the FCM notification
+addon is enabled. Register from the storefront with scope at site root.
+    """.strip(),
+)
+async def get_push_service_worker() -> Response:
+    js = build_fcm_service_worker_js()
+    if js is None:
+        return Response(status_code=404, content="Push service worker not available")
+    return Response(content=js, media_type="application/javascript")

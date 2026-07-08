@@ -9,6 +9,7 @@ from abc import abstractmethod
 from typing import Any, Dict
 
 from app.addons.base import BaseAddon
+from schemas.payment import PaymentWebhookOutcome
 
 
 class PaymentAddon(BaseAddon):
@@ -23,15 +24,11 @@ class PaymentAddon(BaseAddon):
         currency: str,
         order_id: str,
         customer_email: str,
+        *,
+        return_url: str | None = None,
+        cancel_url: str | None = None,
     ) -> Dict[str, Any]:
-        """Create a new payment / checkout session.
-
-        Args:
-            amount:         Amount in smallest currency unit (e.g. cents).
-            currency:       ISO 4217 currency code (e.g. ``"usd"``).
-            order_id:       Local order identifier.
-            customer_email: Customer email for the invoice.
-        """
+        """Create a new payment / checkout session."""
         ...
 
     @abstractmethod
@@ -41,12 +38,7 @@ class PaymentAddon(BaseAddon):
 
     @abstractmethod
     async def refund_payment(self, payment_id: str, amount: int) -> Dict[str, Any]:
-        """Refund a payment (full or partial).
-
-        Args:
-            payment_id: ID of the payment to refund.
-            amount:     Refund amount in smallest currency unit.
-        """
+        """Refund a payment (full or partial)."""
         ...
 
     @abstractmethod
@@ -55,11 +47,38 @@ class PaymentAddon(BaseAddon):
         ...
 
     @abstractmethod
+    async def parse_webhook(
+        self, payload: Dict[str, Any], signature: str
+    ) -> PaymentWebhookOutcome:
+        """Parse a provider webhook into a structured outcome (no DB writes)."""
+        ...
+
     async def handle_webhook(
         self, payload: Dict[str, Any], signature: str
     ) -> Dict[str, Any]:
-        """Process an incoming webhook event from the payment provider.
+        """Legacy adapter — prefer ``parse_webhook``."""
+        outcome = await self.parse_webhook(payload, signature)
+        return {
+            "handled": outcome.handled,
+            "event_type": outcome.event_type,
+            "event_id": outcome.event_id,
+            "error": outcome.error,
+        }
 
-        Returns a dict with ``"handled"`` (bool) and ``"event"`` metadata.
-        """
-        ...
+    def webhook_event_id(self, payload: Dict[str, Any]) -> str:
+        """Extract a stable event id from a provider payload."""
+        for key in ("id", "event_id", "notificationId"):
+            value = payload.get(key)
+            if value:
+                return str(value)
+        data = payload.get("data", {})
+        if isinstance(data, dict):
+            for key in ("id", "payment_id", "session_id"):
+                value = data.get(key)
+                if value:
+                    return str(value)
+        return ""
+
+    def webhook_signature_header(self) -> str:
+        """Default HTTP header name for webhook signatures."""
+        return "signature"

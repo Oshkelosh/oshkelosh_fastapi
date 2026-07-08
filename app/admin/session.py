@@ -5,6 +5,7 @@ from __future__ import annotations
 import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Any
+from urllib.parse import quote, unquote
 
 from fastapi.responses import RedirectResponse, Response
 from jose import JWTError, jwt
@@ -47,7 +48,7 @@ def set_session_cookie(response: RedirectResponse, user_id: int) -> RedirectResp
         key=SESSION_COOKIE_NAME,
         value=token,
         httponly=True,
-        samesite="lax",
+        samesite=settings.admin_cookie_samesite,
         secure=cookie_secure(),
         max_age=86400,
         path="/",
@@ -68,9 +69,19 @@ def set_flash_cookie(response: Response, message: str) -> Response:
     """Set a short-lived flash message cookie for admin redirects."""
     response.set_cookie(
         key=FLASH_COOKIE_NAME,
-        value=message,
+        value=quote(message, safe=""),
         httponly=True,
         max_age=settings.flash_cookie_max_age,
         path="/",
     )
     return response
+
+
+def read_flash_cookie(raw_value: str) -> str:
+    """Decode a flash cookie value (supports legacy unencoded ASCII messages)."""
+    if not raw_value:
+        return ""
+    try:
+        return unquote(raw_value)
+    except ValueError:
+        return raw_value
