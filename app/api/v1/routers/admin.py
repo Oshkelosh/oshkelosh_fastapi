@@ -7,15 +7,18 @@ from pydantic import BaseModel
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import col, func, select
 
+from app.addons.registry import addon_registry
 from app.core.dependencies import CurrentUser, get_admin_user
 from app.core.exceptions import NotFound, ValidationError
 from app.core.security import hash_password
 from app.db.connection import get_session, mark_instance_dirty
+from app.addons.admin_helpers import redact_config_for_schema
 from app.services.audit import log_change
 from app.services.commerce import VALID_TRANSITIONS, apply_order_status_change, serialize_order
 from app.services.categories import resolve_category_id
 from app.services.product_defaults import apply_product_creation_defaults, validate_api_product_update
 from app.services.product_images import build_product_read, build_product_reads
+from app.services.product_variants import create_default_variant
 from app.services.product_slugs import (
     ensure_product_slug,
     raise_friendly_product_integrity_error,
@@ -45,6 +48,23 @@ def _category_read(cat: Category) -> CategoryRead:
 
 def _api_client_ip(request: Request) -> str | None:
     return request.client.host if request.client else None
+
+
+async def _ensure_admin_slot_available(
+    session,
+    *,
+    make_admin: bool,
+    exclude_user_id: int | None = None,
+) -> None:
+    """Enforce the current single-admin DB constraint with a friendly error."""
+    if not make_admin:
+        return
+    stmt = select(User).where(col(User.is_admin).is_(True))
+    if exclude_user_id is not None:
+        stmt = stmt.where(col(User.id) != exclude_user_id)
+    existing = await session.execute(stmt.limit(1))
+    if existing.scalar_one_or_none() is not None:
+        raise ValidationError(message="Only one admin user is allowed")
 
 
 class DashboardStats(BaseModel):
@@ -283,6 +303,7 @@ async def admin_create_user(
     )
     if existing.first() is not None:
         raise ValidationError(message="A user with this email already exists")
+    await _ensure_admin_slot_available(session, make_admin=data.is_admin)
 
     user = User(
         email=data.email,
@@ -328,6 +349,13 @@ async def admin_update_user(
     updates = data.model_dump(exclude_unset=True)
     password = updates.pop("password", None)
     verified_set = updates.pop("verified", None)
+    requested_admin = updates.get("is_admin")
+    if requested_admin is True and not user.is_admin:
+        await _ensure_admin_slot_available(
+            session,
+            make_admin=True,
+            exclude_user_id=user.id,
+        )
     for key, value in updates.items():
         setattr(user, key, value)
 
@@ -417,6 +445,7 @@ async def admin_create_product(
         store_name=store_name,
         preferred_slug=data.slug,
     )
+    await create_default_variant(session, product)
     mark_instance_dirty(session, product)
     try:
         await session.flush()
@@ -631,7 +660,11 @@ async def admin_update_order_status(
     current_user: CurrentUser = Depends(get_admin_user),
 ) -> Order:
     """Update an order's status."""
-    from app.services.commerce import apply_order_status_change, serialize_order
+    from app.services.commerce import (
+        apply_order_status_change,
+        cancel_order_as_admin,
+        serialize_order,
+    )
 
     order = await session.get(Order, order_id)
     if not order:
@@ -655,7 +688,10 @@ async def admin_update_order_status(
             tracking_url=data.tracking_url,
             carrier=data.carrier,
         )
-    await apply_order_status_change(session, order, data.status)
+    if data.status == "cancelled":
+        await cancel_order_as_admin(session, order)
+    else:
+        await apply_order_status_change(session, order, data.status)
     await session.flush()
     await log_change(
         session,
@@ -701,6 +737,10 @@ async def admin_configure_addon(
     )
     await session.flush()
     await session.refresh(row)
+    addon = addon_registry.get(addon_id)
+    redacted_config = row.config
+    if addon is not None:
+        redacted_config = redact_config_for_schema(addon.config_schema(), row.config)
     await log_change(
         session,
         actor_user_id=current_user.id,
@@ -717,7 +757,7 @@ async def admin_configure_addon(
         "addon_id": row.addon_id,
         "addon_type": row.addon_type,
         "is_enabled": row.is_enabled,
-        "config": row.config,
+        "config": redacted_config,
         "updated_at": row.updated_at,
     }
 

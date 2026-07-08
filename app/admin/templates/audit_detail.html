@@ -22,7 +22,7 @@
       <strong>Actor</strong>
       <div>
         {% if actor %}
-          <a href="/admin/users/{{ actor.id }}">{{ actor.full_name or actor.email }}</a>
+          <a href="{{ admin_prefix }}/users/{{ actor.id }}">{{ actor.full_name or actor.email }}</a>
           <span style="color:var(--clr-text-muted);">({{ actor.email }})</span>
         {% elif entry.actor_user_id %}
           User #{{ entry.actor_user_id }}

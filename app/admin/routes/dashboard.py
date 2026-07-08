@@ -19,6 +19,70 @@ from app.admin.routes._deps import (
 )
 
 router = APIRouter()
+REVENUE_TREND_RANGE_OPTIONS = (30, 90, 180)
+
+
+def _build_revenue_trend_chart(series: dict[str, Any]) -> dict[str, Any]:
+    """Prepare a lightweight SVG chart model for the dashboard template."""
+    points = list(series.get("days", []))
+    width = 800
+    height = 200
+    left = 60
+    right = 20
+    top = 30
+    bottom = 30
+    plot_width = width - left - right
+    plot_height = height - top - bottom
+    max_cents = max(series.get("max_cents", 0), 0)
+    scale_max = max_cents if max_cents > 0 else 1
+
+    chart_points: list[dict[str, Any]] = []
+    for index, point in enumerate(points):
+        x = left if len(points) == 1 else left + (plot_width * index / (len(points) - 1))
+        y = top + plot_height - ((point["revenue_cents"] / scale_max) * plot_height)
+        chart_points.append(
+            {
+                **point,
+                "x": round(x, 2),
+                "y": round(y, 2),
+                "amount": f"${point['revenue_cents'] / 100:,.2f}",
+                "short_date": point["date"][5:],
+            }
+        )
+
+    if chart_points:
+        path_d = "M " + " L ".join(f"{point['x']} {point['y']}" for point in chart_points)
+        area_d = (
+            f"{path_d} L {chart_points[-1]['x']} {top + plot_height} "
+            f"L {chart_points[0]['x']} {top + plot_height} Z"
+        )
+        start_label = chart_points[0]["date"]
+        end_label = chart_points[-1]["date"]
+    else:
+        baseline_y = top + plot_height
+        path_d = f"M {left} {baseline_y} L {left + plot_width} {baseline_y}"
+        area_d = (
+            f"M {left} {baseline_y} L {left + plot_width} {baseline_y} "
+            f"L {left + plot_width} {baseline_y} L {left} {baseline_y} Z"
+        )
+        start_label = ""
+        end_label = ""
+
+    midpoint_cents = max_cents // 2 if max_cents > 0 else 0
+    return {
+        "points": chart_points,
+        "path_d": path_d,
+        "area_d": area_d,
+        "has_revenue": series.get("total_cents", 0) > 0,
+        "total_cents": series.get("total_cents", 0),
+        "max_cents": max_cents,
+        "top_label": f"${max_cents / 100:,.2f}",
+        "mid_label": f"${midpoint_cents / 100:,.2f}",
+        "baseline_y": top + plot_height,
+        "start_label": start_label,
+        "end_label": end_label,
+        "days": len(points),
+    }
 
 
 async def _load_dashboard_context(db) -> Dict[str, Any]:
@@ -71,10 +135,23 @@ async def admin_dashboard(request: Request, db=Depends(require_admin_session)):
     from models.order import Order
     from models.product import Product
 
+    selected_range = 30
+    requested_range = request.query_params.get("range_days")
+    if requested_range is not None:
+        try:
+            parsed_range = int(requested_range)
+        except ValueError:
+            parsed_range = selected_range
+        if parsed_range in REVENUE_TREND_RANGE_OPTIONS:
+            selected_range = parsed_range
+
     stats: Dict[str, Any] = {
         "total_products": 0,
         "total_orders": 0,
         "total_revenue_cents": 0,
+        "revenue_trend": _build_revenue_trend_chart({"days": [], "max_cents": 0, "total_cents": 0}),
+        "revenue_trend_days": selected_range,
+        "revenue_trend_options": REVENUE_TREND_RANGE_OPTIONS,
         "recent_orders": [],
         "pending_orders": 0,
         "total_users": 0,
@@ -91,9 +168,12 @@ async def admin_dashboard(request: Request, db=Depends(require_admin_session)):
 
         try:
             operational = await _load_dashboard_context(db)
-            from app.services.admin_dashboard import fetch_dashboard_stats
+            from app.services.admin_dashboard import fetch_dashboard_stats, fetch_revenue_trend
 
             stats.update(await fetch_dashboard_stats(db))
+            stats["revenue_trend"] = _build_revenue_trend_chart(
+                await fetch_revenue_trend(db, days=selected_range)
+            )
 
             from models.order_item import OrderItem
 

@@ -5,7 +5,7 @@
 {% block content %}
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
   <h2 style="margin:0;">{{ 'Edit User' if user else 'New User' }}</h2>
-  <a href="/admin/users" class="btn btn--secondary">← Back to Users</a>
+  <a href="{{ admin_prefix }}/users" class="btn btn--secondary">← Back to Users</a>
 </div>
 
 {% if form_error %}

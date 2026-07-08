@@ -5,7 +5,6 @@ from __future__ import annotations
 from fastapi import FastAPI, Request
 from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded as SlowAPIRateLimitExceeded
-from slowapi.util import get_remote_address
 from starlette.responses import JSONResponse
 
 from app.config import settings
@@ -13,7 +12,17 @@ from app.core.exceptions import RateLimitExceeded
 
 
 def _client_key(request: Request) -> str:
-    return get_remote_address(request) or "unknown"
+    remote_addr = request.client.host if request.client else None
+    trusted_proxies = {ip.strip() for ip in settings.trusted_proxy_ips if ip.strip()}
+    if remote_addr and remote_addr in trusted_proxies:
+        for header_name in settings.trusted_proxy_headers:
+            raw = request.headers.get(header_name)
+            if not raw:
+                continue
+            forwarded = raw.split(",")[0].strip()
+            if forwarded:
+                return forwarded
+    return remote_addr or "unknown"
 
 
 limiter = Limiter(

@@ -384,7 +384,7 @@
           "products"
         ],
         "summary": "List products",
-        "description": "Return a paginated list of published products. Supports filtering by category_id, search (name/description), status, and sorting.",
+        "description": "Return a paginated list of published products. Supports filtering by category_id or category slug, search (name/description), status, and sorting.",
         "operationId": "list_products_api_v1_products_get",
         "parameters": [
           {
@@ -431,6 +431,24 @@
               "title": "Category Id"
             },
             "description": "Filter by category id"
+          },
+          {
+            "name": "category",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by category slug",
+              "title": "Category"
+            },
+            "description": "Filter by category slug"
           },
           {
             "name": "status",
@@ -1297,7 +1315,7 @@
           "orders"
         ],
         "summary": "Create order from cart",
-        "description": "Create a new order from the current user's cart. Inventory is reserved immediately; stale pending orders are auto-cancelled.",
+        "description": "Create a new order from the current user's cart. Inventory is reserved immediately; stale pending orders can be cleaned up by background maintenance jobs.",
         "operationId": "create_order_api_v1_orders_post",
         "parameters": [
           {
@@ -1552,7 +1570,7 @@
           "orders"
         ],
         "summary": "Cancel order",
-        "description": "Cancel an order if its status allows cancellation (pending, paid, shipped).",
+        "description": "Cancel a pending order owned by the current user.",
         "operationId": "cancel_order_api_v1_orders__order_id__cancel_post",
         "parameters": [
           {
@@ -2963,32 +2981,14 @@
         }
       }
     },
-    "/api/v1/suppliers/printful/products": {
+    "/api/v1/suppliers/manual/suppliers": {
       "get": {
         "tags": [
           "addons-suppliers",
           "addons-suppliers"
         ],
-        "summary": "List Products Route",
-        "operationId": "list_products_route_api_v1_suppliers_printful_products_get",
-        "parameters": [
-          {
-            "name": "oshkelosh_admin",
-            "in": "cookie",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Oshkelosh Admin"
-            }
-          }
-        ],
+        "summary": "List Manual Suppliers Api",
+        "operationId": "list_manual_suppliers_api_api_v1_suppliers_manual_suppliers_get",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -2997,14 +2997,64 @@
                 "schema": {}
               }
             }
-          },
-          "422": {
-            "description": "Validation Error",
+          }
+        }
+      }
+    },
+    "/api/v1/suppliers/spreadconnect/products": {
+      "get": {
+        "tags": [
+          "addons-suppliers",
+          "addons-suppliers"
+        ],
+        "summary": "List Products Route",
+        "operationId": "list_products_route_api_v1_suppliers_spreadconnect_products_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/suppliers/prodigi/products": {
+      "get": {
+        "tags": [
+          "addons-suppliers",
+          "addons-suppliers"
+        ],
+        "summary": "List Products Route",
+        "operationId": "list_products_route_api_v1_suppliers_prodigi_products_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/suppliers/printful/products": {
+      "get": {
+        "tags": [
+          "addons-suppliers",
+          "addons-suppliers"
+        ],
+        "summary": "List Products Route",
+        "operationId": "list_products_route_api_v1_suppliers_printful_products_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
               }
             }
           }
@@ -3052,26 +3102,6 @@
         }
       }
     },
-    "/api/v1/suppliers/manual/suppliers": {
-      "get": {
-        "tags": [
-          "addons-suppliers",
-          "addons-suppliers"
-        ],
-        "summary": "List Manual Suppliers Api",
-        "operationId": "list_manual_suppliers_api_api_v1_suppliers_manual_suppliers_get",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/v1/suppliers/printify/products": {
       "get": {
         "tags": [
@@ -3080,40 +3110,12 @@
         ],
         "summary": "List Products Route",
         "operationId": "list_products_route_api_v1_suppliers_printify_products_get",
-        "parameters": [
-          {
-            "name": "oshkelosh_admin",
-            "in": "cookie",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Oshkelosh Admin"
-            }
-          }
-        ],
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
               }
             }
           }
@@ -3169,184 +3171,12 @@
         ],
         "summary": "List Products Route",
         "operationId": "list_products_route_api_v1_suppliers_podbase_products_get",
-        "parameters": [
-          {
-            "name": "oshkelosh_admin",
-            "in": "cookie",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Oshkelosh Admin"
-            }
-          }
-        ],
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/suppliers/gelato/products": {
-      "get": {
-        "tags": [
-          "addons-suppliers",
-          "addons-suppliers"
-        ],
-        "summary": "List Products Route",
-        "operationId": "list_products_route_api_v1_suppliers_gelato_products_get",
-        "parameters": [
-          {
-            "name": "oshkelosh_admin",
-            "in": "cookie",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Oshkelosh Admin"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/suppliers/prodigi/products": {
-      "get": {
-        "tags": [
-          "addons-suppliers",
-          "addons-suppliers"
-        ],
-        "summary": "List Products Route",
-        "operationId": "list_products_route_api_v1_suppliers_prodigi_products_get",
-        "parameters": [
-          {
-            "name": "oshkelosh_admin",
-            "in": "cookie",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Oshkelosh Admin"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/suppliers/customcat/products": {
-      "get": {
-        "tags": [
-          "addons-suppliers",
-          "addons-suppliers"
-        ],
-        "summary": "List Products Route",
-        "operationId": "list_products_route_api_v1_suppliers_customcat_products_get",
-        "parameters": [
-          {
-            "name": "oshkelosh_admin",
-            "in": "cookie",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Oshkelosh Admin"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
               }
             }
           }
@@ -3361,72 +3191,26 @@
         ],
         "summary": "List Products Route",
         "operationId": "list_products_route_api_v1_suppliers_gooten_products_get",
-        "parameters": [
-          {
-            "name": "oshkelosh_admin",
-            "in": "cookie",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Oshkelosh Admin"
-            }
-          }
-        ],
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
               }
             }
           }
         }
       }
     },
-    "/api/v1/suppliers/spreadconnect/products": {
+    "/api/v1/suppliers/gelato/products": {
       "get": {
         "tags": [
           "addons-suppliers",
           "addons-suppliers"
         ],
         "summary": "List Products Route",
-        "operationId": "list_products_route_api_v1_suppliers_spreadconnect_products_get",
-        "parameters": [
-          {
-            "name": "oshkelosh_admin",
-            "in": "cookie",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Oshkelosh Admin"
-            }
-          }
-        ],
+        "operationId": "list_products_route_api_v1_suppliers_gelato_products_get",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -3435,14 +3219,24 @@
                 "schema": {}
               }
             }
-          },
-          "422": {
-            "description": "Validation Error",
+          }
+        }
+      }
+    },
+    "/api/v1/suppliers/customcat/products": {
+      "get": {
+        "tags": [
+          "addons-suppliers",
+          "addons-suppliers"
+        ],
+        "summary": "List Products Route",
+        "operationId": "list_products_route_api_v1_suppliers_customcat_products_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
+                "schema": {}
               }
             }
           }
@@ -3457,40 +3251,12 @@
         ],
         "summary": "List Products Route",
         "operationId": "list_products_route_api_v1_suppliers_cjdropshipping_products_get",
-        "parameters": [
-          {
-            "name": "oshkelosh_admin",
-            "in": "cookie",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Oshkelosh Admin"
-            }
-          }
-        ],
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
               }
             }
           }
@@ -6667,148 +6433,6 @@
         }
       }
     },
-    "/admin/suppliers/printful": {
-      "get": {
-        "summary": "Config Page",
-        "operationId": "config_page_admin_suppliers_printful_get",
-        "parameters": [
-          {
-            "name": "oshkelosh_admin",
-            "in": "cookie",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Oshkelosh Admin"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/admin/suppliers/printful/save": {
-      "post": {
-        "summary": "Save Config",
-        "operationId": "save_config_admin_suppliers_printful_save_post",
-        "parameters": [
-          {
-            "name": "oshkelosh_admin",
-            "in": "cookie",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Oshkelosh Admin"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/admin/suppliers/printful/sync": {
-      "post": {
-        "summary": "Sync Catalog",
-        "operationId": "sync_catalog_admin_suppliers_printful_sync_post",
-        "parameters": [
-          {
-            "name": "oshkelosh_admin",
-            "in": "cookie",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Oshkelosh Admin"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/x-www-form-urlencoded": {
-              "schema": {
-                "$ref": "#/components/schemas/Body_sync_catalog_admin_suppliers_printful_sync_post"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/admin/suppliers/manual": {
       "get": {
         "summary": "Manual Suppliers List",
@@ -7184,6 +6808,432 @@
         }
       }
     },
+    "/admin/suppliers/spreadconnect": {
+      "get": {
+        "summary": "Config Page",
+        "operationId": "config_page_admin_suppliers_spreadconnect_get",
+        "parameters": [
+          {
+            "name": "oshkelosh_admin",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Oshkelosh Admin"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/suppliers/spreadconnect/save": {
+      "post": {
+        "summary": "Save Config",
+        "operationId": "save_config_admin_suppliers_spreadconnect_save_post",
+        "parameters": [
+          {
+            "name": "oshkelosh_admin",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Oshkelosh Admin"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/suppliers/spreadconnect/sync": {
+      "post": {
+        "summary": "Sync Catalog",
+        "operationId": "sync_catalog_admin_suppliers_spreadconnect_sync_post",
+        "parameters": [
+          {
+            "name": "oshkelosh_admin",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Oshkelosh Admin"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_sync_catalog_admin_suppliers_spreadconnect_sync_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/suppliers/prodigi": {
+      "get": {
+        "summary": "Config Page",
+        "operationId": "config_page_admin_suppliers_prodigi_get",
+        "parameters": [
+          {
+            "name": "oshkelosh_admin",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Oshkelosh Admin"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/suppliers/prodigi/save": {
+      "post": {
+        "summary": "Save Config",
+        "operationId": "save_config_admin_suppliers_prodigi_save_post",
+        "parameters": [
+          {
+            "name": "oshkelosh_admin",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Oshkelosh Admin"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/suppliers/prodigi/sync": {
+      "post": {
+        "summary": "Sync Catalog",
+        "operationId": "sync_catalog_admin_suppliers_prodigi_sync_post",
+        "parameters": [
+          {
+            "name": "oshkelosh_admin",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Oshkelosh Admin"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_sync_catalog_admin_suppliers_prodigi_sync_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/suppliers/printful": {
+      "get": {
+        "summary": "Config Page",
+        "operationId": "config_page_admin_suppliers_printful_get",
+        "parameters": [
+          {
+            "name": "oshkelosh_admin",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Oshkelosh Admin"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/suppliers/printful/save": {
+      "post": {
+        "summary": "Save Config",
+        "operationId": "save_config_admin_suppliers_printful_save_post",
+        "parameters": [
+          {
+            "name": "oshkelosh_admin",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Oshkelosh Admin"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/suppliers/printful/sync": {
+      "post": {
+        "summary": "Sync Catalog",
+        "operationId": "sync_catalog_admin_suppliers_printful_sync_post",
+        "parameters": [
+          {
+            "name": "oshkelosh_admin",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Oshkelosh Admin"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_sync_catalog_admin_suppliers_printful_sync_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/admin/suppliers/printify": {
       "get": {
         "summary": "Config Page",
@@ -7468,432 +7518,6 @@
         }
       }
     },
-    "/admin/suppliers/gelato": {
-      "get": {
-        "summary": "Config Page",
-        "operationId": "config_page_admin_suppliers_gelato_get",
-        "parameters": [
-          {
-            "name": "oshkelosh_admin",
-            "in": "cookie",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Oshkelosh Admin"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/admin/suppliers/gelato/save": {
-      "post": {
-        "summary": "Save Config",
-        "operationId": "save_config_admin_suppliers_gelato_save_post",
-        "parameters": [
-          {
-            "name": "oshkelosh_admin",
-            "in": "cookie",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Oshkelosh Admin"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/admin/suppliers/gelato/sync": {
-      "post": {
-        "summary": "Sync Catalog",
-        "operationId": "sync_catalog_admin_suppliers_gelato_sync_post",
-        "parameters": [
-          {
-            "name": "oshkelosh_admin",
-            "in": "cookie",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Oshkelosh Admin"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/x-www-form-urlencoded": {
-              "schema": {
-                "$ref": "#/components/schemas/Body_sync_catalog_admin_suppliers_gelato_sync_post"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/admin/suppliers/prodigi": {
-      "get": {
-        "summary": "Config Page",
-        "operationId": "config_page_admin_suppliers_prodigi_get",
-        "parameters": [
-          {
-            "name": "oshkelosh_admin",
-            "in": "cookie",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Oshkelosh Admin"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/admin/suppliers/prodigi/save": {
-      "post": {
-        "summary": "Save Config",
-        "operationId": "save_config_admin_suppliers_prodigi_save_post",
-        "parameters": [
-          {
-            "name": "oshkelosh_admin",
-            "in": "cookie",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Oshkelosh Admin"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/admin/suppliers/prodigi/sync": {
-      "post": {
-        "summary": "Sync Catalog",
-        "operationId": "sync_catalog_admin_suppliers_prodigi_sync_post",
-        "parameters": [
-          {
-            "name": "oshkelosh_admin",
-            "in": "cookie",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Oshkelosh Admin"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/x-www-form-urlencoded": {
-              "schema": {
-                "$ref": "#/components/schemas/Body_sync_catalog_admin_suppliers_prodigi_sync_post"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/admin/suppliers/customcat": {
-      "get": {
-        "summary": "Config Page",
-        "operationId": "config_page_admin_suppliers_customcat_get",
-        "parameters": [
-          {
-            "name": "oshkelosh_admin",
-            "in": "cookie",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Oshkelosh Admin"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/admin/suppliers/customcat/save": {
-      "post": {
-        "summary": "Save Config",
-        "operationId": "save_config_admin_suppliers_customcat_save_post",
-        "parameters": [
-          {
-            "name": "oshkelosh_admin",
-            "in": "cookie",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Oshkelosh Admin"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/admin/suppliers/customcat/sync": {
-      "post": {
-        "summary": "Sync Catalog",
-        "operationId": "sync_catalog_admin_suppliers_customcat_sync_post",
-        "parameters": [
-          {
-            "name": "oshkelosh_admin",
-            "in": "cookie",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Oshkelosh Admin"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/x-www-form-urlencoded": {
-              "schema": {
-                "$ref": "#/components/schemas/Body_sync_catalog_admin_suppliers_customcat_sync_post"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/admin/suppliers/gooten": {
       "get": {
         "summary": "Config Page",
@@ -8036,10 +7660,10 @@
         }
       }
     },
-    "/admin/suppliers/spreadconnect": {
+    "/admin/suppliers/gelato": {
       "get": {
         "summary": "Config Page",
-        "operationId": "config_page_admin_suppliers_spreadconnect_get",
+        "operationId": "config_page_admin_suppliers_gelato_get",
         "parameters": [
           {
             "name": "oshkelosh_admin",
@@ -8080,10 +7704,10 @@
         }
       }
     },
-    "/admin/suppliers/spreadconnect/save": {
+    "/admin/suppliers/gelato/save": {
       "post": {
         "summary": "Save Config",
-        "operationId": "save_config_admin_suppliers_spreadconnect_save_post",
+        "operationId": "save_config_admin_suppliers_gelato_save_post",
         "parameters": [
           {
             "name": "oshkelosh_admin",
@@ -8124,10 +7748,10 @@
         }
       }
     },
-    "/admin/suppliers/spreadconnect/sync": {
+    "/admin/suppliers/gelato/sync": {
       "post": {
         "summary": "Sync Catalog",
-        "operationId": "sync_catalog_admin_suppliers_spreadconnect_sync_post",
+        "operationId": "sync_catalog_admin_suppliers_gelato_sync_post",
         "parameters": [
           {
             "name": "oshkelosh_admin",
@@ -8151,7 +7775,149 @@
           "content": {
             "application/x-www-form-urlencoded": {
               "schema": {
-                "$ref": "#/components/schemas/Body_sync_catalog_admin_suppliers_spreadconnect_sync_post"
+                "$ref": "#/components/schemas/Body_sync_catalog_admin_suppliers_gelato_sync_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/suppliers/customcat": {
+      "get": {
+        "summary": "Config Page",
+        "operationId": "config_page_admin_suppliers_customcat_get",
+        "parameters": [
+          {
+            "name": "oshkelosh_admin",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Oshkelosh Admin"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/suppliers/customcat/save": {
+      "post": {
+        "summary": "Save Config",
+        "operationId": "save_config_admin_suppliers_customcat_save_post",
+        "parameters": [
+          {
+            "name": "oshkelosh_admin",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Oshkelosh Admin"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/suppliers/customcat/sync": {
+      "post": {
+        "summary": "Sync Catalog",
+        "operationId": "sync_catalog_admin_suppliers_customcat_sync_post",
+        "parameters": [
+          {
+            "name": "oshkelosh_admin",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Oshkelosh Admin"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_sync_catalog_admin_suppliers_customcat_sync_post"
               }
             }
           }
@@ -10826,6 +10592,12 @@
             "type": "string",
             "maxLength": 128,
             "title": "Password"
+          },
+          "csrf_token": {
+            "type": "string",
+            "maxLength": 128,
+            "title": "Csrf Token",
+            "default": ""
           }
         },
         "type": "object",

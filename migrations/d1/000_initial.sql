@@ -56,6 +56,9 @@ CREATE INDEX IF NOT EXISTS idx_orders_payment_id
 CREATE UNIQUE INDEX IF NOT EXISTS idx_order_idempotency_user_key
     ON order_idempotency_keys (user_id, key_hash);
 
+CREATE UNIQUE INDEX IF NOT EXISTS idx_processed_webhook_events_event_id
+    ON processed_webhook_events (event_id);
+
 CREATE UNIQUE INDEX IF NOT EXISTS idx_users_single_admin
     ON users (is_admin)
     WHERE is_admin = 1;

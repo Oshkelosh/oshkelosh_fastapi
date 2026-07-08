@@ -5,7 +5,7 @@
 {% block content %}
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
   <h2 style="margin:0;">Users</h2>
-  <a href="/admin/users/new" class="btn btn--primary">+ New User</a>
+  <a href="{{ admin_prefix }}/users/new" class="btn btn--primary">+ New User</a>
 </div>
 
 <form method="GET" style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:16px;">
@@ -40,7 +40,7 @@
   <tbody>
     {% for u in items %}
     <tr>
-      <td><a href="/admin/users/{{ u.id }}">{{ u.email }}</a></td>
+      <td><a href="{{ admin_prefix }}/users/{{ u.id }}">{{ u.email }}</a></td>
       <td>{{ u.full_name or '—' }}</td>
       <td>
         {% if u.verified %}
@@ -65,7 +65,7 @@
       </td>
       <td>{{ u.created_at.strftime('%Y-%m-%d') if u.created_at else '' }}</td>
       <td>
-        <a href="/admin/users/{{ u.id }}" class="btn btn--secondary btn--sm">Edit</a>
+        <a href="{{ admin_prefix }}/users/{{ u.id }}" class="btn btn--secondary btn--sm">Edit</a>
       </td>
     </tr>
     {% endfor %}
@@ -74,17 +74,17 @@
 {% if total_pages > 1 %}
 <nav style="margin-top:16px;display:flex;gap:8px;align-items:center;">
   {% if page > 1 %}
-  <a href="/admin/users?page={{ page - 1 }}{% if search %}&search={{ search }}{% endif %}{% if verified_filter %}&verified={{ verified_filter }}{% endif %}{% if banned_filter %}&banned={{ banned_filter }}{% endif %}" class="btn btn--secondary btn--sm">Previous</a>
+  <a href="{{ admin_prefix }}/users?page={{ page - 1 }}{% if search %}&search={{ search }}{% endif %}{% if verified_filter %}&verified={{ verified_filter }}{% endif %}{% if banned_filter %}&banned={{ banned_filter }}{% endif %}" class="btn btn--secondary btn--sm">Previous</a>
   {% endif %}
   <span style="color:var(--clr-text-muted);">Page {{ page }} of {{ total_pages }} ({{ total }} users)</span>
   {% if page < total_pages %}
-  <a href="/admin/users?page={{ page + 1 }}{% if search %}&search={{ search }}{% endif %}{% if verified_filter %}&verified={{ verified_filter }}{% endif %}{% if banned_filter %}&banned={{ banned_filter }}{% endif %}" class="btn btn--secondary btn--sm">Next</a>
+  <a href="{{ admin_prefix }}/users?page={{ page + 1 }}{% if search %}&search={{ search }}{% endif %}{% if verified_filter %}&verified={{ verified_filter }}{% endif %}{% if banned_filter %}&banned={{ banned_filter }}{% endif %}" class="btn btn--secondary btn--sm">Next</a>
   {% endif %}
 </nav>
 {% endif %}
 {% else %}
 <div class="card" style="text-align:center;padding:40px;">
-  <p style="color:var(--clr-text-muted);">No users found. <a href="/admin/users/new">Create a user</a>.</p>
+  <p style="color:var(--clr-text-muted);">No users found. <a href="{{ admin_prefix }}/users/new">Create a user</a>.</p>
 </div>
 {% endif %}
 {% endblock %}

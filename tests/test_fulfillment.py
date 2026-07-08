@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from app.core.exceptions import ValidationError
 from app.services.fulfillment import fulfill_order_with_suppliers
 from app.services.suppliers import (
     build_supplier_tag,
@@ -313,14 +314,22 @@ async def test_disabled_supplier_skipped_other_still_fulfills(db_session):
     product = Product(
         name="Manual only",
         price_cents=1000,
-        tags=[
-            {
-                "supplier_addon_id": "manual",
-                "manual_supplier_slug": "local_workshop",
-            }
-        ],
+        tags=[],
     )
     db_session.add(product)
+    await db_session.flush()
+    variant = ProductVariant(
+        product_id=product.id,
+        title="Default",
+        position=0,
+        price_cents=1000,
+        inventory_quantity=10,
+        sku="MAN-1",
+        status="active",
+        supplier_addon_id="manual",
+        supplier_variant_id="local_workshop",
+    )
+    db_session.add(variant)
     await db_session.flush()
 
     order = Order(user_id=1, status="paid", total_cents=1000, shipping_address={})
@@ -330,6 +339,7 @@ async def test_disabled_supplier_skipped_other_still_fulfills(db_session):
         OrderItem(
             order_id=order.id,
             product_id=product.id,
+            variant_id=variant.id,
             product_name=product.name,
             product_sku="MAN-1",
             quantity=1,
@@ -341,6 +351,60 @@ async def test_disabled_supplier_skipped_other_still_fulfills(db_session):
     await db_session.flush()
 
     with patch("app.services.fulfillment.get_supplier_addon", return_value=None):
-        await fulfill_order_with_suppliers(db_session, order, items)
+        with pytest.raises(ValidationError, match="not enabled"):
+            await fulfill_order_with_suppliers(db_session, order, items)
 
-    assert not order.notes
+    assert "not enabled" in (order.notes or "")
+
+
+@pytest.mark.asyncio
+async def test_supplier_failure_raises_validation_error(db_session):
+    product = Product(
+        name="Printful only",
+        price_cents=1000,
+        tags=[],
+    )
+    db_session.add(product)
+    await db_session.flush()
+    variant = ProductVariant(
+        product_id=product.id,
+        title="Default",
+        position=0,
+        price_cents=1000,
+        inventory_quantity=10,
+        sku="PF-FAIL",
+        status="active",
+        supplier_addon_id="printful",
+        supplier_product_id="pf-fail",
+    )
+    db_session.add(variant)
+    await db_session.flush()
+
+    order = Order(user_id=1, status="paid", total_cents=1000, shipping_address={})
+    db_session.add(order)
+    await db_session.flush()
+    item = OrderItem(
+        order_id=order.id,
+        product_id=product.id,
+        variant_id=variant.id,
+        product_name=product.name,
+        product_sku="PF-FAIL",
+        quantity=1,
+        unit_price_cents=1000,
+        total_price_cents=1000,
+    )
+    db_session.add(item)
+    await db_session.flush()
+
+    failure_mock = AsyncMock(return_value={"success": False, "error": "supplier unavailable"})
+
+    class FakeAddon:
+        addon_id = "printful"
+        is_enabled = True
+        create_order = failure_mock
+
+    with patch("app.services.fulfillment.get_supplier_addon", return_value=FakeAddon()):
+        with pytest.raises(ValidationError, match="supplier unavailable"):
+            await fulfill_order_with_suppliers(db_session, order, [item])
+
+    assert "supplier unavailable" in (order.notes or "")

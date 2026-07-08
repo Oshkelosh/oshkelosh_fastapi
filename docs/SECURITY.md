@@ -8,11 +8,17 @@
 - **CSRF is not required** for API clients that send Bearer tokens (no browser cookie session).
 - Do **not** store API access tokens in cookies without CSRF protection.
 
-### Admin panel (`/admin/*`)
+### Admin panel (`ADMIN_PREFIX`, default `/admin`)
 
 - Uses **httponly session cookies** signed with `ADMIN_SESSION_SECRET` (separate from `JWT_SECRET_KEY` in production).
 - All mutating forms require a **CSRF token** (`csrf_token` field + session claim).
 - Session cookie `SameSite` defaults to `lax`; set `ADMIN_COOKIE_SAMESITE=strict` for stricter CSRF protection (may affect cross-site admin flows).
+
+### Admin JSON API (`/api/v1/admin/*`)
+
+- Uses **Bearer JWT** plus `get_admin_user()` authorization checks.
+- Intended for scripts, cron jobs, and operator tooling rather than browser navigation.
+- Maintenance endpoints such as `POST /api/v1/admin/jobs/abandoned-cart` and `POST /api/v1/admin/jobs/pending-orders` belong here.
 
 ## Secrets (production)
 
@@ -34,6 +40,8 @@ Auth endpoints are limited per client IP (slowapi):
 - `POST /admin/login` — default `5/minute` (`RATE_LIMIT_ADMIN_LOGIN`)
 
 Disable in tests with `RATE_LIMIT_ENABLED=false`.
+
+If the app sits behind a reverse proxy, configure `TRUSTED_PROXY_IPS` and optionally `TRUSTED_PROXY_HEADERS` so rate limiting keys off the forwarded client IP only when the immediate peer is trusted.
 
 ## Password hashing
 
@@ -57,6 +65,8 @@ In production, allowed methods and headers are restricted (see `app/core/middlew
 
 At application startup the lifespan hook runs SQLModel `create_all` and then applies supplemental SQL from `migrations/d1/` via `apply_migrations_async()` (see [DATABASE.md](DATABASE.md)). The `schema_migrations` table records **which SQL files ran** — it does not automatically sync ORM model changes. Application tables come from `create_all`; SQL files add indexes, constraints, and other supplemental DDL.
 
+The supplemental SQL is security-critical on D1 deployments. Unique indexes such as `order_idempotency_keys (user_id, key_hash)` and `processed_webhook_events (event_id)` are added there rather than by the D1 HTTP table emitter.
+
 ## First-run setup race
 
 `POST /setup` creates the first admin user. Concurrent submissions (multiple tabs or parallel deploys) are guarded by:
@@ -68,4 +78,10 @@ Only one admin is created; the loser sees an error message and must sign in norm
 
 ## Payment webhook idempotency
 
-Payment webhooks are processed by [`app/services/payment_webhooks.py`](../app/services/payment_webhooks.py). Before side effects, core inserts a `processed_webhook_events` row keyed by `event_id` (unique). A duplicate delivery hits the unique constraint, rolls back the insert, and returns `{"handled": true, "duplicate": true}` without re-marking the order paid. Addon `parse_webhook()` methods must not write to the database — core owns idempotency and order transitions.
+Payment webhooks are processed by [`app/services/payment_webhooks.py`](../app/services/payment_webhooks.py). Core first asks the addon to parse and validate the delivery, then records a `processed_webhook_events` row keyed by `event_id` (unique) before applying side effects. A duplicate delivery hits the unique constraint and returns `{"handled": true, "duplicate": true}` without re-marking the order paid. Addon `parse_webhook()` methods must not write to the database — core owns idempotency and order transitions.
+
+Late payments for already-cancelled orders are preserved on the order, flagged for refund review, and written to the audit log as reconciliation events instead of silently flipping the order back to `paid`.
+
+## Media access
+
+`GET /api/v1/media/{key}` now requires admin authentication. Presigned or resolved media URLs should be treated as operational/admin tools unless a future storefront-safe reader surface is added deliberately.

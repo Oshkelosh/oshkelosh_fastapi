@@ -49,6 +49,14 @@ class SetupRedirectMiddleware(BaseHTTPMiddleware):
         if not getattr(request.app.state, "needs_setup", False):
             return await call_next(request)
 
+        from app.db.connection import session_scope
+        from app.services.bootstrap import has_admin_user
+
+        async with session_scope() as session:
+            if await has_admin_user(session):
+                request.app.state.needs_setup = False
+                return await call_next(request)
+
         path = request.url.path
         if _is_exempt_path(path) or not _should_redirect_to_setup(path):
             return await call_next(request)

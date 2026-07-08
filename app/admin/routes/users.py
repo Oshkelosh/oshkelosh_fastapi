@@ -20,6 +20,7 @@ from app.admin.routes._deps import (
     require_admin_session,
     select,
     set_flash_cookie,
+    settings,
 )
 
 router = APIRouter()
@@ -164,7 +165,7 @@ async def admin_user_new(request: Request, db=Depends(require_admin_session)):
     return await _render_user_form(
         request,
         title="New User",
-        action_url="/admin/users",
+        action_url=f"{settings.admin_prefix}/users",
     )
 
 
@@ -230,7 +231,7 @@ async def admin_user_create(
         return await _render_user_form(
             request,
             title="New User",
-            action_url="/admin/users",
+            action_url=f"{settings.admin_prefix}/users",
             form_error=errors,
             draft=draft,
         )
@@ -240,7 +241,7 @@ async def admin_user_create(
         return await _render_user_form(
             request,
             title="New User",
-            action_url="/admin/users",
+            action_url=f"{settings.admin_prefix}/users",
             form_error="A user with this email already exists",
             draft=draft,
         )
@@ -282,7 +283,7 @@ async def admin_user_create(
     )
     await db.commit()
 
-    resp = RedirectResponse(url=f"/admin/users/{user.id}", status_code=302)
+    resp = RedirectResponse(url=f"{settings.admin_prefix}/users/{user.id}", status_code=302)
     set_flash_cookie(resp, f"User '{user.email}' created")
     return resp
 
@@ -307,7 +308,7 @@ async def admin_user_detail(
         request,
         title=f"User: {user.email}",
         user=user,
-        action_url=f"/admin/users/{user_id}",
+        action_url=f"{settings.admin_prefix}/users/{user_id}",
     )
 
 
@@ -392,7 +393,7 @@ async def admin_user_update(
             request,
             title=f"User: {user.email}",
             user=user,
-            action_url=f"/admin/users/{user_id}",
+            action_url=f"{settings.admin_prefix}/users/{user_id}",
             form_error=errors,
             draft=draft,
         )
@@ -435,7 +436,7 @@ async def admin_user_update(
     )
     await db.commit()
 
-    resp = RedirectResponse(url=f"/admin/users/{user.id}", status_code=302)
+    resp = RedirectResponse(url=f"{settings.admin_prefix}/users/{user.id}", status_code=302)
     set_flash_cookie(resp, f"User '{user.email}' updated")
     return resp
 

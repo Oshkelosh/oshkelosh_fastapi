@@ -9,6 +9,7 @@ from fastapi import Request
 from fastapi.responses import RedirectResponse
 from jinja2 import ChoiceLoader, Environment, FileSystemLoader
 
+from app.addons.config_serialization import iter_secret_field_paths
 from app.services.addons import merge_config_updates, persist_addon_config
 
 _ADMIN_TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "admin" / "templates"
@@ -39,6 +40,25 @@ def redact_secret_values(config: dict[str, Any], *keys: str) -> dict[str, Any]:
     return redacted
 
 
+def redact_config_for_schema(schema_model: type, config: dict[str, Any]) -> dict[str, Any]:
+    """Mask all configured secret fields defined by a Pydantic config schema."""
+    redacted = dict(config)
+    for path in iter_secret_field_paths(schema_model):
+        current: Any = redacted
+        for key in path[:-1]:
+            if not isinstance(current, dict):
+                current = None
+                break
+            current = current.get(key)
+        if not isinstance(current, dict):
+            continue
+        leaf = path[-1]
+        value = current.get(leaf)
+        if isinstance(value, str) and value:
+            current[leaf] = value[:8] + "…" if len(value) > 8 else "***"
+    return redacted
+
+
 def render_addon_admin_page(
     jinja_env: Environment,
     request: Request,
@@ -54,7 +74,7 @@ def render_addon_admin_page(
     ``flash`` and ``flash_type`` are merged into ``_common_ctx`` output without
     duplicating keyword arguments (which breaks Jinja ``render()``).
     """
-    from app.admin.routes import _common_ctx
+    from app.admin.auth_shared import _common_ctx
 
     ctx = _common_ctx(request, title, flash=flash)
     ctx["flash_type"] = flash_type
@@ -64,7 +84,7 @@ def render_addon_admin_page(
 
 def require_addon_csrf(request: Request, csrf_token: str) -> None:
     """Validate CSRF token on addon admin POST handlers."""
-    from app.admin.routes import _require_csrf
+    from app.admin.auth_shared import _require_csrf
 
     _require_csrf(request, csrf_token)
 

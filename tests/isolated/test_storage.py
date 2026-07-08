@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+import app.config as config_module
 from app.config import Settings, reload_settings
 from app.storage.factory import create_storage, reset_storage
 from app.storage.local import LocalStorageBackend
@@ -30,6 +31,13 @@ def test_local_media_base_url_derived_from_public_app_url(monkeypatch: pytest.Mo
     cfg = Settings()
     assert cfg.local_media_base_url == "https://shop.example.com/media/files"
     reload_settings()
+
+
+def test_reload_settings_rebinds_module_singleton(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("ADMIN_PREFIX", "/control")
+    reloaded = reload_settings()
+    assert reloaded.admin_prefix == "/control"
+    assert config_module.settings.admin_prefix == "/control"
 
 
 @pytest.mark.asyncio

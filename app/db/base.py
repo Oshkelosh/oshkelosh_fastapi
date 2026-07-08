@@ -14,6 +14,7 @@ from sqlmodel import Field, SQLModel
 
 from app.config import settings
 from app.db.backends.d1_binding import D1BindingNotConfiguredError
+from app.db.sqlite_utils import configure_sqlite_foreign_keys
 
 # ------------------------------------------------------------------
 # Base model
@@ -67,6 +68,7 @@ def _create_sqlite_tables() -> None:
     db_path.parent.mkdir(parents=True, exist_ok=True)
 
     engine = create_engine(f"sqlite:///{db_path}")
+    configure_sqlite_foreign_keys(engine)
     try:
         SQLModel.metadata.create_all(engine)
         logger.info("SQLite tables created at {}", db_path)

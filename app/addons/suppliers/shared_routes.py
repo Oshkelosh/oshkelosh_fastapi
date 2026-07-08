@@ -15,7 +15,8 @@ from app.addons.admin_helpers import (
     render_addon_admin_page,
     require_addon_csrf,
 )
-from app.admin.routes import _require_csrf, require_admin_session
+from app.admin.auth_shared import _require_csrf, require_admin_session
+from app.core.dependencies import get_admin_user
 from app.services.supplier_catalog_sync import SupplierCatalogSyncOptions, sync_supplier_catalog
 
 
@@ -123,7 +124,8 @@ def build_supplier_routers(
         return resp
 
     @api_router.get("/products")
-    async def list_products_route(db=Depends(require_admin_session)):
+    async def list_products_route(current_user=Depends(get_admin_user)):
+        del current_user
         from app.addons.registry import addon_registry
 
         addon = addon_registry.get(addon_id)

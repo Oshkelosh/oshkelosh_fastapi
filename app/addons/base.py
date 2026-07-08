@@ -12,6 +12,8 @@ from typing import List, Type
 from fastapi import APIRouter
 from pydantic import BaseModel
 
+from app.config import settings
+
 
 @dataclass(frozen=True)
 class AdminNavItem:
@@ -128,5 +130,5 @@ class BaseAddon(ABC):
     def _configure_url(self) -> str:
         """Admin URL for configuring this addon."""
         if self.get_admin_routes():
-            return f"/admin{self.admin_mount_prefix()}"
-        return f"/admin/addons/{self.addon_id}/configure"
+            return f"{settings.admin_prefix}{self.admin_mount_prefix()}"
+        return f"{settings.admin_prefix}/addons/{self.addon_id}/configure"

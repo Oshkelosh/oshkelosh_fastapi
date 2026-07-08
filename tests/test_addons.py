@@ -8,7 +8,9 @@ import pytest
 
 from app.addons.base import BaseAddon
 from app.admin.session import SESSION_COOKIE_NAME, decode_session, encode_session
+from app.services.addons import merge_addon_list
 from fastapi.responses import RedirectResponse
+from models.addon_config import AddonConfig
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _ADDON_TEMPLATES = _REPO_ROOT / "app" / "addons"
@@ -27,6 +29,43 @@ class TestBaseAddon:
         """BaseAddon should be abstract and not instantiable directly."""
         with pytest.raises(TypeError):
             BaseAddon()
+
+    def test_merge_addon_list_redacts_secret_fields(self, monkeypatch):
+        from pydantic import BaseModel, SecretStr
+
+        class _SecretConfig(BaseModel):
+            api_key: SecretStr
+            label: str = "visible"
+
+        class _DummyAddon:
+            addon_id = "dummy"
+            is_enabled = True
+
+            @classmethod
+            def config_schema(cls):
+                return _SecretConfig
+
+        addon = _DummyAddon()
+        monkeypatch.setattr(
+            "app.services.addons.addon_registry.list_addons",
+            lambda: [{"addon_id": "dummy", "addon_name": "Dummy", "is_enabled": True}],
+        )
+        monkeypatch.setattr("app.services.addons.addon_registry.get", lambda addon_id: addon)
+        monkeypatch.setattr(
+            "app.services.addons.addon_registry.get_config",
+            lambda addon_id: {"api_key": "supersecret", "label": "visible"},
+        )
+
+        row = AddonConfig(
+            addon_id="dummy",
+            addon_type="tool",
+            is_enabled=True,
+            config={"api_key": "supersecret", "label": "visible"},
+        )
+        merged = merge_addon_list({"dummy": row})
+
+        assert merged[0]["config"]["api_key"] != "supersecret"
+        assert merged[0]["config"]["label"] == "visible"
 
 
 class TestManualSupplierAddon:

@@ -17,6 +17,7 @@ Full developer guides live under **[`docs/`](docs/README.md)**:
 | Suppliers / fulfillment | [`app/addons/suppliers/README.md`](app/addons/suppliers/README.md) |
 | Email / notifications | [`app/addons/notifications/README.md`](app/addons/notifications/README.md) |
 | OpenAPI reference | [`docs/api/OPENAPI.md`](docs/api/OPENAPI.md) |
+| API/admin surfaces | [`app/api/README.md`](app/api/README.md) |
 | Security | [`docs/SECURITY.md`](docs/SECURITY.md) |
 
 **API contract:** Swagger at `/docs`, or export a snapshot:
@@ -163,7 +164,7 @@ uvicorn app.main:app --reload --port 8000
 
 The API is available at `http://localhost:8000/api/v1/health`.
 
-The admin panel is at `http://localhost:8000/admin`. 
+The admin panel is at `http://localhost:8000/admin` by default (`ADMIN_PREFIX` can change it).
 
 The SPA static files are served at `http://localhost:8000/`.
 
@@ -183,6 +184,20 @@ Then open the category tabs (Suppliers, Payments, **Notifications**, Frontends, 
 | Message templates | `/admin/notifications/messages` |
 
 Settings are stored in the database (`addon_configs`), not in `.env`.
+
+### Scheduled maintenance
+
+Startup performs a one-time stale pending-order cleanup, but production should also call the admin JSON maintenance endpoints on a schedule:
+
+```bash
+curl -X POST \
+  -H "Authorization: Bearer <admin-jwt>" \
+  http://localhost:8000/api/v1/admin/jobs/pending-orders
+
+curl -X POST \
+  -H "Authorization: Bearer <admin-jwt>" \
+  http://localhost:8000/api/v1/admin/jobs/abandoned-cart
+```
 
 ### 6. Open API docs
 

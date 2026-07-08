@@ -88,7 +88,6 @@ class User(ModelBase, table=True):
     )
     orders: List["Order"] = Relationship(
         back_populates="user",
-        cascade_delete=True,
     )
 
     @property

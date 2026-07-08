@@ -14,6 +14,7 @@ Developer documentation for the Oshkelosh modular e-commerce backend.
 | Send transactional email | [app/addons/notifications/README.md](../app/addons/notifications/README.md) |
 | Add analytics, A/B testing, or other shop tools | [app/addons/tools/README.md](../app/addons/tools/README.md) |
 | Explore HTTP endpoints and schemas | [docs/api/OPENAPI.md](api/OPENAPI.md) |
+| Understand API/admin surfaces | [app/api/README.md](../app/api/README.md) |
 | Review security assumptions | [SECURITY.md](SECURITY.md) |
 | Understand database backends | [DATABASE.md](DATABASE.md) |
 | Run the project locally | [README.md](../README.md) (repository root) |
@@ -43,6 +44,17 @@ Export a copy to the repo:
 python scripts/export_openapi.py
 # writes docs/api/openapi.json
 ```
+
+## Maintenance entrypoints
+
+Recurring maintenance is not fully in-process. The app does two things today:
+
+- Startup runs stale pending-order cleanup once as defense-in-depth.
+- Automation should call admin JSON maintenance endpoints on a schedule:
+  - `POST /api/v1/admin/jobs/abandoned-cart`
+  - `POST /api/v1/admin/jobs/pending-orders`
+
+See [app/api/README.md](../app/api/README.md) and [DATABASE.md](DATABASE.md) for the operational expectations.
 
 ## Repository layout (plugins)
 

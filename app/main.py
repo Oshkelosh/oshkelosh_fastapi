@@ -93,10 +93,14 @@ async def lifespan(app: FastAPI):
     from app.addons import addon_registry
     from app.db.connection import session_scope
     from app.services.bootstrap import has_admin_user
+    from app.services.pending_order_cleanup import process_stale_pending_orders
 
     async with session_scope() as session:
         app.state.needs_setup = not await has_admin_user(session)
         await addon_registry.startup(session)
+        cleanup_result = await process_stale_pending_orders(session)
+        if cleanup_result.scanned:
+            logger.info(cleanup_result.summary_message())
 
     from app.services.addons import get_frontend_addon
 

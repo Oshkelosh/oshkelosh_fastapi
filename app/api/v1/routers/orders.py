@@ -19,6 +19,7 @@ from app.services.commerce import (
     ensure_product_purchasable,
     load_user_cart,
     load_variants_for_cart_items,
+    release_order_inventory,
     reserve_order_inventory,
     serialize_order,
     validate_status_transition,
@@ -44,6 +45,20 @@ router = APIRouter(prefix="/orders", tags=["orders"])
 logger = logging.getLogger(__name__)
 
 
+async def _discard_duplicate_order(
+    session,
+    *,
+    order: Order,
+    order_items: list[OrderItem],
+) -> None:
+    """Undo local side effects when an idempotency race loses."""
+    await release_order_inventory(session, order_items)
+    for item in order_items:
+        await session.delete(item)
+    await session.delete(order)
+    await session.flush()
+
+
 @router.post(
     "",
     response_model=OrderRead,
@@ -51,7 +66,8 @@ logger = logging.getLogger(__name__)
     summary="Create order from cart",
     description=(
         "Create a new order from the current user's cart. "
-        "Inventory is reserved immediately; stale pending orders are auto-cancelled."
+        "Inventory is reserved immediately; stale pending orders can be cleaned up "
+        "by background maintenance jobs."
     ),
 )
 async def create_order(
@@ -152,6 +168,7 @@ async def create_order(
             order_id=order.id,
         )
         if dup is not None:
+            await _discard_duplicate_order(session, order=order, order_items=order_items)
             response.status_code = status.HTTP_200_OK
             return await serialize_order(session, dup)
 
@@ -286,7 +303,7 @@ async def get_order(
     "/{order_id}/cancel",
     response_model=OrderRead,
     summary="Cancel order",
-    description="Cancel an order if its status allows cancellation (pending, paid, shipped).",
+    description="Cancel a pending order owned by the current user.",
 )
 async def cancel_order(
     order_id: int,
@@ -298,6 +315,9 @@ async def cancel_order(
     order = await session.get(Order, order_id)
     if order is None or order.user_id != user_id:
         raise NotFound(resource_name="Order", resource_id=order_id)
+
+    if order.status != "pending":
+        raise ValidationError(message="Only pending orders can be cancelled by customers")
 
     validate_status_transition(order.status, "cancelled")
 

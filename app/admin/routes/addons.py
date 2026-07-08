@@ -28,13 +28,13 @@ router = APIRouter()
 _ADDON_CATEGORY_PAGES: dict[str, dict[str, str]] = {
     "supplier": {
         "nav_section": "suppliers",
-        "list_path": "/admin/suppliers",
+        "list_path": f"{settings.admin_prefix}/suppliers",
         "title": "Suppliers",
         "description": "Manage fulfillment and inventory supplier integrations.",
     },
     "payment": {
         "nav_section": "payments",
-        "list_path": "/admin/payments",
+        "list_path": f"{settings.admin_prefix}/payments",
         "title": "Payments",
         "description": (
             "Manage payment processors for checkout. Only one processor can be enabled at a time."
@@ -42,19 +42,19 @@ _ADDON_CATEGORY_PAGES: dict[str, dict[str, str]] = {
     },
     "frontend": {
         "nav_section": "frontends",
-        "list_path": "/admin/frontends",
+        "list_path": f"{settings.admin_prefix}/frontends",
         "title": "Frontends",
         "description": "Manage storefront themes and SPA frontends.",
     },
     "tool": {
         "nav_section": "tools",
-        "list_path": "/admin/tools",
+        "list_path": f"{settings.admin_prefix}/tools",
         "title": "Tools",
         "description": "Advanced shop utilities: analytics, A/B testing, and other optional integrations.",
     },
     "notification": {
         "nav_section": "notifications",
-        "list_path": "/admin/notifications",
+        "list_path": f"{settings.admin_prefix}/notifications",
         "title": "Notifications",
         "description": (
             "Manage email, SMS, and push notification providers. "
@@ -71,7 +71,7 @@ def _addon_nav_section(category: str) -> str | None:
 
 def _addon_list_path(category: str) -> str:
     meta = _ADDON_CATEGORY_PAGES.get(category)
-    return meta["list_path"] if meta else "/admin/suppliers"
+    return meta["list_path"] if meta else f"{settings.admin_prefix}/suppliers"
 
 
 async def _admin_addon_category_list(
@@ -190,7 +190,9 @@ async def admin_suppliers_sync_all(
     try:
         existing = await get_active_supplier_sync_job(db)
         if existing is not None:
-            resp = RedirectResponse(url=f"/admin/jobs/{existing.id}", status_code=303)
+            resp = RedirectResponse(
+                url=f"{settings.admin_prefix}/jobs/{existing.id}", status_code=303
+            )
             set_flash_cookie(resp, "A supplier sync job is already running")
             return resp
 
@@ -205,7 +207,9 @@ async def admin_suppliers_sync_all(
             ),
         )
         await db.commit()
-        resp = RedirectResponse(url=f"/admin/jobs/{job.id}", status_code=303)
+        resp = RedirectResponse(
+            url=f"{settings.admin_prefix}/jobs/{job.id}", status_code=303
+        )
         set_flash_cookie(resp, "Supplier catalog sync started")
         return resp
     except Exception as exc:
@@ -285,7 +289,9 @@ async def admin_notification_messages_list(request: Request, db=Depends(require_
             channels[channel] = {
                 "subject": subject,
                 "enabled": enabled,
-                "edit_url": f"/admin/notifications/messages/{event.key}/{channel}",
+                "edit_url": (
+                    f"{settings.admin_prefix}/notifications/messages/{event.key}/{channel}"
+                ),
             }
         rows.append(
             {
@@ -352,8 +358,8 @@ async def admin_notification_message_save(
     if event is None or channel not in event.channels:
         return _render_error(request, "Unknown notification event or channel", status_code=404)
 
-    list_url = "/admin/notifications/messages"
-    edit_url = f"/admin/notifications/messages/{event_key}/{channel}"
+    list_url = f"{settings.admin_prefix}/notifications/messages"
+    edit_url = f"{settings.admin_prefix}/notifications/messages/{event_key}/{channel}"
     resource_id = f"{event_key}/{channel}"
     actor_user_id, ip_address = admin_request_meta(request)
 
@@ -419,7 +425,7 @@ async def admin_tools_list(request: Request, db=Depends(require_admin_session)):
 @router.get("/addons")
 async def admin_addons_list(request: Request, db=Depends(require_admin_session)):
     """Legacy URL — redirect to suppliers list."""
-    return RedirectResponse(url="/admin/suppliers", status_code=302)
+    return RedirectResponse(url=f"{settings.admin_prefix}/suppliers", status_code=302)
 
 
 def _addon_install_success_message(result) -> str:
@@ -436,7 +442,7 @@ def _addon_install_success_message(result) -> str:
 
 
 def _addon_install_error_redirect(request: Request, message: str) -> RedirectResponse:
-    resp = RedirectResponse(url="/admin/dashboard", status_code=302)
+    resp = RedirectResponse(url=f"{settings.admin_prefix}/dashboard", status_code=302)
     set_flash_cookie(resp, message)
     return resp
 
@@ -663,7 +669,11 @@ async def admin_addon_save_config(
         )
         await db.commit()
 
-        list_url = _addon_list_path(addon.addon_category) if addon else "/admin/suppliers"
+        list_url = (
+            _addon_list_path(addon.addon_category)
+            if addon
+            else f"{settings.admin_prefix}/suppliers"
+        )
         resp = RedirectResponse(url=list_url, status_code=302)
         set_flash_cookie(
             resp,

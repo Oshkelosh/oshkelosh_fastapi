@@ -50,7 +50,7 @@
         {% endif %}
       </td>
       <td>
-        <a href="/admin/orders/{{ order.id }}" class="btn btn--secondary btn--sm">View</a>
+        <a href="{{ admin_prefix }}/orders/{{ order.id }}" class="btn btn--secondary btn--sm">View</a>
       </td>
     </tr>
     {% endfor %}
@@ -59,11 +59,11 @@
 {% if total_pages > 1 %}
 <nav style="margin-top:16px;display:flex;gap:8px;align-items:center;">
   {% if page > 1 %}
-  <a href="/admin/orders?page={{ page - 1 }}{% if status_filter %}&status_filter={{ status_filter }}{% endif %}" class="btn btn--secondary btn--sm">Previous</a>
+  <a href="{{ admin_prefix }}/orders?page={{ page - 1 }}{% if status_filter %}&status_filter={{ status_filter }}{% endif %}" class="btn btn--secondary btn--sm">Previous</a>
   {% endif %}
   <span style="color:var(--clr-text-muted);">Page {{ page }} of {{ total_pages }} ({{ total }} orders)</span>
   {% if page < total_pages %}
-  <a href="/admin/orders?page={{ page + 1 }}{% if status_filter %}&status_filter={{ status_filter }}{% endif %}" class="btn btn--secondary btn--sm">Next</a>
+  <a href="{{ admin_prefix }}/orders?page={{ page + 1 }}{% if status_filter %}&status_filter={{ status_filter }}{% endif %}" class="btn btn--secondary btn--sm">Next</a>
   {% endif %}
 </nav>
 {% endif %}

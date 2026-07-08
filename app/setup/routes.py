@@ -43,6 +43,7 @@ def _render_setup(error: str = "", csrf_token: str | None = None) -> HTMLRespons
         content=jinja_env.get_template("setup.html").render(
             title="Initial Setup",
             app_name=settings.app_name,
+            admin_prefix=settings.admin_prefix,
             error=error,
             csrf_token=token,
         ),

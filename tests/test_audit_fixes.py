@@ -245,6 +245,88 @@ class TestAdminOrderStatus:
         )
         assert response.status_code == 403
 
+    async def test_admin_cancels_paid_order_flags_refund_review(
+        self, client: AsyncClient, test_user, test_product, test_variant, db_session
+    ):
+        order = Order(
+            user_id=test_user.id,
+            status="paid",
+            total_cents=test_product.price_cents,
+            tax_cents=0,
+            shipping_cents=0,
+            currency="usd",
+        )
+        db_session.add(order)
+        await db_session.flush()
+        db_session.add(
+            OrderItem(
+                order_id=order.id,
+                product_id=test_product.id,
+                variant_id=test_variant.id,
+                product_name=test_product.name,
+                product_sku=test_variant.sku or "SKU",
+                quantity=1,
+                unit_price_cents=test_variant.price_cents,
+                total_price_cents=test_variant.price_cents,
+            )
+        )
+        test_variant.inventory_quantity -= 1
+        await db_session.commit()
+
+        cookies, csrf = _admin_session(test_user.id)
+        response = await client.post(
+            f"/admin/orders/{order.id}/status",
+            cookies=cookies,
+            data={"status": "cancelled", "csrf_token": csrf},
+            follow_redirects=False,
+        )
+        assert response.status_code == 302
+
+        await db_session.refresh(order)
+        await db_session.refresh(test_variant)
+        assert order.status == "cancelled"
+        assert "Refund review required" in (order.notes or "")
+        assert test_variant.inventory_quantity == 100
+
+    async def test_admin_cannot_cancel_shipped_order(
+        self, client: AsyncClient, test_user, test_product, test_variant, db_session
+    ):
+        order = Order(
+            user_id=test_user.id,
+            status="shipped",
+            total_cents=test_product.price_cents,
+            tax_cents=0,
+            shipping_cents=0,
+            currency="usd",
+        )
+        db_session.add(order)
+        await db_session.flush()
+        db_session.add(
+            OrderItem(
+                order_id=order.id,
+                product_id=test_product.id,
+                variant_id=test_variant.id,
+                product_name=test_product.name,
+                product_sku=test_variant.sku or "SKU",
+                quantity=1,
+                unit_price_cents=test_variant.price_cents,
+                total_price_cents=test_variant.price_cents,
+            )
+        )
+        await db_session.commit()
+
+        cookies, csrf = _admin_session(test_user.id)
+        response = await client.post(
+            f"/admin/orders/{order.id}/status",
+            cookies=cookies,
+            data={"status": "cancelled", "csrf_token": csrf},
+        )
+        assert response.status_code == 200
+        assert "Cannot cancel shipped or delivered orders" in response.text
+
+        await db_session.refresh(order)
+        assert order.status == "shipped"
+
 
 class TestAdminStaticSecurity:
     async def test_blocks_path_traversal(self, client: AsyncClient):

@@ -87,6 +87,14 @@ class Settings(BaseSettings):
             return [origin.strip() for origin in value.split(",") if origin.strip()]
         return list(value)
 
+    @field_validator("trusted_proxy_ips", "trusted_proxy_headers", mode="before")
+    @classmethod
+    def parse_proxy_lists(cls, value: str | List[str]) -> List[str]:
+        """Parse comma-separated proxy config lists."""
+        if isinstance(value, str):
+            return [item.strip() for item in value.split(",") if item.strip()]
+        return list(value)
+
     # ------------------------------------------------------------------
     # Cloudflare D1 (d1_http / d1_binding)
     # ------------------------------------------------------------------
@@ -206,6 +214,14 @@ class Settings(BaseSettings):
     rate_limit_admin_login: str = Field(
         default="5/minute",
         description="slowapi limit string for POST /admin/login",
+    )
+    trusted_proxy_ips: Annotated[List[str], NoDecode] = Field(
+        default_factory=list,
+        description="Comma-separated proxy IP allowlist for trusting forwarded client IP headers",
+    )
+    trusted_proxy_headers: Annotated[List[str], NoDecode] = Field(
+        default_factory=lambda: ["x-forwarded-for", "x-real-ip"],
+        description="Comma-separated header names checked for forwarded client IPs",
     )
     admin_cookie_samesite: Literal["lax", "strict"] = Field(
         default="lax",
@@ -448,9 +464,10 @@ def get_settings() -> Settings:
 
 def reload_settings() -> Settings:
     """Clear cached settings (useful in tests)."""
-    global _settings
+    global _settings, settings
     _settings = None
-    return get_settings()
+    settings = get_settings()
+    return settings
 
 
 settings = get_settings()

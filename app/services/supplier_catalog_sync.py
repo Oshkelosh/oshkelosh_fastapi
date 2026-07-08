@@ -18,6 +18,7 @@ from app.services.audit import log_change
 from app.services.product_defaults import (
     apply_product_creation_defaults,
     assign_product_category_from_type,
+    refresh_sync_marker_only,
 )
 from app.services.product_images import import_images_from_urls
 from app.services.product_variants import (
@@ -244,7 +245,6 @@ async def _upsert_variant(
 
     existing.title = catalog_variant.title
     existing.price_cents = catalog_variant.price_cents
-    existing.inventory_quantity = catalog_variant.inventory_quantity
     existing.attributes = dict(catalog_variant.attributes)
     existing.supplier_product_id = catalog_variant.supplier_product_id
     existing.supplier_variant_id = catalog_variant.supplier_variant_id or None
@@ -290,6 +290,10 @@ async def _upsert_catalog_product(
             tags=[],
             created_by=actor_user_id,
         )
+        product.tags = refresh_sync_marker_only(
+            product.tags,
+            catalog_product.external_product_key,
+        )
         session.add(product)
         await session.flush()
         await apply_product_creation_defaults(session, product, store_name=store_name)
@@ -298,7 +302,10 @@ async def _upsert_catalog_product(
     else:
         product.name = catalog_product.name
         product.description = catalog_product.description
-        product.options = dict(catalog_product.options)
+        product.tags = refresh_sync_marker_only(
+            product.tags,
+            catalog_product.external_product_key,
+        )
         product.updated_by = actor_user_id
         if product.status == "archived":
             product.status = options.import_status

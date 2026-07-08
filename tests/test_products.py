@@ -2,6 +2,7 @@
 
 import pytest
 from httpx import AsyncClient
+from sqlmodel import select
 
 from models.category import Category
 from models.product import Product
@@ -156,6 +157,35 @@ class TestProductAdminCRUD:
         assert data["name"] == "New Product"
         assert data["price_cents"] == 2999
 
+    async def test_create_product_generates_default_variant(
+        self, client: AsyncClient, test_user, test_category, db_session
+    ):
+        login = await client.post("/api/v1/auth/login", json={
+            "email": test_user.email,
+            "password": "SecurePass123!",
+        })
+        token = login.json()["access_token"]
+
+        response = await client.post(
+            "/api/v1/admin/products",
+            json={
+                "name": "Variant Product",
+                "description": "A new product",
+                "price_cents": 3499,
+                "sku": "VAR-001",
+                "inventory_quantity": 25,
+                "status": "draft",
+                "category_id": test_category.id,
+            },
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert response.status_code in (200, 201)
+
+        result = await db_session.execute(
+            select(ProductVariant).where(ProductVariant.product_id == response.json()["id"])
+        )
+        assert len(result.scalars().all()) == 1
+
     async def test_update_product(self, client: AsyncClient, test_product, test_user):
         """Test updating a product."""
         from passlib.context import CryptContext
@@ -188,6 +218,49 @@ class TestProductAdminCRUD:
             headers={"Authorization": f"Bearer {token}"},
         )
         assert response.status_code == 204
+
+    async def test_public_admin_delete_blocks_products_on_existing_orders(
+        self, client: AsyncClient, test_product, test_variant, test_user, db_session
+    ):
+        from models.order import Order
+        from models.order_item import OrderItem
+
+        order = Order(
+            user_id=test_user.id,
+            status="paid",
+            total_cents=test_product.price_cents,
+            tax_cents=0,
+            shipping_cents=0,
+            currency="usd",
+        )
+        db_session.add(order)
+        await db_session.flush()
+        db_session.add(
+            OrderItem(
+                order_id=order.id,
+                product_id=test_product.id,
+                variant_id=test_variant.id,
+                product_name=test_product.name,
+                product_sku=test_variant.sku or "SKU",
+                quantity=1,
+                unit_price_cents=test_variant.price_cents,
+                total_price_cents=test_variant.price_cents,
+            )
+        )
+        await db_session.commit()
+
+        login = await client.post("/api/v1/auth/login", json={
+            "email": test_user.email,
+            "password": "SecurePass123!",
+        })
+        token = login.json()["access_token"]
+
+        response = await client.delete(
+            f"/api/v1/products/{test_product.id}",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert response.status_code == 422
+        assert "existing orders" in response.json()["message"].lower()
 
     async def test_admin_product_requires_auth(self, client: AsyncClient):
         """Test that admin product endpoints require authentication."""

@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Admin Login — Oshkelosh</title>
-    <link rel="stylesheet" href="/admin/static/admin.css">
+    <link rel="stylesheet" href="{{ admin_prefix }}/static/admin.css">
 </head>
 <body class="page-login">
     <div class="login-card">
@@ -23,7 +23,7 @@
         </div>
         {% endif %}
 
-        <form method="POST" action="/admin/login" class="login-form">
+        <form method="POST" action="{{ admin_prefix }}/login" class="login-form">
             <div class="form-group">
                 <label for="email" class="form-group__label">Email</label>
                 <input
@@ -47,7 +47,8 @@
                     required
                 />
             </div>
-            <input type="hidden" name="redirect_to" value="/admin/dashboard" />
+            <input type="hidden" name="redirect_to" value="{{ admin_prefix }}/dashboard" />
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
             <button type="submit" class="btn btn--primary btn--block">Sign in</button>
         </form>
 

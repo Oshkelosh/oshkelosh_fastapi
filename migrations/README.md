@@ -17,10 +17,10 @@ Files are sorted **lexicographically by filename**. Use a zero-padded numeric pr
 
 | Concern | Mechanism |
 |---------|-----------|
-| Application tables (`users`, `orders`, `products`, `product_variants`, …) | SQLModel `create_all` at startup ([`app/db/base.py`](../app/db/base.py)) |
-| Indexes, partial unique constraints, supplemental tables | `migrations/d1/*.sql` |
+| Application tables (`users`, `orders`, `products`, `product_variants`, …) | SQLModel bootstrap / `create_all` on fresh installs ([`app/db/base.py`](../app/db/base.py)) |
+| Indexes, partial unique constraints, supplemental tables | `migrations/d1/*.sql`, applied at startup and by bootstrap scripts |
 
-There is no Alembic-style model diff runner. Changing a SQLModel field updates `create_all` on fresh installs only; existing databases need a deliberate SQL migration if you cannot recreate them.
+There is no Alembic-style model diff runner. Changing a SQLModel field updates `create_all` on fresh installs only; existing databases still need a deliberate SQL migration if you cannot recreate them.
 
 Write migration SQL as **idempotent**: `CREATE TABLE IF NOT EXISTS`, `CREATE INDEX IF NOT EXISTS`, `INSERT OR IGNORE`. The runner skips duplicate-column errors on SQLite.
 

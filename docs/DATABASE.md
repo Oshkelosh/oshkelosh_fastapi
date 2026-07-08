@@ -10,11 +10,20 @@ Oshkelosh supports three database backends, selected via `DATABASE_BACKEND` or t
 
 ## Schema on fresh install
 
-There is **no Alembic-style migration runner** for application models. New environments get tables from SQLModel `create_all` during bootstrap ([`app/services/bootstrap.py`](../app/services/bootstrap.py)).
+There is **no Alembic-style model diff runner**. Fresh environments still get application tables from SQLModel bootstrap, but startup also applies tracked SQL files from [`migrations/d1/`](../migrations/d1/) for supplemental indexes, constraints, and bootstrap-only DDL.
 
-Optional SQL files under [`migrations/d1/`](../migrations/d1/) are supplemental (indexes, idempotency DDL) for future D1/wrangler deploys. They are tracked in the `schema_migrations` table when applied manually — that table records **which SQL files ran**, not automatic ORM model sync.
+The `schema_migrations` table records which migration files ran. Re-running startup is safe: already-applied SQL files are skipped.
 
 Do not plan `ALTER TABLE` backfills against production data in this project phase; treat schema changes as bootstrap-only until a production database exists.
+
+## Operations and recurring maintenance
+
+Two cleanup paths matter operationally:
+
+- **Abandoned cart reminders** via `POST /api/v1/admin/jobs/abandoned-cart`
+- **Pending order cleanup** via `POST /api/v1/admin/jobs/pending-orders`
+
+The FastAPI lifespan also runs pending-order cleanup once at startup, but that is only defense-in-depth. Production deployments should invoke the admin JSON maintenance endpoints from cron, a scheduler, or an external worker on a recurring cadence.
 
 ## ORM usage conventions
 
@@ -49,6 +58,7 @@ Listing endpoints expose denormalized `products.price_cents`, `inventory_quantit
 ## SQLite specifics
 
 - Default local backend; file created automatically when the parent directory exists.
+- Foreign-key enforcement is enabled explicitly (`PRAGMA foreign_keys=ON`) for app and test SQLite engines so `SET NULL` / cascade behavior matches production expectations.
 - Inventory updates use `sqlalchemy.text()` when `execute_raw` is not available on the session.
 
 ## D1 HTTP specifics
@@ -58,6 +68,8 @@ Listing endpoints expose denormalized `products.price_cents`, `inventory_quantit
 - Queues writes until `flush()`; `flush()` sends a **batch** via `D1Connection.batch_query()`.
 - Call `mark_dirty(instance)` (or `mark_instance_dirty`) after in-place mutations so the session tracks changes.
 - `rollback()` clears the write queue only; remote D1 state is not rolled back transactionally.
+
+Supplemental constraints and indexes added by `migrations/d1/*.sql` remain important here, especially idempotency and webhook uniqueness indexes that SQLModel does not fully express for the D1 HTTP emitter.
 
 ## D1 binding specifics
 

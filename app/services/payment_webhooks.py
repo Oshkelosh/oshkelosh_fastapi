@@ -7,7 +7,7 @@ from typing import Any, Optional
 from sqlalchemy.exc import IntegrityError
 
 from app.addons.payments.base import PaymentAddon
-from app.services.payments import complete_order_payment
+from app.services.payments import complete_order_payment, record_late_cancelled_payment
 from models.order import Order
 from models.processed_webhook_event import ProcessedWebhookEvent
 
@@ -23,6 +23,9 @@ async def process_payment_webhook(
 ) -> dict[str, Any]:
     """Idempotent webhook handling: parse via addon, apply core side effects."""
     provider_id = provider or addon.addon_id
+    outcome = await addon.parse_webhook(payload, signature)
+    if not outcome.handled:
+        return {"handled": False, "error": outcome.error or "Webhook not handled"}
 
     record = ProcessedWebhookEvent(
         event_id=event_id,
@@ -35,13 +38,6 @@ async def process_payment_webhook(
             await session.flush()
     except IntegrityError:
         return {"handled": True, "duplicate": True}
-
-    outcome = await addon.parse_webhook(payload, signature)
-    if not outcome.handled:
-        record.event_type = "failed"
-        if hasattr(session, "mark_dirty"):
-            session.mark_dirty(record)
-        return {"handled": False, "error": outcome.error or "Webhook not handled"}
 
     record.event_type = outcome.event_type or "processed"
     if hasattr(session, "mark_dirty"):
@@ -60,14 +56,14 @@ async def process_payment_webhook(
                     payment_charge_id=outcome.payment_charge_id,
                 )
             elif order.status == "cancelled":
-                note = (
-                    f"Late payment webhook from {provider_id} for cancelled order "
-                    f"(event_id={event_id})"
+                await record_late_cancelled_payment(
+                    session,
+                    order,
+                    processor_id=provider_id,
+                    event_id=event_id,
+                    payment_id=outcome.payment_id,
+                    payment_charge_id=outcome.payment_charge_id,
                 )
-                existing = order.notes or ""
-                order.notes = f"{existing}\n{note}".strip() if existing else note
-                if hasattr(session, "mark_dirty"):
-                    session.mark_dirty(order)
 
     return {
         "handled": True,

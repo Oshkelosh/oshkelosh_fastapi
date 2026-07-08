@@ -8,10 +8,13 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 from httpx import AsyncClient
+from sqlalchemy import text
 
+from app.db.backends.d1_http_session import D1HTTPAsyncSession
 from app.core.security import hash_password, verify_password
 from app.services.payments import complete_order_payment
 from app.services.user_accounts import (
+    clear_email_verification,
     issue_email_verification,
     issue_password_reset,
     resolve_order_shipping_address,
@@ -67,6 +70,53 @@ class TestAdminUserCrud:
         )
         assert response.status_code == 201
         assert response.json()["email"] == "staff@example.com"
+
+    async def test_deleting_user_preserves_order_history(
+        self, db_session, test_user, test_product
+    ):
+        order = Order(
+            user_id=test_user.id,
+            status="pending",
+            total_cents=test_product.price_cents,
+            tax_cents=0,
+            shipping_cents=0,
+            currency="usd",
+        )
+        db_session.add(order)
+        await db_session.commit()
+
+        await db_session.delete(test_user)
+        await db_session.commit()
+
+        await db_session.refresh(order)
+        preserved = await db_session.get(Order, order.id)
+        assert preserved is not None
+        assert preserved.user_id is None
+
+    async def test_sqlite_foreign_keys_set_user_id_null_on_raw_delete(
+        self, db_session, test_user, test_product
+    ):
+        order = Order(
+            user_id=test_user.id,
+            status="pending",
+            total_cents=test_product.price_cents,
+            tax_cents=0,
+            shipping_cents=0,
+            currency="usd",
+        )
+        db_session.add(order)
+        await db_session.commit()
+
+        await db_session.execute(
+            text("DELETE FROM users WHERE id = :user_id"),
+            {"user_id": test_user.id},
+        )
+        await db_session.commit()
+
+        await db_session.refresh(order)
+        preserved = await db_session.get(Order, order.id)
+        assert preserved is not None
+        assert preserved.user_id is None
 
 
 class TestEmailVerification:
@@ -243,3 +293,21 @@ class TestUserAccountHelpers:
         issue_password_reset(user)
         assert user.password_reset_token
         assert user.password_reset_expires_at is not None
+
+    def test_d1_compile_update_preserves_null_field_clears(self):
+        user = User(
+            id=123,
+            email="clear@example.com",
+            password_hash="hash",
+            email_verification_token="token",
+            email_verification_expires_at=datetime.now(timezone.utc) + timedelta(hours=1),
+        )
+        clear_email_verification(user)
+
+        session = D1HTTPAsyncSession(object())  # type: ignore[arg-type]
+        sql, values = session._compile_update(user)
+
+        assert "email_verification_token = ?" in sql
+        assert "email_verification_expires_at = ?" in sql
+        assert values[-1] == 123
+        assert None in values[:-1]

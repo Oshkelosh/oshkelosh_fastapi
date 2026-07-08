@@ -7,11 +7,11 @@
 
 <p style="color:var(--clr-text-muted);margin-bottom:16px;">
   {{ event.description }}
-  <a href="/admin/notifications/messages">← Back to all messages</a>
+  <a href="{{ admin_prefix }}/notifications/messages">← Back to all messages</a>
 </p>
 
 <div style="display:grid;grid-template-columns:1fr 280px;gap:24px;align-items:start;">
-  <form method="POST" action="/admin/notifications/messages/{{ event.key }}/{{ channel }}" class="card">
+  <form method="POST" action="{{ admin_prefix }}/notifications/messages/{{ event.key }}/{{ channel }}" class="card">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <input type="hidden" name="action" value="save">
 
@@ -55,7 +55,7 @@
   </div>
 </div>
 
-<form method="POST" action="/admin/notifications/messages/{{ event.key }}/{{ channel }}"
+<form method="POST" action="{{ admin_prefix }}/notifications/messages/{{ event.key }}/{{ channel }}"
       style="margin-top:16px;"
       onsubmit="return confirm('Reset this template to the default copy?');">
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}">

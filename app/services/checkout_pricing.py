@@ -6,12 +6,13 @@ matching common payment-processor rounding. Amounts are never rounded up implici
 
 from __future__ import annotations
 
+from copy import copy
 import logging
 from dataclasses import dataclass, field
 from typing import Any
 
 from app.services.pricing.protocols import TaxQuote
-from app.services.commerce import cart_line_totals
+from app.services.commerce import build_cart_pricing_lines, cart_line_totals
 from app.services.pricing.shipping import SiteShippingQuoter
 from app.services.pricing.site import SiteTaxQuoter
 from app.services.pricing.tax_rules import compute_site_shipping_cents, compute_site_tax_cents
@@ -49,23 +50,16 @@ def _build_tax_line_items(
     products: dict[int, Product],
     variants: dict[int, ProductVariant],
 ) -> list[dict[str, Any]]:
-    lines: list[dict[str, Any]] = []
-    for item in cart_items:
-        product = products.get(item.product_id)
-        variant = variants.get(getattr(item, "variant_id", None))
-        if product is None or variant is None:
-            continue
-        quantity = getattr(item, "quantity", 1)
-        lines.append(
-            {
-                "product_id": product.id,
-                "product_name": product.name,
-                "quantity": quantity,
-                "unit_price_cents": variant.price_cents,
-                "total_price_cents": variant.price_cents * quantity,
-            }
-        )
-    return lines
+    return [
+        {
+            "product_id": line["product_id"],
+            "product_name": line["product_name"],
+            "quantity": line["quantity"],
+            "unit_price_cents": line["unit_price_cents"],
+            "total_price_cents": line["total_price_cents"],
+        }
+        for line in build_cart_pricing_lines(cart_items, products, variants)
+    ]
 
 
 def _cart_subtotal_cents(
@@ -186,12 +180,23 @@ async def reprice_pending_order(session: Any, order: Any, site: SiteSettings) ->
             if variant is not None:
                 variants[item.variant_id] = variant
 
+    priced_variants = {
+        variant_id: copy(variant)
+        for variant_id, variant in variants.items()
+    }
+    for item in items:
+        if item.variant_id is None:
+            continue
+        priced_variant = priced_variants.get(item.variant_id)
+        if priced_variant is not None:
+            priced_variant.price_cents = item.unit_price_cents
+
     charges = await quote_order_charges(
         items,
         products,
         order.shipping_address,
         site,
-        variants,
+        priced_variants,
     )
     subtotal_cents = sum(item.total_price_cents for item in items)
     order.tax_cents = charges.tax_cents

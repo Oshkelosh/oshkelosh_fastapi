@@ -5,7 +5,7 @@
 {% block content %}
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
   <h2 style="margin:0;">Order #{{ order.id }}</h2>
-  <a href="/admin/orders" class="btn btn--secondary">← Back to Orders</a>
+  <a href="{{ admin_prefix }}/orders" class="btn btn--secondary">← Back to Orders</a>
 </div>
 
 <div style="display:grid;grid-template-columns:2fr 1fr;gap:20px;">
@@ -61,7 +61,7 @@
       <h3 style="margin-top:0;">Status</h3>
       {% if order.user_id %}
       <p style="font-size:14px;margin:0 0 12px;">
-        Customer: <a href="/admin/users/{{ order.user_id }}">User #{{ order.user_id }}</a>
+        Customer: <a href="{{ admin_prefix }}/users/{{ order.user_id }}">User #{{ order.user_id }}</a>
       </p>
       {% endif %}
       <p>
@@ -79,7 +79,7 @@
       </p>
 
       {% if allowed_statuses %}
-      <form method="POST" action="/admin/orders/{{ order.id }}/status">
+      <form method="POST" action="{{ admin_prefix }}/orders/{{ order.id }}/status">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <label class="form-label">Update Status</label>
         <select name="status" class="form-select" style="margin-bottom:8px;" id="order-status-select">

@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 
 from app.admin import limits as L
+from app.config import settings
 from app.admin.routes._deps import (
     Depends,
     Form,
@@ -136,7 +137,12 @@ async def admin_order_update_status(
 
     _require_csrf(request, csrf_token)
 
-    from app.services.commerce import VALID_TRANSITIONS, apply_order_status_change, apply_order_tracking
+    from app.services.commerce import (
+        VALID_TRANSITIONS,
+        apply_order_status_change,
+        apply_order_tracking,
+        cancel_order_as_admin,
+    )
 
     if status not in VALID_TRANSITIONS:
         all_statuses = sorted(VALID_TRANSITIONS.keys())
@@ -172,7 +178,15 @@ async def admin_order_update_status(
             tracking_url=tracking_url or None,
             carrier=carrier or None,
         )
-    await apply_order_status_change(db, order, status)
+    if status == "cancelled":
+        from app.core.exceptions import ValidationError
+
+        try:
+            await cancel_order_as_admin(db, order)
+        except ValidationError as exc:
+            return _render_error(request, exc.message)
+    else:
+        await apply_order_status_change(db, order, status)
 
     from app.services.audit import admin_request_meta, log_change
 
@@ -189,7 +203,7 @@ async def admin_order_update_status(
     )
     await db.commit()
 
-    resp = RedirectResponse(url=f"/admin/orders/{order.id}", status_code=302)
+    resp = RedirectResponse(url=f"{settings.admin_prefix}/orders/{order.id}", status_code=302)
     set_flash_cookie(
         resp,
         f"Order #{order.id} status changed from '{old_status}' to '{status}'",

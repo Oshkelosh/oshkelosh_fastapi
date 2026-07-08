@@ -43,3 +43,25 @@ async def test_stale_pending_order_is_cancelled(db_session, test_product, monkey
     assert result.cancelled >= 1
     await db_session.refresh(order)
     assert order.status == "cancelled"
+
+
+@pytest.mark.asyncio
+async def test_stale_pending_order_without_items_is_cancelled(db_session, monkeypatch):
+    monkeypatch.setattr("app.services.pending_order_cleanup.settings.pending_order_expiry_hours", 24)
+
+    order = Order(
+        user_id=None,
+        status="pending",
+        total_cents=500,
+        tax_cents=0,
+        shipping_cents=0,
+        currency="usd",
+        created_at=datetime.now(timezone.utc) - timedelta(hours=48),
+    )
+    db_session.add(order)
+    await db_session.flush()
+
+    result = await process_stale_pending_orders(db_session)
+    assert result.cancelled == 1
+    await db_session.refresh(order)
+    assert order.status == "cancelled"

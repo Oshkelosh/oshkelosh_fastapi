@@ -226,8 +226,8 @@ class D1HTTPAsyncSession:
         pk_name = pk_cols[0].name
         data = obj.model_dump()
         pk_val = data[pk_name]
-        sets = [f"{k} = ?" for k in data if k != pk_name and data[k] is not None]
-        values = [data[k] for k in data if k != pk_name and data[k] is not None]
+        sets = [f"{k} = ?" for k in data if k != pk_name]
+        values = [data[k] for k in data if k != pk_name]
         values.append(pk_val)
         sql = f"UPDATE {table.name} SET {', '.join(sets)} WHERE {pk_name} = ?"
         return sql, values

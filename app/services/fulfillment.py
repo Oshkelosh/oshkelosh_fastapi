@@ -8,6 +8,7 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import Any
 
+from app.core.exceptions import ValidationError
 from app.services.addons import get_supplier_addon
 from app.services.suppliers import SupplierAssignment
 from models.product import Product
@@ -68,6 +69,7 @@ async def fulfill_order_with_suppliers(session: Any, order: Any, items: list) ->
     shipping_address = order.shipping_address or {}
     notes_parts: list[str] = []
     external_id = str(getattr(order, "id", "")) or None
+    failures: list[str] = []
 
     for key, group in grouped.items():
         assignment = group.assignment
@@ -78,6 +80,12 @@ async def fulfill_order_with_suppliers(session: Any, order: Any, items: list) ->
                 assignment.addon_id,
                 order.id,
             )
+            failure_note = f"Supplier addon '{assignment.addon_id}' is not enabled"
+            existing = order.notes or ""
+            order.notes = f"{existing}\n{failure_note}".strip() if existing else failure_note
+            if hasattr(session, "mark_dirty"):
+                session.mark_dirty(order)
+            failures.append(failure_note)
             continue
         try:
             result = await addon.create_order(
@@ -108,18 +116,25 @@ async def fulfill_order_with_suppliers(session: Any, order: Any, items: list) ->
                 order.notes = f"{existing}\n{failure_note}".strip() if existing else failure_note
                 if hasattr(session, "mark_dirty"):
                     session.mark_dirty(order)
+                failures.append(failure_note)
             config_updates = result.get("config_updates")
             if isinstance(config_updates, dict) and config_updates:
                 from app.services.addons import merge_config_updates, persist_addon_config
 
                 merged = merge_config_updates(assignment.addon_id, config_updates)
                 await persist_addon_config(session, assignment.addon_id, merged, addon.is_enabled)
-        except Exception:
+        except Exception as exc:
             logger.exception(
                 "Supplier %s fulfillment error for order %s",
                 key,
                 order.id,
             )
+            failure_note = f"Fulfillment error for {key}: {exc}"
+            existing = order.notes or ""
+            order.notes = f"{existing}\n{failure_note}".strip() if existing else failure_note
+            if hasattr(session, "mark_dirty"):
+                session.mark_dirty(order)
+            failures.append(failure_note)
 
     if notes_parts:
         existing = order.notes or ""
@@ -127,3 +142,6 @@ async def fulfill_order_with_suppliers(session: Any, order: Any, items: list) ->
         order.notes = f"{existing}\n{fulfillment_note}".strip() if existing else fulfillment_note
         if hasattr(session, "mark_dirty"):
             session.mark_dirty(order)
+
+    if failures:
+        raise ValidationError(message="; ".join(failures))

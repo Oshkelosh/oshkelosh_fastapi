@@ -51,10 +51,6 @@ async def process_stale_pending_orders(session: Any) -> PendingOrderCleanupResul
 
     for order in orders:
         try:
-            items = await load_order_items(session, order.id)
-            if not items:
-                result.skipped += 1
-                continue
             await apply_order_status_change(session, order, "cancelled")
             result.cancelled += 1
             logger.info("Auto-cancelled stale pending order %s", order.id)

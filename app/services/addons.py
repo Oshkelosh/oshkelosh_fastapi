@@ -243,11 +243,16 @@ async def persist_addon_config(
 
 def merge_addon_list(db_rows: dict[str, AddonConfig]) -> list[dict]:
     """Merge registry metadata with persisted DB state for admin listing."""
+    from app.addons.admin_helpers import redact_config_for_schema
+
     items: list[dict] = []
     for meta in addon_registry.list_addons():
         addon_id = meta["addon_id"]
+        addon = addon_registry.get(addon_id)
         stored = db_rows.get(addon_id)
         config = stored.config if stored else addon_registry.get_config(addon_id)
+        if addon is not None:
+            config = redact_config_for_schema(addon.config_schema(), config)
         items.append(
             {
                 **meta,

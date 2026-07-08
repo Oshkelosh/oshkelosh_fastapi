@@ -78,7 +78,12 @@ async def require_admin_session(
 ):
     """Verify the admin session cookie and return the request DB session."""
     if _needs_setup(request):
-        _redirect_to_setup()
+        from app.services.bootstrap import has_admin_user
+
+        if await has_admin_user(db):
+            request.app.state.needs_setup = False
+        else:
+            _redirect_to_setup()
 
     if not session_token:
         _redirect_to_login()
@@ -139,6 +144,7 @@ def _common_ctx(request: Request, title: str, flash: str | None = None) -> Dict[
         "user": user,
         "flash": flash,
         "flash_type": "info",
+        "admin_prefix": settings.admin_prefix,
         "settings": settings,
         "site_settings": site_settings,
         "store_name": store_name,

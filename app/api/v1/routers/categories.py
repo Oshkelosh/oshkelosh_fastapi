@@ -12,6 +12,11 @@ from sqlmodel import col, select
 from app.core.dependencies import CurrentUser, get_admin_user, get_current_user
 from app.core.exceptions import NotFound, ValidationError
 from app.db.connection import get_session, mark_instance_dirty
+from app.services.categories import (
+    ensure_category_slug_available,
+    require_category_by_slug,
+    validate_category_parent,
+)
 from models.category import Category
 from schemas.category import CategoryCreate, CategoryRead, CategoryUpdate
 
@@ -126,17 +131,8 @@ async def create_category(
 ) -> CategoryRead:
     """Create a new category."""
     # Check for duplicate slug
-    existing = await session.execute(
-        select(Category).where(col(Category.slug) == body.slug)
-    )
-    if existing.scalar_one_or_none() is not None:
-        raise ValidationError(message=f"Category with slug '{body.slug}' already exists")
-
-    # Validate parent exists
-    if body.parent_id is not None:
-        parent = await session.get(Category, body.parent_id)
-        if parent is None:
-            raise NotFound(resource_name="Category", resource_id=body.parent_id)
+    await ensure_category_slug_available(session, body.slug)
+    await validate_category_parent(session, 0, body.parent_id)
 
     category = Category(
         name=body.name,
@@ -173,30 +169,19 @@ async def update_category(
     session=Depends(get_session),
 ) -> CategoryRead:
     """Update an existing category."""
-    result = await session.execute(
-        select(Category).where(col(Category.slug) == category_slug)
-    )
-    category = result.scalar_one_or_none()
-    if category is None:
-        raise NotFound(resource_name="Category", resource_id=category_slug)
+    category = await require_category_by_slug(session, category_slug)
 
     update_data = body.model_dump(exclude_unset=True)
 
-    # Validate new slug uniqueness
     if "slug" in update_data and update_data["slug"] != category.slug:
-        existing = await session.execute(
-            select(Category).where(col(Category.slug) == update_data["slug"])
+        await ensure_category_slug_available(
+            session,
+            update_data["slug"],
+            exclude_id=category.id,
         )
-        if existing.scalar_one_or_none() is not None:
-            raise ValidationError(message=f"Category with slug '{update_data['slug']}' already exists")
 
-    # Validate parent exists
     if "parent_id" in update_data and update_data["parent_id"] is not None:
-        if update_data["parent_id"] == category.id:
-            raise ValidationError(message="A category cannot be its own parent")
-        parent = await session.get(Category, update_data["parent_id"])
-        if parent is None:
-            raise NotFound(resource_name="Category", resource_id=update_data["parent_id"])
+        await validate_category_parent(session, category.id, update_data["parent_id"])
 
     for key, value in update_data.items():
         setattr(category, key, value)
@@ -219,12 +204,7 @@ async def delete_category(
     session=Depends(get_session),
 ) -> dict:
     """Delete a category."""
-    result = await session.execute(
-        select(Category).where(col(Category.slug) == category_slug)
-    )
-    category = result.scalar_one_or_none()
-    if category is None:
-        raise NotFound(resource_name="Category", resource_id=category_slug)
+    category = await require_category_by_slug(session, category_slug)
 
     # Check if this category has children – cascade will handle deletion
     children_result = await session.execute(

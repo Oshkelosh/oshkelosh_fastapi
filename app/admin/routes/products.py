@@ -22,6 +22,7 @@ from app.admin.routes._deps import (
     require_admin_session,
     select,
     set_flash_cookie,
+    settings,
     status,
 )
 
@@ -187,7 +188,7 @@ async def admin_product_new(request: Request, db=Depends(require_admin_session))
         db,
         title="New Product",
         product=None,
-        action_url="/admin/products",
+        action_url=f"{settings.admin_prefix}/products",
         supplier_value=supplier_value,
         supplier_product_id=supplier_product_id,
         supplier_variant_id=supplier_variant_id,
@@ -249,7 +250,7 @@ async def admin_product_create(
             db,
             title="New Product",
             product=draft,
-            action_url="/admin/products",
+            action_url=f"{settings.admin_prefix}/products",
             supplier_value=supplier_value,
             supplier_product_id=supplier_product_id,
             supplier_variant_id=supplier_variant_id,
@@ -277,7 +278,7 @@ async def admin_product_create(
             db,
             title="New Product",
             product=draft,
-            action_url="/admin/products",
+            action_url=f"{settings.admin_prefix}/products",
             supplier_value=supplier_value,
             supplier_product_id=supplier_product_id,
             supplier_variant_id=supplier_variant_id,
@@ -319,7 +320,7 @@ async def admin_product_create(
                 status=status,
                 category_id=category_id,
             ),
-            action_url="/admin/products",
+            action_url=f"{settings.admin_prefix}/products",
             supplier_value=supplier_value,
             supplier_product_id=supplier_product_id,
             supplier_variant_id=supplier_variant_id,
@@ -346,7 +347,7 @@ async def admin_product_create(
                 status=status,
                 category_id=category_id,
             ),
-            action_url="/admin/products",
+            action_url=f"{settings.admin_prefix}/products",
             supplier_value=supplier_value,
             supplier_product_id=supplier_product_id,
             supplier_variant_id=supplier_variant_id,
@@ -421,7 +422,9 @@ async def admin_product_create(
     )
     await db.commit()
 
-    resp = RedirectResponse(url=f"/admin/products/{product.id}", status_code=302)
+    resp = RedirectResponse(
+        url=f"{settings.admin_prefix}/products/{product.id}", status_code=302
+    )
     set_flash_cookie(resp, f"Product '{product.name}' created — add images below")
     return resp
 
@@ -459,7 +462,7 @@ async def admin_product_edit(request: Request, product_id: int, db=Depends(requi
         db,
         title=f"Edit: {product.name}",
         product=product,
-        action_url=f"/admin/products/{product_id}",
+        action_url=f"{settings.admin_prefix}/products/{product_id}",
         supplier_value=supplier_value,
         supplier_product_id=supplier_product_id,
         supplier_variant_id=supplier_variant_id,
@@ -554,7 +557,7 @@ async def admin_product_update(
             db,
             title=f"Edit: {name}",
             product=product,
-            action_url=f"/admin/products/{product_id}",
+            action_url=f"{settings.admin_prefix}/products/{product_id}",
             supplier_value=supplier_value,
             supplier_product_id=supplier_product_id,
             supplier_variant_id=supplier_variant_id,
@@ -595,7 +598,7 @@ async def admin_product_update(
             db,
             title=f"Edit: {name}",
             product=product,
-            action_url=f"/admin/products/{product_id}",
+            action_url=f"{settings.admin_prefix}/products/{product_id}",
             supplier_value=supplier_value,
             supplier_product_id=supplier_product_id,
             supplier_variant_id=supplier_variant_id,
@@ -641,7 +644,7 @@ async def admin_product_update(
     )
     await db.commit()
 
-    resp = RedirectResponse(url="/admin/products", status_code=302)
+    resp = RedirectResponse(url=f"{settings.admin_prefix}/products", status_code=302)
     set_flash_cookie(resp, f"Product '{product.name}' updated")
     return resp
 
@@ -683,11 +686,15 @@ async def admin_product_image_upload(
         )
         await db.commit()
     except ValidationError as exc:
-        resp = RedirectResponse(url=f"/admin/products/{product_id}", status_code=302)
+        resp = RedirectResponse(
+            url=f"{settings.admin_prefix}/products/{product_id}", status_code=302
+        )
         set_flash_cookie(resp, exc.message)
         return resp
 
-    resp = RedirectResponse(url=f"/admin/products/{product_id}", status_code=302)
+    resp = RedirectResponse(
+        url=f"{settings.admin_prefix}/products/{product_id}", status_code=302
+    )
     set_flash_cookie(resp, "Image uploaded")
     return resp
 
@@ -718,7 +725,9 @@ async def admin_product_image_delete(
     await delete_product_image(db, image, storage=storage)
     await db.commit()
 
-    resp = RedirectResponse(url=f"/admin/products/{product_id}", status_code=302)
+    resp = RedirectResponse(
+        url=f"{settings.admin_prefix}/products/{product_id}", status_code=302
+    )
     set_flash_cookie(resp, "Image deleted")
     return resp
 
@@ -751,7 +760,7 @@ async def admin_product_delete(
     from app.services.product_slugs import product_has_order_items
 
     if await product_has_order_items(db, product_id):
-        resp = RedirectResponse(url="/admin/products", status_code=302)
+        resp = RedirectResponse(url=f"{settings.admin_prefix}/products", status_code=302)
         set_flash_cookie(
             resp,
             f"Cannot delete '{product.name}': it appears on existing orders",
@@ -776,7 +785,7 @@ async def admin_product_delete(
     )
     await db.commit()
 
-    resp = RedirectResponse(url="/admin/products", status_code=302)
+    resp = RedirectResponse(url=f"{settings.admin_prefix}/products", status_code=302)
     set_flash_cookie(resp, f"Product '{product_name}' deleted")
     return resp
 

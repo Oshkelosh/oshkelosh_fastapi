@@ -8,6 +8,16 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 from schemas.base import PaginatedResponse
 
 
+def _validate_password_strength(value: str) -> str:
+    if not any(c.isupper() for c in value):
+        raise ValueError("Password must contain at least one uppercase letter")
+    if not any(c.islower() for c in value):
+        raise ValueError("Password must contain at least one lowercase letter")
+    if not any(c.isdigit() for c in value):
+        raise ValueError("Password must contain at least one digit")
+    return value
+
+
 class UserBase(BaseModel):
     email: EmailStr
     full_name: Optional[str] = Field(default=None, max_length=255)
@@ -31,13 +41,7 @@ class _PasswordMixin(BaseModel):
     @field_validator("password")
     @classmethod
     def password_strength(cls, v: str) -> str:
-        if not any(c.isupper() for c in v):
-            raise ValueError("Password must contain at least one uppercase letter")
-        if not any(c.islower() for c in v):
-            raise ValueError("Password must contain at least one lowercase letter")
-        if not any(c.isdigit() for c in v):
-            raise ValueError("Password must contain at least one digit")
-        return v
+        return _validate_password_strength(v)
 
 
 class UserRegister(_PasswordMixin):
@@ -73,13 +77,7 @@ class UserProfileUpdate(BaseModel):
     def password_strength(cls, v: Optional[str]) -> Optional[str]:
         if v is None:
             return v
-        if not any(c.isupper() for c in v):
-            raise ValueError("Password must contain at least one uppercase letter")
-        if not any(c.islower() for c in v):
-            raise ValueError("Password must contain at least one lowercase letter")
-        if not any(c.isdigit() for c in v):
-            raise ValueError("Password must contain at least one digit")
-        return v
+        return _validate_password_strength(v)
 
 
 class UserUpdate(BaseModel):
@@ -96,13 +94,7 @@ class UserUpdate(BaseModel):
     def password_strength(cls, v: Optional[str]) -> Optional[str]:
         if v is None:
             return v
-        if not any(c.isupper() for c in v):
-            raise ValueError("Password must contain at least one uppercase letter")
-        if not any(c.islower() for c in v):
-            raise ValueError("Password must contain at least one lowercase letter")
-        if not any(c.isdigit() for c in v):
-            raise ValueError("Password must contain at least one digit")
-        return v
+        return _validate_password_strength(v)
 
 
 # ── Read ────────────────────────────────────────────────────────────

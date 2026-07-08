@@ -11,6 +11,7 @@ from sqlmodel import select
 from app.addons.suppliers.printful.catalog import normalize_printful_catalog_products
 from app.addons.suppliers.printify.catalog import normalize_printify_catalog_products
 from app.core.exceptions import ValidationError
+from app.services.product_defaults import product_is_sync_imported
 from app.services.supplier_catalog_sync import (
     SupplierCatalogSyncOptions,
     sync_supplier_catalog,
@@ -241,7 +242,69 @@ async def test_sync_updates_existing_product_by_external_key(db_session, test_us
     assert existing.price_cents == 2999
     assert existing.sku == "old-sku"
     assert existing.status == "published"
+    assert product_is_sync_imported(existing) is True
     assert variant.price_cents == 2999
+    assert variant.inventory_quantity == 5
+
+
+@pytest.mark.asyncio
+async def test_sync_preserves_existing_product_options(db_session, test_user):
+    existing = Product(
+        name="Old name",
+        price_cents=1000,
+        sku="old-sku",
+        inventory_quantity=5,
+        status="published",
+        supplier_external_product_key="printful:product:100",
+        options={"Material": "Cotton"},
+        tags=[],
+        created_by=test_user.id,
+    )
+    db_session.add(existing)
+    await db_session.flush()
+    variant = ProductVariant(
+        product_id=existing.id,
+        title="Old variant",
+        price_cents=1000,
+        inventory_quantity=5,
+        sku="old-sku",
+        status="active",
+        supplier_addon_id="printful",
+        supplier_product_id="4752058849",
+        supplier_external_key="printful:variant:4752058849",
+    )
+    db_session.add(variant)
+    await db_session.commit()
+
+    catalog = normalize_printful_catalog_products(
+        [
+            {
+                "id": "4752058849",
+                "sync_product_id": "100",
+                "sync_product_name": "Cool Tee",
+                "name": "Updated Tee / M",
+                "description": "Remote supplier description",
+                "retail_price": "29.99",
+                "sku": "TEE-M-NEW",
+                "synced": True,
+                "size": "M",
+                "product_type": "T-Shirt",
+            }
+        ]
+    )
+    mock_addon = _mock_addon(catalog)
+
+    with patch("app.services.supplier_catalog_sync.get_supplier_addon", return_value=mock_addon):
+        await sync_supplier_catalog(
+            db_session,
+            "printful",
+            SupplierCatalogSyncOptions(import_status="draft"),
+            actor_user_id=test_user.id,
+        )
+
+    await db_session.refresh(existing)
+    assert existing.description == "Remote supplier description"
+    assert existing.options == {"Material": "Cotton"}
 
 
 @pytest.mark.asyncio

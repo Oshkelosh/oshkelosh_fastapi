@@ -1,6 +1,9 @@
 """Checkout and commerce flow tests."""
 
+import pytest
 from httpx import AsyncClient
+
+from app.core.exceptions import ValidationError
 
 
 class TestCheckout:
@@ -99,7 +102,7 @@ class TestCheckout:
         await db_session.refresh(test_variant)
         assert test_variant.inventory_quantity == 100
 
-    async def test_cancel_paid_order_restores_inventory(
+    async def test_cancel_paid_order_is_rejected_for_customer(
         self, client: AsyncClient, test_user, test_product, test_variant, db_session
     ):
         from models.order import Order
@@ -134,10 +137,22 @@ class TestCheckout:
         )
         db_session.add(item)
         test_variant.inventory_quantity -= 3
-        await db_session.flush()
+        await db_session.commit()
+        await db_session.refresh(order)
+        await db_session.refresh(test_variant)
 
         cancel = await client.post(f"/api/v1/orders/{order.id}/cancel", headers=headers)
-        assert cancel.status_code == 200
+        assert cancel.status_code == 422
+        assert cancel.json()["message"] == "Only pending orders can be cancelled by customers"
 
         await db_session.refresh(test_variant)
-        assert test_variant.inventory_quantity == 100
+        assert test_variant.inventory_quantity == 97
+
+
+@pytest.mark.asyncio
+async def test_cart_line_totals_reject_missing_variant():
+    from app.services.commerce import cart_line_totals
+
+    item = type("CartItemLike", (), {"product_id": 1, "variant_id": 99, "quantity": 1})()
+    with pytest.raises(ValidationError, match="cannot be priced"):
+        cart_line_totals([item], {1: type("P", (), {"id": 1, "name": "Widget"})()}, {})

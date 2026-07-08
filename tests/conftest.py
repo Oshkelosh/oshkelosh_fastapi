@@ -12,10 +12,12 @@ from typing import AsyncGenerator
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlmodel import SQLModel
 
 from app.core.security import hash_password
+from app.db.sqlite_utils import configure_sqlite_foreign_keys
 from app.db.connection import get_session
 from app.main import app
 from models.category import Category
@@ -45,6 +47,7 @@ async def db_session():
         "sqlite+aiosqlite:///:memory:",
         connect_args={"check_same_thread": False},
     )
+    configure_sqlite_foreign_keys(engine)
     async with engine.begin() as conn:
         await conn.run_sync(SQLModel.metadata.create_all)
 
@@ -65,6 +68,7 @@ async def db_session():
 
     factory = async_sessionmaker(engine, expire_on_commit=False)
     async with factory() as session:
+        await session.execute(text("PRAGMA foreign_keys=ON"))
         yield session
 
     await engine.dispose()

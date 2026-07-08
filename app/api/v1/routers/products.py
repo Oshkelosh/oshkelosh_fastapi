@@ -386,9 +386,16 @@ async def delete_product(
     session=Depends(get_session),
 ) -> dict:
     """Delete a product."""
+    from app.services.product_slugs import product_has_order_items
+
+    del current_user
     product = await session.get(Product, product_id)
     if product is None:
         raise NotFound(resource_name="Product", resource_id=product_id)
+    if await product_has_order_items(session, product_id):
+        raise ValidationError(
+            message=f"Cannot delete product '{product.name}': it appears on existing orders"
+        )
 
     await session.delete(product)
     return {"message": f"Product {product_id} deleted"}

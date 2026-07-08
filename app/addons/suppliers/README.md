@@ -109,6 +109,13 @@ API supplier addons implement **`fetch_catalog_for_import()`**, returning normal
 - **One `ProductVariant`** per catalog variant, keyed by `supplier_external_key`
 - Per-variant images, prices, inventory, and supplier IDs
 
+Update policy is intentionally narrower than create policy:
+
+- first import may populate supplier catalog metadata broadly;
+- later syncs refresh supplier-owned fields like product name/description and variant title/price/attributes;
+- existing local runtime state such as variant `inventory_quantity` is preserved rather than overwritten by catalog refresh;
+- products are marked with the sync-import tag used by admin/API immutability checks.
+
 [`catalog_utils.py`](catalog_utils.py) provides shared normalization helpers (price conversion, attribute extraction, flat-item → grouped product conversion).
 
 **Admin UI:** Each supplier config page includes a **Catalog sync** card.

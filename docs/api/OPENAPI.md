@@ -122,7 +122,7 @@ Examples:
 | Stripe webhook | `POST /api/v1/payments/stripe/webhook` |
 | Printful | `GET /api/v1/suppliers/printful/products` |
 
-Admin configuration UIs are **HTML** under `/admin/...` and may appear in OpenAPI but return HTML, not JSON.
+Admin configuration UIs are **HTML** under `ADMIN_PREFIX` (default `/admin`). The current exported schema includes some of these HTML routes because they are mounted on the same FastAPI app; treat them as operator pages rather than JSON API contracts.
 
 ## Authentication in OpenAPI
 
@@ -136,7 +136,7 @@ Admin JSON routes require a user with `is_admin: true`.
 
 ## What is not in OpenAPI
 
-- **HTML admin panel** (`/admin/*`) — forms and Jinja pages; use the UI or addon READMEs
+- **Most HTML admin behavior** (`ADMIN_PREFIX/*`) is for forms and Jinja pages rather than programmatic JSON clients, even when routes appear in the exported schema.
 - **Static storefront** (`/`, `/assets/*`) — served dynamically from the active frontend addon per request (see `app/services/storefront_resolver.py`)
 - **Local media** (`/media/files/*`) — when `storage_backend=local`
 

@@ -9,6 +9,7 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 from typing import Any, AsyncIterator, Optional
 
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.config import settings
@@ -16,6 +17,7 @@ from app.db.backends.d1_binding import D1BindingNotConfiguredError, get_d1_bindi
 from app.db.backends.d1_http_session import d1_http_session
 from app.db.d1_binding_connection import D1BindingConnection
 from app.db.d1_client import D1Connection
+from app.db.sqlite_utils import configure_sqlite_foreign_keys
 
 # Re-export for callers that use get_d1()
 __all__ = [
@@ -42,6 +44,7 @@ def _create_sqlite_session_factory() -> async_sessionmaker[AsyncSession]:
         echo=settings.debug,
         connect_args={"check_same_thread": False},
     )
+    configure_sqlite_foreign_keys(_sqlite_engine)
     return async_sessionmaker(_sqlite_engine, expire_on_commit=False)
 
 
@@ -88,6 +91,7 @@ async def session_scope() -> AsyncIterator[Any]:
     factory = get_session_factory()
     async with factory() as session:
         try:
+            await session.execute(text("PRAGMA foreign_keys=ON"))
             yield session
             await session.commit()
         except Exception:

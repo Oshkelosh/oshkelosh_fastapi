@@ -15,6 +15,7 @@ from app.admin.routes._deps import (
     json,
     require_admin_session,
     set_flash_cookie,
+    settings,
 )
 
 router = APIRouter()
@@ -107,7 +108,7 @@ async def admin_site_settings_save(
         )
         await db.commit()
         request.state.site_settings = await get_site_settings(db)
-        resp = RedirectResponse(url="/admin/settings", status_code=302)
+        resp = RedirectResponse(url=f"{settings.admin_prefix}/settings", status_code=302)
         set_flash_cookie(resp, "Site settings saved")
         return resp
     except Exception as exc:
@@ -163,11 +164,11 @@ async def _save_branding_asset(
         )
         await db.commit()
         request.state.site_settings = await get_site_settings(db)
-        resp = RedirectResponse(url="/admin/settings", status_code=302)
+        resp = RedirectResponse(url=f"{settings.admin_prefix}/settings", status_code=302)
         set_flash_cookie(resp, f"{label} uploaded")
         return resp
     except ValidationError as exc:
-        resp = RedirectResponse(url="/admin/settings", status_code=302)
+        resp = RedirectResponse(url=f"{settings.admin_prefix}/settings", status_code=302)
         set_flash_cookie(resp, exc.message)
         return resp
 
@@ -212,7 +213,7 @@ async def _clear_branding_asset(
     )
     await db.commit()
     request.state.site_settings = await get_site_settings(db)
-    resp = RedirectResponse(url="/admin/settings", status_code=302)
+    resp = RedirectResponse(url=f"{settings.admin_prefix}/settings", status_code=302)
     set_flash_cookie(resp, f"{label} removed")
     return resp
 

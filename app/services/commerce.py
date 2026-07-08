@@ -27,6 +27,7 @@ from app.services.product_variants import (
 )
 
 _INVENTORY_RESERVED = frozenset({"pending", "paid", "shipped", "delivered"})
+_INVENTORY_RESTORABLE = frozenset({"pending", "paid"})
 
 VALID_TRANSITIONS: dict[str, frozenset[str]] = {
     "pending": frozenset({"paid", "cancelled"}),
@@ -56,29 +57,52 @@ def cart_line_totals(
     variants: dict[int, ProductVariant],
 ) -> tuple[int, list[dict[str, Any]]]:
     """Return (subtotal_cents, order_items_data) for cart line items."""
-    subtotal_cents = 0
-    order_items_data: list[dict[str, Any]] = []
+    order_items_data = build_cart_pricing_lines(
+        cart_items,
+        products,
+        variants,
+        include_variant_snapshot=True,
+    )
+    subtotal_cents = sum(item["total_price_cents"] for item in order_items_data)
+    return subtotal_cents, order_items_data
+
+
+def build_cart_pricing_lines(
+    cart_items: list[Any],
+    products: dict[int, Product],
+    variants: dict[int, ProductVariant],
+    *,
+    include_variant_snapshot: bool = False,
+) -> list[dict[str, Any]]:
+    """Build canonical cart/order pricing lines from product + variant maps."""
+    lines: list[dict[str, Any]] = []
     for item in cart_items:
-        product = products.get(getattr(item, "product_id", None))
-        variant = variants.get(getattr(item, "variant_id", None))
+        product_id = getattr(item, "product_id", None)
+        variant_id = getattr(item, "variant_id", None)
+        product = products.get(product_id)
+        variant = variants.get(variant_id)
         if product is None or variant is None:
-            continue
+            raise ValidationError(
+                message=(
+                    "Cart contains a missing product or variant and cannot be priced. "
+                    f"(product_id={product_id}, variant_id={variant_id})"
+                )
+            )
         quantity = getattr(item, "quantity", 1)
         line_total = variant.price_cents * quantity
-        subtotal_cents += line_total
-        order_items_data.append(
-            {
-                "product_id": product.id,
-                "variant_id": variant.id,
-                "product_name": product.name,
-                "product_sku": variant.sku or f"SKU-{variant.id}",
-                "quantity": quantity,
-                "unit_price_cents": variant.price_cents,
-                "total_price_cents": line_total,
-                "variant_snapshot": build_variant_snapshot(variant),
-            }
-        )
-    return subtotal_cents, order_items_data
+        line = {
+            "product_id": product.id,
+            "variant_id": variant.id,
+            "product_name": product.name,
+            "product_sku": variant.sku or f"SKU-{variant.id}",
+            "quantity": quantity,
+            "unit_price_cents": variant.price_cents,
+            "total_price_cents": line_total,
+        }
+        if include_variant_snapshot:
+            line["variant_snapshot"] = build_variant_snapshot(variant)
+        lines.append(line)
+    return lines
 
 
 def ensure_product_purchasable(product: Product) -> None:
@@ -270,7 +294,7 @@ async def apply_order_status_change(
 
     items = await load_order_items(session, order.id)
 
-    if new_status == "cancelled" and old_status in _INVENTORY_RESERVED:
+    if new_status == "cancelled" and old_status in _INVENTORY_RESTORABLE:
         await release_order_inventory(session, items)
         if old_status == "paid":
             from app.services.product_popularity import decrement_product_units_sold
@@ -290,6 +314,31 @@ async def apply_order_status_change(
     from app.services.notifications import notify_order_status_change
 
     await notify_order_status_change(session, order, old_status, new_status)
+
+
+async def cancel_order_as_admin(session: Any, order: Order) -> None:
+    """Cancel an order with admin-specific guardrails for paid and shipped states."""
+    if order.status == "cancelled":
+        return
+    if order.status == "pending":
+        await apply_order_status_change(session, order, "cancelled")
+        return
+    if order.status == "paid":
+        from app.services.payments import mark_refund_required_for_cancelled_order
+
+        await apply_order_status_change(session, order, "cancelled")
+        mark_refund_required_for_cancelled_order(session, order)
+        return
+    if order.status in {"shipped", "delivered"}:
+        raise ValidationError(
+            message=(
+                "Cannot cancel shipped or delivered orders from the admin status flow. "
+                "Use a separate return/restock workflow."
+            )
+        )
+    raise ValidationError(
+        message=f"Cannot cancel order from status '{order.status}'"
+    )
 
 
 async def serialize_order(session: Any, order: Order):

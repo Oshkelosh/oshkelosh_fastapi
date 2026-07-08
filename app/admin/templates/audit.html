@@ -35,7 +35,7 @@
   <input type="date" name="date_to" class="form-input" value="{{ filter_date_to }}" style="width:auto;">
   <button type="submit" class="btn btn--secondary">Filter</button>
   {% if filter_query %}
-  <a href="/admin/audit" class="btn btn--ghost btn--sm">Clear</a>
+  <a href="{{ admin_prefix }}/audit" class="btn btn--ghost btn--sm">Clear</a>
   {% endif %}
 </form>
 
@@ -60,7 +60,7 @@
       <td>{{ row.created_at.strftime('%Y-%m-%d %H:%M') if row.created_at else '—' }}</td>
       <td>
         {% if actor_user %}
-          <a href="/admin/users/{{ actor_user.id }}">{{ actor_user.full_name or actor_user.email }}</a>
+          <a href="{{ admin_prefix }}/users/{{ actor_user.id }}">{{ actor_user.full_name or actor_user.email }}</a>
         {% elif row.actor_user_id %}
           User #{{ row.actor_user_id }}
         {% else %}
@@ -92,7 +92,7 @@
       </td>
       <td>{{ row.ip_address or '—' }}</td>
       <td>
-        <a href="/admin/audit/{{ row.id }}?back={{ current_list_url | urlencode }}"
+        <a href="{{ admin_prefix }}/audit/{{ row.id }}?back={{ current_list_url | urlencode }}"
            class="btn btn--ghost btn--sm">View</a>
       </td>
     </tr>

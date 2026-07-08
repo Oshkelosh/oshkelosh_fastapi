@@ -94,7 +94,7 @@
 <div class="card" style="margin-bottom:24px;">
     <div class="card__header">
         <h2 class="card__title">Recent Orders</h2>
-        <a href="/admin/orders" class="card__action">View all</a>
+        <a href="{{ admin_prefix }}/orders" class="card__action">View all</a>
     </div>
     <div class="card__body">
         {% if recent_orders %}
@@ -112,7 +112,7 @@
                 {% for order in recent_orders %}
                 <tr>
                     <td class="table__cell--left">
-                        <a href="/admin/orders/{{ order.id }}" class="link">
+                        <a href="{{ admin_prefix }}/orders/{{ order.id }}" class="link">
                             #{{ order.id }}
                         </a>
                     </td>
@@ -138,28 +138,56 @@
 <div class="card" style="margin-bottom:24px;">
     <div class="card__header">
         <h2 class="card__title">Revenue Trend</h2>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            {% for days in revenue_trend_options %}
+            <a
+                href="{{ admin_prefix }}/dashboard?range_days={{ days }}"
+                class="card__action"
+                {% if days == revenue_trend_days %}
+                aria-current="page"
+                style="font-weight:600;text-decoration:underline;"
+                {% endif %}
+            >
+                {{ days }} days
+            </a>
+            {% endfor %}
+        </div>
     </div>
     <div class="card__body">
         <div class="chart-placeholder">
             <svg viewBox="0 0 800 200" class="chart-placeholder__svg">
                 <line x1="60" y1="180" x2="780" y2="180" stroke="currentColor" stroke-width="1" opacity="0.2"/>
-                <line x1="60" y1="40" x2="60" y2="180" stroke="currentColor" stroke-width="1" opacity="0.2"/>
-                <text x="70" y="45" font-size="12" fill="currentColor" opacity="0.5">Revenue ($)</text>
-                <text x="70" y="195" font-size="12" fill="currentColor" opacity="0.5">Date</text>
-                <path d="M80 150 Q150 120, 220 100 Q290 80, 360 90 Q430 100, 500 60 Q570 20, 640 40 Q710 60, 760 30"
-                      fill="none" stroke="oklch(0.65 0.18 260)" stroke-width="3" stroke-linecap="round"/>
-                <path d="M80 150 Q150 120, 220 100 Q290 80, 360 90 Q430 100, 500 60 Q570 20, 640 40 Q710 60, 760 30 L760 180 L80 180 Z"
+                <line x1="60" y1="30" x2="60" y2="180" stroke="currentColor" stroke-width="1" opacity="0.2"/>
+                <line x1="60" y1="105" x2="780" y2="105" stroke="currentColor" stroke-width="1" opacity="0.08"/>
+                <text x="70" y="35" font-size="12" fill="currentColor" opacity="0.55">{{ revenue_trend.top_label }}</text>
+                <text x="70" y="100" font-size="12" fill="currentColor" opacity="0.45">{{ revenue_trend.mid_label }}</text>
+                <text x="60" y="195" font-size="12" fill="currentColor" opacity="0.5">{{ revenue_trend.start_label }}</text>
+                <text x="780" y="195" font-size="12" text-anchor="end" fill="currentColor" opacity="0.5">{{ revenue_trend.end_label }}</text>
+                <path d="{{ revenue_trend.area_d }}"
                       fill="oklch(0.65 0.18 260 / 0.1)"/>
+                <path d="{{ revenue_trend.path_d }}"
+                      fill="none" stroke="oklch(0.65 0.18 260)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+                {% for point in revenue_trend.points if point.revenue_cents > 0 %}
+                <circle cx="{{ point.x }}" cy="{{ point.y }}" r="3" fill="oklch(0.65 0.18 260)">
+                    <title>{{ point.date }}: {{ point.amount }}</title>
+                </circle>
+                {% endfor %}
             </svg>
         </div>
-        <p class="chart-placeholder__caption">Revenue over the last 30 days (placeholder — integrate a charting library for real data).</p>
+        {% if revenue_trend.has_revenue %}
+        <p class="chart-placeholder__caption">
+            Collected ${{ "{:,.2f}".format(revenue_trend.total_cents / 100) }} over the last {{ revenue_trend_days }} days.
+        </p>
+        {% else %}
+        <p class="chart-placeholder__caption">No collected revenue in the last {{ revenue_trend_days }} days.</p>
+        {% endif %}
     </div>
 </div>
 
 <div class="card" style="margin-bottom:24px;">
     <div class="card__header">
         <h2 class="card__title">Supplier catalog sync</h2>
-        <a href="/admin/audit?action=supplier_catalog_sync" class="card__action">Sync history</a>
+        <a href="{{ admin_prefix }}/audit?action=supplier_catalog_sync" class="card__action">Sync history</a>
     </div>
     <div class="card__body">
         {% if active_sync_job %}
@@ -171,7 +199,7 @@
                 <div class="job-progress__fill" style="width:{{ active_sync_job.percent }}%;"></div>
             </div>
             <p style="margin:8px 0 0;font-size:13px;">
-                <a href="/admin/jobs/{{ active_sync_job.id }}">View sync progress</a>
+                <a href="{{ admin_prefix }}/jobs/{{ active_sync_job.id }}">View sync progress</a>
             </p>
         </div>
         {% endif %}
@@ -206,7 +234,7 @@
         {% endif %}
 
         {% if syncable_suppliers and not active_sync_job %}
-        <form method="POST" action="/admin/suppliers/sync-all" class="form" style="max-width:480px;">
+        <form method="POST" action="{{ admin_prefix }}/suppliers/sync-all" class="form" style="max-width:480px;">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <div class="form-group">
                 <label class="form-label" for="import_status">Import as</label>
@@ -242,7 +270,7 @@
         </p>
 
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:24px;">
-            <form method="POST" action="/admin/addons/install" enctype="multipart/form-data">
+            <form method="POST" action="{{ admin_prefix }}/addons/install" enctype="multipart/form-data">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                 <h3 style="margin:0 0 12px;font-size:15px;">Upload ZIP</h3>
                 <div class="form-group">
@@ -256,7 +284,7 @@
                 <button type="submit" class="btn btn--primary btn--sm">Install from ZIP</button>
             </form>
 
-            <form method="POST" action="/admin/addons/install/url">
+            <form method="POST" action="{{ admin_prefix }}/addons/install/url">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                 <h3 style="margin:0 0 12px;font-size:15px;">Install from URL</h3>
                 <div class="form-group">

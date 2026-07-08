@@ -428,6 +428,12 @@ async def test_admin_products_list_shows_thumbnail(client: AsyncClient, test_use
 
 
 @pytest.mark.asyncio
+async def test_media_url_requires_admin_auth(client: AsyncClient):
+    response = await client.get("/api/v1/media/products/example/full.webp")
+    assert response.status_code in (401, 403)
+
+
+@pytest.mark.asyncio
 async def test_admin_product_edit_form_no_nested_forms_with_images(
     client: AsyncClient, test_user, db_session, test_product
 ):

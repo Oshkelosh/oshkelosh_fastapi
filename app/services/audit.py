@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from app.config import settings
 from models.audit_log import AuditLog
 
 _SECRET_KEY_PATTERN = re.compile(
@@ -65,24 +66,25 @@ def admin_request_meta(request: Any) -> tuple[int | None, str | None]:
 
 def resource_admin_url(resource_type: str, resource_id: str | None) -> str | None:
     """Map audit resource to an admin panel URL, if one exists."""
+    admin_prefix = settings.admin_prefix
     if not resource_id:
         if resource_type == "site_settings":
-            return "/admin/settings"
+            return f"{admin_prefix}/settings"
         return None
 
     if resource_type == "product":
-        return f"/admin/products/{resource_id}"
+        return f"{admin_prefix}/products/{resource_id}"
     if resource_type == "order":
-        return f"/admin/orders/{resource_id}"
+        return f"{admin_prefix}/orders/{resource_id}"
     if resource_type == "user":
-        return f"/admin/users/{resource_id}"
+        return f"{admin_prefix}/users/{resource_id}"
     if resource_type in ("supplier", "addon"):
-        return f"/admin/addons/{resource_id}/configure"
+        return f"{admin_prefix}/addons/{resource_id}/configure"
     if resource_type == "site_settings":
-        return "/admin/settings"
+        return f"{admin_prefix}/settings"
     if resource_type == "notification_template" and "/" in resource_id:
         event_key, channel = resource_id.split("/", 1)
-        return f"/admin/notifications/messages/{event_key}/{channel}"
+        return f"{admin_prefix}/notifications/messages/{event_key}/{channel}"
     return None
 
 

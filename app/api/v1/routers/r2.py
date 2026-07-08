@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, File, Form, UploadFile, status
 from sqlmodel import col, select
 
 from app.config import settings
-from app.core.dependencies import CurrentUser, get_admin_user, get_current_user
+from app.core.dependencies import CurrentUser, get_admin_user
 from app.core.exceptions import NotFound, ValidationError
 from app.db.connection import get_session
 from app.services.product_images import (
@@ -98,10 +98,11 @@ async def upload_image(
 )
 async def get_media_url(
     key: str,
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(get_admin_user),
     storage: StorageBackend = Depends(get_storage),
 ) -> dict:
     """Get a URL for a media file."""
+    del current_user
     _validate_media_key(key)
     try:
         url = await storage.get_url(key)

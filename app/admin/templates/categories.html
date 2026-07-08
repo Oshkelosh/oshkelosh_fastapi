@@ -5,7 +5,7 @@
 {% block content %}
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
   <h2 style="margin:0;">Categories</h2>
-  <a href="/admin/categories/new" class="btn btn--primary">+ New Category</a>
+  <a href="{{ admin_prefix }}/categories/new" class="btn btn--primary">+ New Category</a>
 </div>
 
 {% if categories %}
@@ -25,8 +25,8 @@
       <td><code>{{ cat.slug }}</code></td>
       <td>{{ cat.sort_order }}</td>
       <td>
-        <a href="/admin/categories/{{ cat.slug }}/edit" class="btn btn--secondary btn--sm">Edit</a>
-        <form action="/admin/categories/{{ cat.slug }}/delete" method="POST" style="display:inline;" onsubmit="return confirm('Delete this category?')">
+        <a href="{{ admin_prefix }}/categories/{{ cat.slug }}/edit" class="btn btn--secondary btn--sm">Edit</a>
+        <form action="{{ admin_prefix }}/categories/{{ cat.slug }}/delete" method="POST" style="display:inline;" onsubmit="return confirm('Delete this category?')">
           <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
           <button type="submit" class="btn btn--danger btn--sm">Delete</button>
         </form>
@@ -38,17 +38,17 @@
 {% if total_pages > 1 %}
 <nav style="margin-top:16px;display:flex;gap:8px;align-items:center;">
   {% if page > 1 %}
-  <a href="/admin/categories?page={{ page - 1 }}" class="btn btn--secondary btn--sm">Previous</a>
+  <a href="{{ admin_prefix }}/categories?page={{ page - 1 }}" class="btn btn--secondary btn--sm">Previous</a>
   {% endif %}
   <span style="color:var(--clr-text-muted);">Page {{ page }} of {{ total_pages }} ({{ total }} categories)</span>
   {% if page < total_pages %}
-  <a href="/admin/categories?page={{ page + 1 }}" class="btn btn--secondary btn--sm">Next</a>
+  <a href="{{ admin_prefix }}/categories?page={{ page + 1 }}" class="btn btn--secondary btn--sm">Next</a>
   {% endif %}
 </nav>
 {% endif %}
 {% else %}
 <div class="card" style="text-align:center;padding:40px;">
-  <p style="color:var(--clr-text-muted);">No categories yet. <a href="/admin/categories/new">Create your first category</a>.</p>
+  <p style="color:var(--clr-text-muted);">No categories yet. <a href="{{ admin_prefix }}/categories/new">Create your first category</a>.</p>
 </div>
 {% endif %}
 {% endblock %}

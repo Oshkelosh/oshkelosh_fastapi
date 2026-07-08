@@ -7,11 +7,11 @@
 
 <p style="color:var(--clr-text-muted);margin-bottom:24px;">
   Site-wide branding used by the storefront, admin header, and order emails.
-  Choose and configure the active storefront under <a href="/admin/frontends">Frontends</a>.
+  Choose and configure the active storefront under <a href="{{ admin_prefix }}/frontends">Frontends</a>.
   The public storefront URL is set via <code>PUBLIC_APP_URL</code> in your server environment.
 </p>
 
-<form method="POST" action="/admin/settings">
+<form method="POST" action="{{ admin_prefix }}/settings">
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 
   <div class="card" style="margin-bottom:16px;">
@@ -56,7 +56,7 @@
     <h3 style="margin-top:0;">Tax</h3>
     <p style="color:var(--clr-text-muted);font-size:0.875rem;margin-bottom:16px;">
       Built-in tax rules applied at checkout. Third-party tax APIs (TaxJar, Avalara) are configured under
-      <a href="/admin/tools">Tools</a> when installed.
+      <a href="{{ admin_prefix }}/tools">Tools</a> when installed.
     </p>
     <div class="form-group">
       <label class="form-label">
@@ -153,14 +153,14 @@
   <div style="margin-bottom:16px;">
     <img src="{{ site.logo_url }}" alt="Current logo" style="max-height:80px;max-width:240px;object-fit:contain;">
   </div>
-  <form method="POST" action="/admin/settings/logo/clear" style="margin-bottom:16px;">
+  <form method="POST" action="{{ admin_prefix }}/settings/logo/clear" style="margin-bottom:16px;">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <button type="submit" class="btn btn--danger btn--sm" onclick="return confirm('Remove the logo?')">Remove logo</button>
   </form>
   {% else %}
   <p style="color:var(--clr-text-muted);margin:0 0 16px;">No logo uploaded yet.</p>
   {% endif %}
-  <form method="POST" action="/admin/settings/logo" enctype="multipart/form-data">
+  <form method="POST" action="{{ admin_prefix }}/settings/logo" enctype="multipart/form-data">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <p style="color:var(--clr-text-muted);font-size:14px;margin:0 0 12px;">JPG, PNG, WebP, or GIF — max 5 MB.</p>
     <div class="form-group">
@@ -178,14 +178,14 @@
   <div style="margin-bottom:16px;">
     <img src="{{ site.favicon_url }}" alt="Current favicon" style="width:32px;height:32px;object-fit:contain;">
   </div>
-  <form method="POST" action="/admin/settings/favicon/clear" style="margin-bottom:16px;">
+  <form method="POST" action="{{ admin_prefix }}/settings/favicon/clear" style="margin-bottom:16px;">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <button type="submit" class="btn btn--danger btn--sm" onclick="return confirm('Remove the favicon?')">Remove favicon</button>
   </form>
   {% else %}
   <p style="color:var(--clr-text-muted);margin:0 0 16px;">No favicon uploaded yet.</p>
   {% endif %}
-  <form method="POST" action="/admin/settings/favicon" enctype="multipart/form-data">
+  <form method="POST" action="{{ admin_prefix }}/settings/favicon" enctype="multipart/form-data">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <p style="color:var(--clr-text-muted);font-size:14px;margin:0 0 12px;">JPG, PNG, WebP, or GIF — max 5 MB.</p>
     <div class="form-group">

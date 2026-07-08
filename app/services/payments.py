@@ -10,6 +10,62 @@ from app.services.user_accounts import link_payment_customer
 from models.order import Order
 
 
+async def record_late_cancelled_payment(
+    session: Any,
+    order: Order,
+    *,
+    processor_id: str,
+    event_id: str,
+    payment_id: Optional[str] = None,
+    payment_charge_id: Optional[str] = None,
+) -> None:
+    """Persist payment metadata on a cancelled order and flag refund follow-up."""
+    order.payment_processor_id = processor_id
+    if payment_id:
+        order.payment_id = payment_id
+    if payment_charge_id:
+        order.payment_charge_id = payment_charge_id
+    note = (
+        f"Late payment received from {processor_id} for cancelled order "
+        f"(event_id={event_id}). Refund review required."
+    )
+    existing = order.notes or ""
+    order.notes = f"{existing}\n{note}".strip() if existing else note
+    if hasattr(session, "mark_dirty"):
+        session.mark_dirty(order)
+    from app.services.audit import log_change
+
+    await log_change(
+        session,
+        actor_user_id=None,
+        action="reconcile",
+        resource_type="order",
+        resource_id=order.id,
+        changes={
+            "late_cancelled_payment": {
+                "processor_id": processor_id,
+                "event_id": event_id,
+                "payment_id": payment_id,
+                "payment_charge_id": payment_charge_id,
+            }
+        },
+        detail=note,
+    )
+
+
+def mark_refund_required_for_cancelled_order(
+    session: Any,
+    order: Order,
+) -> None:
+    """Flag that a cancelled paid order still needs refund handling."""
+    note = "Admin cancelled a paid order. Refund review required."
+    existing = order.notes or ""
+    if note not in existing:
+        order.notes = f"{existing}\n{note}".strip() if existing else note
+    if hasattr(session, "mark_dirty"):
+        session.mark_dirty(order)
+
+
 async def complete_order_payment(
     session: Any,
     order_id: int,

@@ -19,6 +19,12 @@ from app.admin.routes._deps import (
     require_admin_session,
     select,
     set_flash_cookie,
+    settings,
+)
+from app.services.categories import (
+    ensure_category_slug_available,
+    get_category_by_slug,
+    validate_category_parent,
 )
 
 router = APIRouter()
@@ -29,13 +35,6 @@ async def _load_all_categories(db):
 
     result = await db.execute(select(Category).order_by(col(Category.sort_order).asc(), col(Category.name).asc()))
     return result.scalars().all()
-
-
-async def _get_category_by_slug(db, slug: str):
-    from models.category import Category
-
-    result = await db.execute(select(Category).where(col(Category.slug) == slug))
-    return result.scalar_one_or_none()
 
 
 def _parent_options(categories: list[Any], *, exclude_id: int | None = None) -> list[Any]:
@@ -121,7 +120,7 @@ async def admin_category_new(request: Request, db=Depends(require_admin_session)
     return await _render_category_form(
         request,
         title="New Category",
-        action_url="/admin/categories",
+        action_url=f"{settings.admin_prefix}/categories",
         db=db,
     )
 
@@ -147,12 +146,13 @@ async def admin_category_create(
     if not db:
         return _render_error(request, "Database unavailable")
 
-    existing = await _get_category_by_slug(db, slug)
-    if existing is not None:
+    try:
+        await ensure_category_slug_available(db, slug)
+    except Exception:
         return await _render_category_form(
             request,
             title="New Category",
-            action_url="/admin/categories",
+            action_url=f"{settings.admin_prefix}/categories",
             form_error=f"Category with slug '{slug}' already exists",
             draft={
                 "name": name,
@@ -166,25 +166,25 @@ async def admin_category_create(
             db=db,
         )
 
-    if parent_id is not None:
-        parent = await db.get(Category, parent_id)
-        if parent is None:
-            return await _render_category_form(
-                request,
-                title="New Category",
-                action_url="/admin/categories",
-                form_error="Parent category not found",
-                draft={
-                    "name": name,
-                    "slug": slug,
-                    "description": description,
-                    "meta_title": meta_title,
-                    "meta_description": meta_description,
-                    "parent_id": parent_id,
-                    "sort_order": sort_order,
-                },
-                db=db,
-            )
+    try:
+        await validate_category_parent(db, 0, parent_id)
+    except Exception as exc:
+        return await _render_category_form(
+            request,
+            title="New Category",
+            action_url=f"{settings.admin_prefix}/categories",
+            form_error=str(exc),
+            draft={
+                "name": name,
+                "slug": slug,
+                "description": description,
+                "meta_title": meta_title,
+                "meta_description": meta_description,
+                "parent_id": parent_id,
+                "sort_order": sort_order,
+            },
+            db=db,
+        )
 
     cat = Category(
         name=name,
@@ -221,7 +221,7 @@ async def admin_category_create(
     )
     await db.commit()
 
-    resp = RedirectResponse(url="/admin/categories", status_code=302)
+    resp = RedirectResponse(url=f"{settings.admin_prefix}/categories", status_code=302)
     set_flash_cookie(resp, f"Category '{cat.name}' created")
     return resp
 
@@ -232,7 +232,7 @@ async def admin_category_edit(request: Request, slug: str, db=Depends(require_ad
     if not db:
         return _render_error(request, "Database unavailable")
 
-    category = await _get_category_by_slug(db, slug)
+    category = await get_category_by_slug(db, slug)
     if category is None:
         return _render_error(request, "Category not found", status_code=404)
 
@@ -240,7 +240,7 @@ async def admin_category_edit(request: Request, slug: str, db=Depends(require_ad
         request,
         title=f"Edit: {category.name}",
         category=category,
-        action_url=f"/admin/categories/{slug}/edit",
+        action_url=f"{settings.admin_prefix}/categories/{slug}/edit",
         db=db,
     )
 
@@ -267,7 +267,7 @@ async def admin_category_update(
     if not db:
         return _render_error(request, "Database unavailable")
 
-    category = await _get_category_by_slug(db, slug)
+    category = await get_category_by_slug(db, slug)
     if category is None:
         return _render_error(request, "Category not found", status_code=404)
 
@@ -282,40 +282,31 @@ async def admin_category_update(
     }
 
     if new_slug != category.slug:
-        existing = await _get_category_by_slug(db, new_slug)
-        if existing is not None:
+        try:
+            await ensure_category_slug_available(db, new_slug, exclude_id=category.id)
+        except Exception:
             return await _render_category_form(
                 request,
                 title=f"Edit: {category.name}",
                 category=category,
-                action_url=f"/admin/categories/{slug}/edit",
+                action_url=f"{settings.admin_prefix}/categories/{slug}/edit",
                 form_error=f"Category with slug '{new_slug}' already exists",
                 draft=draft,
                 db=db,
             )
 
-    if parent_id is not None:
-        if parent_id == category.id:
-            return await _render_category_form(
-                request,
-                title=f"Edit: {category.name}",
-                category=category,
-                action_url=f"/admin/categories/{slug}/edit",
-                form_error="A category cannot be its own parent",
-                draft=draft,
-                db=db,
-            )
-        parent = await db.get(Category, parent_id)
-        if parent is None:
-            return await _render_category_form(
-                request,
-                title=f"Edit: {category.name}",
-                category=category,
-                action_url=f"/admin/categories/{slug}/edit",
-                form_error="Parent category not found",
-                draft=draft,
-                db=db,
-            )
+    try:
+        await validate_category_parent(db, category.id, parent_id)
+    except Exception as exc:
+        return await _render_category_form(
+            request,
+            title=f"Edit: {category.name}",
+            category=category,
+            action_url=f"{settings.admin_prefix}/categories/{slug}/edit",
+            form_error=str(exc),
+            draft=draft,
+            db=db,
+        )
 
     before = {"name": category.name, "slug": category.slug, "parent_id": category.parent_id}
     category.name = name
@@ -345,7 +336,7 @@ async def admin_category_update(
     )
     await db.commit()
 
-    resp = RedirectResponse(url="/admin/categories", status_code=302)
+    resp = RedirectResponse(url=f"{settings.admin_prefix}/categories", status_code=302)
     set_flash_cookie(resp, f"Category '{category.name}' updated")
     return resp
 
@@ -363,7 +354,7 @@ async def admin_category_delete(
     if not db:
         return _render_error(request, "Database unavailable")
 
-    category = await _get_category_by_slug(db, slug)
+    category = await get_category_by_slug(db, slug)
     if category is None:
         return _render_error(request, "Category not found", status_code=404)
 
@@ -388,7 +379,7 @@ async def admin_category_delete(
     )
     await db.commit()
 
-    resp = RedirectResponse(url="/admin/categories", status_code=302)
+    resp = RedirectResponse(url=f"{settings.admin_prefix}/categories", status_code=302)
     set_flash_cookie(resp, f"Category '{category_name}' deleted")
     return resp
 

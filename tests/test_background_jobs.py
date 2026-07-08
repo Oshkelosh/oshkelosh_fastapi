@@ -5,6 +5,7 @@ from __future__ import annotations
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from httpx import AsyncClient
 
 from app.services.background_jobs import (
     SupplierCatalogSyncJobOptions,
@@ -88,3 +89,66 @@ async def test_get_job_not_found(db_session):
 
     with pytest.raises(NotFound):
         await get_job(db_session, "missing-id")
+
+
+async def _auth_headers(client: AsyncClient, email: str, password: str) -> dict[str, str]:
+    response = await client.post(
+        "/api/v1/auth/login",
+        json={"email": email, "password": password},
+    )
+    token = response.json()["access_token"]
+    return {"Authorization": f"Bearer {token}"}
+
+
+@pytest.mark.asyncio
+async def test_pending_order_cleanup_job_requires_admin_auth(client: AsyncClient):
+    response = await client.post("/api/v1/admin/jobs/pending-orders")
+    assert response.status_code in (401, 403)
+
+
+@pytest.mark.asyncio
+async def test_abandoned_cart_job_runs_with_admin_jwt(client: AsyncClient, test_user):
+    headers = await _auth_headers(client, test_user.email, "SecurePass123!")
+    fake_result = MagicMock(scanned=3, sent=2, skipped=1)
+    fake_result.summary_message.return_value = "Scanned 3; sent 2; skipped 1."
+
+    with patch(
+        "app.services.abandoned_cart.process_abandoned_carts",
+        AsyncMock(return_value=fake_result),
+    ):
+        response = await client.post(
+            "/api/v1/admin/jobs/abandoned-cart",
+            headers=headers,
+        )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "scanned": 3,
+        "sent": 2,
+        "skipped": 1,
+        "message": "Scanned 3; sent 2; skipped 1.",
+    }
+
+
+@pytest.mark.asyncio
+async def test_pending_order_cleanup_job_runs_with_admin_jwt(client: AsyncClient, test_user):
+    headers = await _auth_headers(client, test_user.email, "SecurePass123!")
+    fake_result = MagicMock(scanned=4, cancelled=3, skipped=1)
+    fake_result.summary_message.return_value = "Scanned 4 stale pending order(s); cancelled 3; skipped 1."
+
+    with patch(
+        "app.services.pending_order_cleanup.process_stale_pending_orders",
+        AsyncMock(return_value=fake_result),
+    ):
+        response = await client.post(
+            "/api/v1/admin/jobs/pending-orders",
+            headers=headers,
+        )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "scanned": 4,
+        "cancelled": 3,
+        "skipped": 1,
+        "message": "Scanned 4 stale pending order(s); cancelled 3; skipped 1.",
+    }

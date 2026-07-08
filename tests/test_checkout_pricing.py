@@ -16,8 +16,13 @@ from app.services.checkout_pricing import (
     compute_site_shipping_cents,
     compute_site_tax_cents,
     quote_order_charges,
+    reprice_pending_order,
     try_tax_tool_quote,
 )
+from models.order import Order
+from models.order_item import OrderItem
+from models.product import Product
+from models.product_variant import ProductVariant
 from models.site_settings import SiteSettings
 
 
@@ -264,6 +269,76 @@ class TestQuoteOrderCharges:
             assert charges.shipping_breakdown[0]["source"] == "supplier"
         finally:
             addon_registry._registry.pop("mock_ship", None)
+
+
+@pytest.mark.asyncio
+async def test_reprice_pending_order_uses_frozen_line_prices(db_session):
+    site = _site(
+        shipping_mode="free_over_threshold",
+        shipping_free_threshold_cents=1500,
+        shipping_flat_cents=500,
+        tax_rate_bps=1000,
+    )
+    product = Product(
+        name="Frozen Price Product",
+        slug="frozen-price-product",
+        description="Product for repricing test",
+        price_cents=1000,
+        sku="FROZEN-001",
+        inventory_quantity=10,
+        status="published",
+        created_by=1,
+    )
+    db_session.add(product)
+    await db_session.flush()
+
+    variant = ProductVariant(
+        product_id=product.id,
+        title=product.name,
+        position=0,
+        price_cents=1000,
+        inventory_quantity=10,
+        sku="FROZEN-001",
+        status="active",
+    )
+    db_session.add(variant)
+    await db_session.flush()
+
+    order = Order(
+        user_id=None,
+        status="pending",
+        total_cents=0,
+        tax_cents=0,
+        shipping_cents=0,
+        currency="usd",
+        shipping_address={"country": "US"},
+    )
+    db_session.add(order)
+    await db_session.flush()
+
+    item = OrderItem(
+        order_id=order.id,
+        product_id=product.id,
+        variant_id=variant.id,
+        product_name=product.name,
+        product_sku=variant.sku or "SKU",
+        quantity=2,
+        unit_price_cents=1000,
+        total_price_cents=2000,
+    )
+    db_session.add(item)
+    await db_session.flush()
+
+    variant.price_cents = 400
+    await db_session.flush()
+
+    await reprice_pending_order(db_session, order, site)
+    await db_session.flush()
+    await db_session.refresh(order)
+
+    assert order.tax_cents == 200
+    assert order.shipping_cents == 0
+    assert order.total_cents == 2200
 
     async def test_mixed_cart_supplier_and_merchant(self, monkeypatch):
         from app.addons.registry import addon_registry

@@ -104,6 +104,28 @@ class TestNotificationDispatch:
         mock_email.send_email.assert_awaited_once()
         mock_sms.send_sms.assert_not_awaited()
 
+    @pytest.mark.asyncio
+    async def test_logs_missing_success_flag_as_failure(self, db_session, test_user):
+        mock_email = AsyncMock()
+        mock_email.send_email = AsyncMock(return_value={})
+
+        with (
+            patch(
+                "app.services.notification_dispatch.get_notification_addon_for_channel",
+                return_value=mock_email,
+            ),
+            patch("app.services.notification_dispatch.logger.warning") as warn,
+        ):
+            await dispatch_notification(
+                db_session,
+                "order_confirmation",
+                email=test_user.email,
+                context={"order_id": 1, "customer_name": "Test"},
+            )
+
+        mock_email.send_email.assert_awaited_once()
+        warn.assert_called_once()
+
 
 class TestNotificationAdminPages:
     @pytest.mark.asyncio

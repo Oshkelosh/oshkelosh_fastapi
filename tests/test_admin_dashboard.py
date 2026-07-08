@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -10,6 +10,7 @@ from httpx import AsyncClient
 
 from app.admin.session import SESSION_COOKIE_NAME, decode_session, encode_session
 from app.services.audit import log_change
+from models.order import Order
 
 
 def _admin_session(user_id: int) -> tuple[dict[str, str], str]:
@@ -37,6 +38,148 @@ async def test_dashboard_renders_system_health(client: AsyncClient, test_user):
     assert response.status_code == 200
     assert "System health" in response.text
     assert "Degraded" in response.text
+
+
+@pytest.mark.asyncio
+async def test_fetch_revenue_trend_zero_fills_and_excludes_statuses(db_session, test_user):
+    from app.services.admin_dashboard import fetch_revenue_trend
+
+    anchor = date(2026, 7, 8)
+    db_session.add_all(
+        [
+            Order(
+                user_id=test_user.id,
+                status="paid",
+                total_cents=1200,
+                tax_cents=0,
+                shipping_cents=0,
+                currency="usd",
+                created_at=datetime(2026, 7, 8, 12, 0, tzinfo=timezone.utc),
+            ),
+            Order(
+                user_id=test_user.id,
+                status="shipped",
+                total_cents=800,
+                tax_cents=0,
+                shipping_cents=0,
+                currency="usd",
+                created_at=datetime(2026, 7, 6, 9, 0, tzinfo=timezone.utc),
+            ),
+            Order(
+                user_id=test_user.id,
+                status="pending",
+                total_cents=5000,
+                tax_cents=0,
+                shipping_cents=0,
+                currency="usd",
+                created_at=datetime(2026, 7, 8, 10, 0, tzinfo=timezone.utc),
+            ),
+            Order(
+                user_id=test_user.id,
+                status="cancelled",
+                total_cents=9000,
+                tax_cents=0,
+                shipping_cents=0,
+                currency="usd",
+                created_at=datetime(2026, 7, 7, 10, 0, tzinfo=timezone.utc),
+            ),
+            Order(
+                user_id=test_user.id,
+                status="delivered",
+                total_cents=700,
+                tax_cents=0,
+                shipping_cents=0,
+                currency="usd",
+                created_at=datetime(2026, 6, 1, 10, 0, tzinfo=timezone.utc),
+            ),
+        ]
+    )
+    await db_session.commit()
+
+    trend = await fetch_revenue_trend(db_session, days=5, anchor=anchor)
+
+    assert len(trend["days"]) == 5
+    assert [point["date"] for point in trend["days"]] == [
+        (anchor - timedelta(days=offset)).isoformat() for offset in range(4, -1, -1)
+    ]
+    assert [point["revenue_cents"] for point in trend["days"]] == [0, 0, 800, 0, 1200]
+    assert trend["max_cents"] == 1200
+    assert trend["total_cents"] == 2000
+
+
+@pytest.mark.asyncio
+async def test_dashboard_renders_revenue_trend(client: AsyncClient, test_user, db_session):
+    cookies, _csrf = _admin_session(test_user.id)
+    db_session.add(
+        Order(
+            user_id=test_user.id,
+            status="paid",
+            total_cents=2500,
+            tax_cents=0,
+            shipping_cents=0,
+            currency="usd",
+        )
+    )
+    await db_session.commit()
+
+    response = await client.get("/admin/dashboard", cookies=cookies)
+
+    assert response.status_code == 200
+    assert "Revenue Trend" in response.text
+    assert "placeholder" not in response.text
+    assert "Collected $25.00 over the last 30 days." in response.text
+    assert "<circle" in response.text
+
+
+@pytest.mark.asyncio
+async def test_dashboard_supports_revenue_trend_range_options(client: AsyncClient, test_user, db_session):
+    cookies, _csrf = _admin_session(test_user.id)
+    db_session.add(
+        Order(
+            user_id=test_user.id,
+            status="paid",
+            total_cents=4000,
+            tax_cents=0,
+            shipping_cents=0,
+            currency="usd",
+            created_at=datetime.now(timezone.utc) - timedelta(days=45),
+        )
+    )
+    await db_session.commit()
+
+    response = await client.get("/admin/dashboard?range_days=90", cookies=cookies)
+
+    assert response.status_code == 200
+    assert 'href="/admin/dashboard?range_days=30"' in response.text
+    assert 'href="/admin/dashboard?range_days=90"' in response.text
+    assert 'href="/admin/dashboard?range_days=180"' in response.text
+    assert "Collected $40.00 over the last 90 days." in response.text
+    assert 'href="/admin/dashboard?range_days=90"' in response.text
+    assert 'aria-current="page"' in response.text
+
+
+@pytest.mark.asyncio
+async def test_dashboard_invalid_revenue_trend_range_falls_back_to_30_days(
+    client: AsyncClient, test_user, db_session
+):
+    cookies, _csrf = _admin_session(test_user.id)
+    db_session.add(
+        Order(
+            user_id=test_user.id,
+            status="paid",
+            total_cents=4000,
+            tax_cents=0,
+            shipping_cents=0,
+            currency="usd",
+            created_at=datetime.now(timezone.utc) - timedelta(days=45),
+        )
+    )
+    await db_session.commit()
+
+    response = await client.get("/admin/dashboard?range_days=365", cookies=cookies)
+
+    assert response.status_code == 200
+    assert "No collected revenue in the last 30 days." in response.text
 
 
 @pytest.mark.asyncio

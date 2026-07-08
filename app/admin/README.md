@@ -1,6 +1,6 @@
 # Admin panel
 
-Oshkelosh exposes two admin surfaces that share domain models and services but differ in transport and auth.
+Oshkelosh exposes three admin surfaces that share domain models and services but differ in transport and auth.
 
 ## HTML admin vs REST admin API
 
@@ -8,6 +8,7 @@ Oshkelosh exposes two admin surfaces that share domain models and services but d
 |---------|--------|------|----------|
 | **HTML admin** | `/admin/*` | Signed httponly session cookie (`ADMIN_SESSION_SECRET`) | Browser UI: Jinja templates, forms, redirects |
 | **REST admin API** | `/api/v1/admin/*` | Bearer JWT (`Authorization` header); user must have `is_admin=true` | Headless clients, scripts, SPA tooling |
+| **Resource admin endpoints** | `/api/v1/products/*`, `/api/v1/categories/*`, `/api/v1/media/*` | Bearer JWT (`Authorization` header); user must have `is_admin=true` | Product/category/media CRUD colocated with public resource routers |
 
 Route modules live under [`routes/`](routes/): `auth`, `dashboard`, `products`, `categories`, `users`, `orders`, `settings`, `addons`, `audit`, `misc`. They are composed in [`routes/__init__.py`](routes/__init__.py).
 
@@ -32,10 +33,11 @@ Manual products can edit variant rows; supplier-synced products show variant dat
 
 Mutating HTML forms require a CSRF token. The flow:
 
-1. **Login** — [`session.py`](session.py) issues a signed session payload containing a random `csrf` claim.
-2. **Per request** — [`require_admin_session`](routes/_deps.py) decodes the cookie, loads the admin user, and sets `request.state.csrf_token` from the session claim.
-3. **Templates** — `_common_ctx()` passes `csrf_token` into every page; forms include `<input type="hidden" name="csrf_token" …>`.
-4. **POST handlers** — accept `csrf_token: str = Form(...)`, then call `_require_csrf(request, csrf_token)` before any write.
+1. **Login form** — `/admin/login` uses a dedicated short-lived CSRF cookie to protect the initial sign-in POST.
+2. **Login success** — [`session.py`](session.py) issues a signed session payload containing a random `csrf` claim.
+3. **Per request** — [`require_admin_session`](routes/_deps.py) decodes the cookie, loads the admin user, and sets `request.state.csrf_token` from the session claim.
+4. **Templates** — `_common_ctx()` passes `csrf_token` into every page; forms include `<input type="hidden" name="csrf_token" …>`.
+5. **POST handlers** — accept `csrf_token: str = Form(...)`, then call `_require_csrf(request, csrf_token)` before any write.
 
 A mismatch returns `403 Invalid CSRF token`. The REST admin API does not use CSRF (Bearer tokens only).
 

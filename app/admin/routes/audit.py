@@ -18,6 +18,7 @@ from app.admin.routes._deps import (
     timezone,
     urlencode,
 )
+from app.config import settings
 
 router = APIRouter()
 
@@ -189,14 +190,14 @@ async def admin_audit_list(
     total_pages = max(1, (total + PAGE_SIZE - 1) // PAGE_SIZE)
     range_start = offset + 1 if total > 0 else 0
     range_end = min(offset + len(entries), total)
-    current_list_url = f"/admin/audit?{_audit_list_query(page, filters)}"
+    current_list_url = f"{settings.admin_prefix}/audit?{_audit_list_query(page, filters)}"
     prev_url = (
-        f"/admin/audit?{_audit_list_query(page - 1, filters)}"
+        f"{settings.admin_prefix}/audit?{_audit_list_query(page - 1, filters)}"
         if page > 1
         else None
     )
     next_url = (
-        f"/admin/audit?{_audit_list_query(page + 1, filters)}"
+        f"{settings.admin_prefix}/audit?{_audit_list_query(page + 1, filters)}"
         if page < total_pages
         else None
     )
@@ -257,7 +258,7 @@ async def admin_audit_detail(
         if entry.changes
         else None
     )
-    back_url = request.query_params.get("back") or "/admin/audit"
+    back_url = request.query_params.get("back") or f"{settings.admin_prefix}/audit"
 
     return _template(
         "audit_detail.html",

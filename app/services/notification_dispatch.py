@@ -13,6 +13,11 @@ from app.services.site_settings import get_site_settings
 logger = logging.getLogger(__name__)
 
 
+def _notification_succeeded(result: Any) -> bool:
+    """Require explicit addon success instead of treating missing keys as success."""
+    return isinstance(result, dict) and result.get("success") is True
+
+
 async def dispatch_notification(
     session: Any,
     event_key: str,
@@ -66,13 +71,15 @@ async def dispatch_notification(
                     rendered.body,
                     data={"event": event_key, **ctx},
                 )
-            if not result.get("success", True):
+            if not _notification_succeeded(result):
                 logger.warning(
                     "Notification %s/%s to %s failed: %s",
                     event_key,
                     channel,
                     recipient,
-                    result.get("error", "unknown"),
+                    result.get("error", "missing explicit success flag")
+                    if isinstance(result, dict)
+                    else "invalid addon response",
                 )
         except Exception:
             logger.exception(
