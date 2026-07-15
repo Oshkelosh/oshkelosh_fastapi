@@ -135,13 +135,14 @@ At minimum, set `JWT_SECRET_KEY`. Use `DEPLOYMENT_PROFILE=local` (default) for S
 
 **Postmark, Printful, and Stripe** credentials are **not** `.env` variables — configure them in the admin panel after the server is running (see step 6 below).
 
-**Local development (optional):** To work on addon packages without installing via the admin panel, initialize Git submodules:
+**Local development (optional):** To work on addon packages without installing via the admin panel, clone each addon repo into its category path:
 
 ```bash
-git submodule update --init --recursive
+git clone git@github.com:Oshkelosh/stripe.git app/addons/payments/stripe
+# …or any other Oshkelosh addon repo into the matching category path
 ```
 
-Submodules are for development only. Production installs addons through the admin panel.
+Local clones are for development only and stay untracked by this repo (category `.gitignore` rules). Production installs addons through the admin panel.
 
 ### 3. Create the first admin
 
@@ -152,8 +153,6 @@ Submodules are for development only. Production installs addons through the admi
 ```bash
 python scripts/create_admin.py --email admin@example.com --password 'YourSecurePass123!'
 ```
-
-Or set `ADMIN_EMAIL` and `ADMIN_PASSWORD` in `.env` and run `python scripts/create_admin.py` with no arguments.
 
 ### 4. Run the server
 
@@ -219,8 +218,8 @@ Backends are selected explicitly via `DEPLOYMENT_PROFILE` (or individual `DATABA
 
 | Profile | Database | Media storage | Use case |
 |---------|----------|---------------|----------|
-| `local` (default) | SQLite file | Local disk (`data/uploads`) | Development, Docker without Cloudflare |
-| `cloudflare_remote` | D1 HTTP API | R2 (S3 API) | FastAPI on VPS/Docker/Railway |
+| `local` (default) | SQLite file | Local disk (`data/uploads`) | Development or a single VM without Cloudflare |
+| `cloudflare_remote` | D1 HTTP API | R2 (S3 API) | FastAPI on a VPS with Cloudflare D1/R2 |
 | `cloudflare_workers` | D1 binding (stub) | R2 binding (stub) | Future Workers Python runtime |
 
 ### Local (`DEPLOYMENT_PROFILE=local`)
@@ -268,50 +267,157 @@ Check active backends: `GET /health` returns `database_backend` and `storage_bac
 
 ## Deployment
 
-### Cloudflare Pages (Recommended)
+### VM + NGINX (recommended)
 
-1. Push your code to Git
-2. Connect the repo to Cloudflare Pages
-3. Build settings:
-   - Framework preset: None
-   - Build command: `echo "No build step - app serves static files directly"`
-   - Build output directory: `frontend/dist`
-4. Add environment variables in the Cloudflare dashboard
-5. Deploy
+Run the app on a Linux VM with **systemd** (uvicorn) behind **NGINX** (TLS termination and reverse proxy). Use `DEPLOYMENT_PROFILE=local` for SQLite + disk media on the same machine, or `cloudflare_remote` if the VM talks to Cloudflare D1/R2.
 
-### Cloudflare Workers
-
-Use `wrangler.toml` to configure Workers deployment:
-
-```toml
-name = "oshkelosh"
-type = "python"
-workers_dev = true
-
-[vars]
-DEBUG = true
-```
-
-### Docker
-
-```dockerfile
-FROM python:3.11-slim
-WORKDIR /app
-COPY pyproject.toml README.md ./
-COPY app/ app/
-COPY models/ models/
-COPY schemas/ schemas/
-RUN pip install --no-cache-dir .
-COPY . .
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
-```
-
-After the container starts, complete setup at `/setup`, then install addons (storefront, payments, suppliers, etc.) from **Dashboard → Install addon** in the admin panel.
+#### 1. Install the app
 
 ```bash
-docker build -t oshkelosh .
-docker run -p 8000:8000 --env-file .env oshkelosh
+sudo useradd --system --create-home --shell /usr/sbin/nologin oshkelosh
+sudo mkdir -p /opt/oshkelosh
+sudo chown oshkelosh:oshkelosh /opt/oshkelosh
+
+# Switch to the service user (nologin account needs an explicit shell):
+sudo -u oshkelosh -s /bin/bash
+
+cd /opt/oshkelosh
+git clone https://github.com/Oshkelosh/oshkelosh_fastapi.git .
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e .
+
+cp .env.example .env
+# Generate secrets (32 hex chars each; run twice so they differ):
+openssl rand -hex 16
+# Edit .env — at minimum for production:
+#   APP_ENV=production
+#   DEBUG=false
+#   JWT_SECRET_KEY=<output of openssl rand -hex 16>
+#   ADMIN_SESSION_SECRET=<a different openssl rand -hex 16>
+#   PUBLIC_APP_URL=https://shop.example.com
+#   CORS_ORIGINS=https://shop.example.com
+#   TRUSTED_PROXY_IPS=127.0.0.1   # so rate limits see the real client IP
+# Plus D1/R2 vars if using cloudflare_remote
 ```
+
+Or run a one-off command without an interactive shell: `sudo -u oshkelosh bash -c 'cd /opt/oshkelosh && …'`.
+
+Ensure `data/` is writable by the service user (SQLite DB and/or local uploads, restart flag).
+
+#### 2. systemd unit
+
+Create a systemd unit so the app runs as the `oshkelosh` user on boot. Optionally add a second unit that restarts the app automatically after admin addon installs.
+
+**App unit** — uvicorn listens on localhost only; NGINX (next step) is the public front.
+
+`/etc/systemd/system/oshkelosh.service`:
+
+```ini
+[Unit]
+Description=Oshkelosh FastAPI
+After=network.target
+
+[Service]
+Type=simple
+User=oshkelosh
+Group=oshkelosh
+WorkingDirectory=/opt/oshkelosh
+EnvironmentFile=/opt/oshkelosh/.env
+ExecStart=/opt/oshkelosh/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000 --proxy-headers --forwarded-allow-ips=127.0.0.1
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+```
+
+**Addon restart (optional)** — After you install or update an addon in the admin UI, the app writes `data/restart.flag`. A small watcher polls that flag and runs a restart command. Skip this if you prefer to `systemctl restart oshkelosh` yourself after installs. See [`app/addons/README.md`](app/addons/README.md) for flag path / format overrides.
+
+First create `/etc/sudoers.d/oshkelosh` (as root, preferably with `sudo visudo -f /etc/sudoers.d/oshkelosh`) so the service user can restart the app without a password:
+
+```
+oshkelosh ALL=NOPASSWD: /bin/systemctl restart oshkelosh
+```
+
+Then create `/etc/systemd/system/oshkelosh-restart-watcher.service`:
+
+```ini
+[Unit]
+Description=Oshkelosh addon restart watcher
+After=oshkelosh.service
+Requires=oshkelosh.service
+
+[Service]
+Type=simple
+User=oshkelosh
+Group=oshkelosh
+WorkingDirectory=/opt/oshkelosh
+Environment=ADDON_INSTALL_RESTART_COMMAND=sudo systemctl restart oshkelosh
+ExecStart=/opt/oshkelosh/.venv/bin/python scripts/watch_addon_restart.py
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+```
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now oshkelosh
+# Optional — skip if you restart manually after addon installs:
+sudo systemctl enable --now oshkelosh-restart-watcher
+```
+
+#### 3. NGINX reverse proxy
+
+`/etc/nginx/sites-available/oshkelosh`:
+
+```nginx
+server {
+    listen 80;
+    server_name shop.example.com;
+
+    client_max_body_size 30m;  # addon ZIP uploads (default allow 25 MB)
+
+    location / {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Connection "";
+        proxy_read_timeout 60s;
+    }
+}
+```
+
+```bash
+sudo ln -s /etc/nginx/sites-available/oshkelosh /etc/nginx/sites-enabled/
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+Point the domain’s DNS **A** (or **AAAA**) record at this server’s public IP before requesting a certificate. Certbot’s HTTP challenge will fail if the name does not resolve here yet.
+
+```bash
+sudo certbot --nginx -d shop.example.com   # TLS via Let's Encrypt
+```
+
+Certbot rewrites the NGINX site for HTTPS. Use `https://shop.example.com` afterward — plain HTTP will redirect or fail depending on the config.
+
+If your DNS provider also **proxies** traffic (for example Cloudflare’s orange-cloud proxy), set that provider’s SSL/TLS mode so the hop from the proxy to this server is encrypted (**Full** or **Full (strict)**). With **Flexible** / HTTP-only to origin, browsers often cannot load the site after certbot enables HTTPS on NGINX.
+
+After TLS is enabled, keep `PUBLIC_APP_URL` and `CORS_ORIGINS` on `https://…`.
+
+#### 4. Go live
+
+1. Open `https://shop.example.com/setup` and create the first admin (or use `scripts/create_admin.py`).
+2. Sign in at `/admin`. Addons such as the storefront are **not** shipped by default — install them from **Dashboard → Install addon** (ZIP upload or HTTPS URL to a ZIP). For the reference storefront, use the GitHub source archive (includes `oshkelosh-addon.json` and a prebuilt `dist/`):
+   `https://github.com/Oshkelosh/default_frontend/archive/refs/heads/main.zip`
+   After install, restart the server (or rely on the addon-restart watcher), then enable and configure each addon under **Addons** (Stripe / Printful / Postmark, storefront, etc.).
+3. Schedule maintenance jobs (cron or similar) against the admin JSON endpoints — see [Scheduled maintenance](#scheduled-maintenance) above.
+
+See [`docs/SECURITY.md`](docs/SECURITY.md) for production secrets, CORS, and proxy IP trust.
 
 ## Testing
 

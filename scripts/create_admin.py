@@ -6,7 +6,6 @@ from __future__ import annotations
 import argparse
 import asyncio
 import getpass
-import os
 import sys
 from pathlib import Path
 
@@ -53,12 +52,8 @@ async def _run(email: str, password: str, full_name: str | None) -> int:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Create the first Oshkelosh admin user")
-    parser.add_argument("--email", default=os.environ.get("ADMIN_EMAIL"), help="Admin email")
-    parser.add_argument(
-        "--password",
-        default=os.environ.get("ADMIN_PASSWORD"),
-        help="Admin password (or set ADMIN_PASSWORD)",
-    )
+    parser.add_argument("--email", default=None, help="Admin email")
+    parser.add_argument("--password", default=None, help="Admin password")
     parser.add_argument("--full-name", default=None, help="Optional display name")
     args = parser.parse_args()
 

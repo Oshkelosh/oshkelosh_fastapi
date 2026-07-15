@@ -67,7 +67,8 @@ Thumbs.db
 # Logs
 *.log
 
-# Addon implementations live under category subdirs; see app/addons/*/.gitignore
-# (category README, base.py, __init__.py stay tracked)
+# Addon packages: local git clones or admin ZIP installs under category dirs
+# (see app/addons/*/.gitignore). Category README, base.py, __init__.py stay tracked.
+# Ignore submodule metadata so accidental `git submodule` use is never committed.
 .gitmodules
 .git/modules/

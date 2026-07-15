@@ -30,7 +30,7 @@ Oshkelosh keeps the **core as light as possible**. Core orchestrates commerce; a
 
 ```
 app/addons/<category>/<addon_name>/
-├── .gitignore           # each addon is its own Git repo (submodule)
+├── .gitignore           # each addon is its own Git repo (local clone for dev)
 ├── __init__.py          # package marker
 ├── addon.py             # main class (required for discovery)
 ├── routes.py            # optional API + admin routers
@@ -73,7 +73,7 @@ app/addons/<category>/<addon_name>/
 5. **Optional routers:**
    - `get_routers()` → public REST under `/api/v1/...`
    - `get_admin_routes()` → admin HTML under `/admin/...`
-6. **Add `.gitignore`** — each addon package is tracked in its own Git repo (submodule); ignore `__pycache__/`, local `.env`, and editor caches (frontends also ignore `node_modules/`, `dist/`, etc.).
+6. **Add `.gitignore`** — each addon package is tracked in its own Git repo; ignore `__pycache__/`, local `.env`, and editor caches (frontends also ignore `node_modules/`, `dist/`, etc.).
 7. **Use structured logging** — import from [`log.py`](log.py); log init and recoverable errors with a `[Provider]` prefix (see **Logging** below).
 8. **Enable in admin** under the matching category list (Suppliers, Payments, Frontends, Tools) and fill configuration.
 
@@ -83,24 +83,33 @@ Addon packages are installed from the **admin panel** — **Dashboard → Instal
 
 Built-in addons that ship with the host repo: `manual` supplier and `sso` tool. All other addons (storefront, payments, suppliers, notifications) are installed via the admin panel in production and on fresh deploys.
 
-### Maintainers: submodule workflow (development only)
+### Maintainers: local clone workflow (development only)
 
-Each addon package lives in its own Git repository. The host repo tracks addon paths as submodules (see [`.gitmodules`](../../.gitmodules)) for **local development convenience only** — not for production installs.
+Each non-built-in addon package lives in its **own Git repository**. For local development, clone it into the matching category path. The host repo does **not** track these packages (and must not use Git submodules). Production and fresh deploys install addons **only** via the admin dashboard (ZIP or HTTPS URL).
 
 ```bash
-git submodule update --init --recursive
+git clone git@github.com:Oshkelosh/stripe.git app/addons/payments/stripe
+git clone git@github.com:Oshkelosh/default_frontend.git app/addons/frontends/default
 cd app/addons/frontends/default && git checkout dev
 ```
 
-Category-level `.gitignore` rules (`*/`) keep non-built-in addon dirs out of the host repo; only submodule pointers are tracked.
+Category-level `.gitignore` rules (`*/`, with exceptions like `!manual/` and `!sso/`) keep cloned addon dirs out of the host index. From inside a cloned addon directory, `git status` and `git rev-parse --show-toplevel` refer to the **addon** repo (nested `.git`). From the host root, `git status` is the main repo; ignored addon dirs do not appear as host changes. Admin ZIP installs without a nested `.git` are not separate repos — `git status` there falls through to the host.
 
-Every addon repo should commit its own `.gitignore` at the package root (Python addons: caches, local `.env`, editor files; frontends: also `node_modules/`, build output).
+**Do not** add addons with `git submodule add`. If an older checkout still has leftover submodule config:
+
+```bash
+git config --local --get-regexp '^submodule\.'   # list leftovers
+# remove matching submodule.* keys from .git/config, delete .git/modules/<path> if present
+```
+
+Every addon repo should commit its own `.gitignore` at the package root (Python addons: caches, local `.env`, editor files; frontends: also `node_modules/` and `.svelte-kit/`). Frontend packages that distribute via GitHub source archives should **commit** `dist/` (do not gitignore it).
 
 **Checklist for `default_frontend` (separate repo):**
 
-1. Develop the SPA on the `dev` branch (`source/`, npm, etc.).
-2. Before release: run `npm run build`, ensure `oshkelosh-addon.json` at the repo root, and package a ZIP with `dist/` for admin install.
-3. Distribute via admin panel install (ZIP or HTTPS URL to the release archive).
+1. Develop the SPA in `source/` (`npm run dev`).
+2. Keep `oshkelosh-addon.json` at the repo root and commit a built `dist/` (`cd source && npm run build`).
+3. Distribute via Admin → Install addon using the raw GitHub archive URL (no separate release required):
+   `https://github.com/Oshkelosh/default_frontend/archive/refs/heads/main.zip`
 
 Expected **shippable addon package layout** (repo root = addon package):
 
@@ -111,7 +120,7 @@ __init__.py
 addon.py
 routes.py
 templates/
-dist/          # frontends only
+dist/          # frontends only — committed for ZIP / GitHub archive install
 README.md
 ```
 
@@ -119,18 +128,26 @@ README.md
 
 ### ZIP layout
 
+Accepted layouts (manifest must appear exactly once):
+
+1. Nested category path (singular **or** plural category folder):
+
 ```
-<category>/<addon_id>/
+<category>/<addon_id>/          # e.g. frontend/default/ or frontends/default/
   oshkelosh-addon.json
   __init__.py
   addon.py
   routes.py              # optional
-  templates/ static/ dist/  # optional
+  templates/ static/ dist/  # optional (dist/ required for frontends)
 ```
 
-Include a `.gitignore` in addon repos (recommended for submodule development; not required for ZIP install validation).
+2. Flat addon root (manifest at ZIP root).
 
-Alternatively, the ZIP root may be the addon folder itself (manifest at the root) when `category` and `addon_id` in the manifest match the intended install path.
+3. GitHub source archive: a single top-level wrapper folder (e.g. `default_frontend-main/`) containing the addon package. The wrapper name need not match `addon_id`.
+
+Manifest `category` is singular (`frontend`, `tool`, …). The installer writes into the plural discovery directories (`frontends/`, `tools/`, …).
+
+Include a `.gitignore` in addon repos (recommended for local clone development; not required for ZIP install validation).
 
 ### Manifest (`oshkelosh-addon.json`)
 
@@ -139,7 +156,7 @@ Alternatively, the ZIP root may be the addon folder itself (manifest at the root
 | `addon_id` | yes | Lowercase identifier; must match folder name |
 | `addon_name` | yes | Display name |
 | `addon_description` | no | Short description |
-| `category` | yes | `supplier`, `payment`, `notification`, `frontend`, or `tool` |
+| `category` | yes | Singular: `supplier`, `payment`, `notification`, `frontend`, or `tool` (installs under `suppliers/`, `payments/`, …) |
 | `version` | yes | Addon semver string |
 | `min_oshkelosh_version` | yes | Minimum host version (compare to `APP_VERSION`) |
 | `max_oshkelosh_version` | no | Maximum supported host version |
@@ -159,7 +176,7 @@ Example:
 }
 ```
 
-Install validates manifest fields, required files, version compatibility, and that `addon.py` defines exactly one concrete `BaseAddon` subclass matching the manifest.
+Install validates manifest fields, required files, version compatibility, that `addon.py` defines exactly one concrete `BaseAddon` subclass matching the manifest, and that frontend addons include a built `dist/index.html`.
 
 ### Restart flag and watcher
 
@@ -395,7 +412,7 @@ pytest app/addons/payments/stripe/tests -q          # one addon
 pytest tests/test_addons.py tests/test_addon_integration.py -q   # host addon wiring only
 ```
 
-In a standalone addon repo (submodule), install the host as an editable dev dependency and run `pytest tests/` from the addon root:
+In a standalone addon repo (local clone), install the host as an editable dev dependency and run `pytest tests/` from the addon root:
 
 ```bash
 pip install -e /path/to/oshkelosh_fastapi[dev]
@@ -445,4 +462,4 @@ Each addon package includes its own `README.md` with provider-specific config, r
 | `stripe`, `paypal`, `mangopay`, `adyen`, `checkout`, `mollie`, `worldpay`, `airwallex`, `rapyd` | payment | `payments/<id>/` | `<id>/README.md` when installed |
 | `printful`, `printify`, `gelato`, `prodigi`, `gooten`, `cjdropshipping`, `customcat`, `spreadconnect`, `podbase` | supplier | `suppliers/<id>/` | `<id>/README.md` when installed |
 
-Install addons from the admin dashboard (ZIP/URL), or use Git submodules for local development.
+Install addons from the admin dashboard (ZIP/URL), or use a local `git clone` into `app/addons/<category>/<id>/` for development.

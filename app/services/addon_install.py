@@ -30,6 +30,14 @@ from schemas.addon_manifest import AddonManifest
 
 _ADDONS_ROOT = Path(__file__).resolve().parent.parent / "addons"
 _MANIFEST_NAME = "oshkelosh-addon.json"
+# Manifest categories are singular; on-disk discovery dirs are plural.
+_CATEGORY_INSTALL_DIRS = {
+    "supplier": "suppliers",
+    "payment": "payments",
+    "notification": "notifications",
+    "frontend": "frontends",
+    "tool": "tools",
+}
 _PRIVATE_NETWORKS = (
     ipaddress.ip_network("0.0.0.0/8"),
     ipaddress.ip_network("10.0.0.0/8"),
@@ -41,6 +49,13 @@ _PRIVATE_NETWORKS = (
     ipaddress.ip_network("fc00::/7"),
     ipaddress.ip_network("fe80::/10"),
 )
+
+
+def _category_install_dir(category: str) -> str:
+    try:
+        return _CATEGORY_INSTALL_DIRS[category]
+    except KeyError as exc:
+        raise ValidationError(message=f"Unknown addon category: {category}") from exc
 
 
 @dataclass(frozen=True)
@@ -225,7 +240,8 @@ def _validate_layout(addon_root: Path, extract_dir: Path, manifest: AddonManifes
     parts = relative.parts
     if len(parts) == 2:
         category_dir, addon_dir = parts
-        if category_dir != manifest.category:
+        allowed_dirs = {manifest.category, _category_install_dir(manifest.category)}
+        if category_dir not in allowed_dirs:
             raise ValidationError(
                 message=(
                     f"Archive path {category_dir}/{addon_dir} does not match "
@@ -239,7 +255,8 @@ def _validate_layout(addon_root: Path, extract_dir: Path, manifest: AddonManifes
                     f"manifest addon_id '{manifest.addon_id}'"
                 )
             )
-    elif len(parts) == 0:
+    elif len(parts) in (0, 1):
+        # Flat root (len 0) or GitHub-style single wrapper folder (len 1).
         pass
     else:
         raise ValidationError(
@@ -252,6 +269,11 @@ def _validate_layout(addon_root: Path, extract_dir: Path, manifest: AddonManifes
     for required in ("__init__.py", "addon.py"):
         if not (addon_root / required).is_file():
             raise ValidationError(message=f"Addon archive missing required file: {required}")
+
+    if manifest.category == "frontend" and not (addon_root / "dist" / "index.html").is_file():
+        raise ValidationError(
+            message="Frontend addon archive must include a built dist/index.html"
+        )
 
 
 def _verify_addon_class(addon_root: Path, manifest: AddonManifest) -> None:
@@ -327,7 +349,7 @@ def _write_restart_flag(manifest: AddonManifest, cfg: Settings) -> Path | None:
 
 
 def _install_tree(addon_root: Path, manifest: AddonManifest, force: bool) -> Path:
-    target = get_addons_root() / manifest.category / manifest.addon_id
+    target = get_addons_root() / _category_install_dir(manifest.category) / manifest.addon_id
     if target.exists():
         if not force:
             raise ValidationError(
