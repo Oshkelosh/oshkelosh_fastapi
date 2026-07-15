@@ -305,4 +305,28 @@
         </div>
     </div>
 </div>
+
+{% if host_self_update_enabled %}
+<div class="card" style="margin-bottom:24px;">
+    <div class="card__header">
+        <h2 class="card__title">Update Oshkelosh</h2>
+    </div>
+    <div class="card__body">
+        <p style="color:var(--clr-text-muted);margin:0 0 16px;font-size:14px;">
+            Pull the latest commit from the install's git remote (<code>git pull --ff-only</code>),
+            run <code>pip install -e .</code>, then request a restart.
+            Current version: <strong>{{ app_version }}</strong>.
+            Requires a clean working tree under the service user.
+        </p>
+        <form method="POST" action="{{ admin_prefix }}/system/update">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <label style="display:flex;align-items:center;gap:8px;margin-bottom:12px;font-size:14px;">
+                <input type="checkbox" name="confirm" value="on" required>
+                I understand this updates the live server codebase
+            </label>
+            <button type="submit" class="btn btn--primary btn--sm">Update Oshkelosh</button>
+        </form>
+    </div>
+</div>
+{% endif %}
 {% endblock %}

@@ -5,6 +5,7 @@ from app.admin.routes._deps import (
     Any,
     Depends,
     Dict,
+    Form,
     Request,
     _common_ctx,
     _template,
@@ -211,6 +212,72 @@ async def admin_dashboard(request: Request, db=Depends(require_admin_session)):
         **_common_ctx(request, "Dashboard"),
         restart_flag_enabled=settings.addon_install_restart_flag_path is not None,
         restart_flag_path=settings.addon_install_restart_flag_file or "",
+        host_self_update_enabled=settings.host_self_update_enabled,
+        app_version=settings.app_version,
         **stats,
         **operational,
     )
+
+
+@router.post("/system/update")
+async def admin_host_update(
+    request: Request,
+    csrf_token: str = Form(..., max_length=128),
+    confirm: str = Form("off", max_length=8),
+    db=Depends(require_admin_session),
+):
+    """Fast-forward pull the host git repo and request a process restart."""
+    from fastapi.responses import RedirectResponse
+
+    from app.admin.routes._deps import _require_csrf, set_flash_cookie
+    from app.core.exceptions import ValidationError
+    from app.services.host_update import update_host_from_git
+
+    _require_csrf(request, csrf_token)
+    resp = RedirectResponse(url=f"{settings.admin_prefix}/dashboard", status_code=302)
+
+    if confirm != "on":
+        set_flash_cookie(resp, "Confirm the host update checkbox to continue.")
+        return resp
+
+    try:
+        result = update_host_from_git()
+    except ValidationError as e:
+        set_flash_cookie(resp, e.message)
+        return resp
+    except Exception as e:
+        set_flash_cookie(resp, f"Host update failed: {e}")
+        return resp
+
+    if db is not None:
+        from app.services.audit import admin_request_meta, log_change
+
+        actor_user_id, ip_address = admin_request_meta(request)
+        await log_change(
+            db,
+            actor_user_id=actor_user_id,
+            action="update",
+            resource_type="host",
+            resource_id="oshkelosh",
+            changes={
+                "branch": result.branch,
+                "previous_commit": result.previous_commit,
+                "new_commit": result.new_commit,
+            },
+            ip_address=ip_address,
+            detail=(
+                f"Host updated on {result.branch}: "
+                f"{result.previous_commit[:7]} → {result.new_commit[:7]}"
+            ),
+        )
+        await db.commit()
+
+    msg = (
+        f"Oshkelosh updated on {result.branch} "
+        f"({result.previous_commit[:7]} → {result.new_commit[:7]}). "
+        "Restart the server to load the new code."
+    )
+    if result.restart_flag_written and result.restart_flag_path:
+        msg += f" A restart flag was written to {result.restart_flag_path}."
+    set_flash_cookie(resp, msg)
+    return resp

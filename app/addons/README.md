@@ -161,6 +161,7 @@ Include a `.gitignore` in addon repos (recommended for local clone development; 
 | `min_oshkelosh_version` | yes | Minimum host version (compare to `APP_VERSION`) |
 | `max_oshkelosh_version` | no | Maximum supported host version |
 | `python_requires` | no | PEP 440 specifier (default `>=3.11`) |
+| `source_url` | no | HTTPS URL used by Admin → Update (GitHub repo or ZIP). Set automatically on URL install. |
 
 Example:
 

@@ -112,6 +112,12 @@
       <a href="{{ addon.configure_url }}" class="btn btn--primary btn--sm">
         {% if addon.has_config %}Configure{% else %}Setup{% endif %}
       </a>
+      {% if addon.can_update %}
+      <form method="POST" action="{{ admin_prefix }}/addons/{{ addon.addon_id }}/update" style="display:inline;">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button type="submit" class="btn btn--secondary btn--sm">Update</button>
+      </form>
+      {% endif %}
       {% if is_suppliers_page and addon.supports_sync %}
       <a href="{{ addon.configure_url }}" class="btn btn--secondary btn--sm">Sync</a>
       {% endif %}

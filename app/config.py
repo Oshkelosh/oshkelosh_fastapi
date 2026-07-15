@@ -281,6 +281,14 @@ class Settings(BaseSettings):
         default="json",
         description="Payload format for the restart flag file",
     )
+    host_self_update_enabled: bool = Field(
+        default=False,
+        description="Allow Admin Dashboard to git-pull and restart this host install",
+    )
+    host_repo_root: Optional[str] = Field(
+        default=None,
+        description="Git working tree for host self-update (empty = current working directory)",
+    )
 
     @field_validator("addon_install_allowed_hosts", mode="before")
     @classmethod
@@ -296,6 +304,12 @@ class Settings(BaseSettings):
         if not self.addon_install_restart_flag_file or not self.addon_install_restart_flag_file.strip():
             return None
         return Path(self.addon_install_restart_flag_file)
+
+    @property
+    def host_repo_root_path(self) -> Path:
+        if self.host_repo_root and self.host_repo_root.strip():
+            return Path(self.host_repo_root).resolve()
+        return Path.cwd().resolve()
 
     @model_validator(mode="after")
     def apply_deployment_profile(self) -> "Settings":

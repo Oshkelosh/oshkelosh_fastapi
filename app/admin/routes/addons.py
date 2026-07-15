@@ -106,6 +106,13 @@ async def _admin_addon_category_list(
         and not (category == "supplier" and a["addon_id"] == "manual")
     ]
 
+    from app.services.addon_install import read_installed_manifest
+
+    for addon in addons:
+        installed = read_installed_manifest(addon["addon_id"], addon["addon_category"])
+        addon["source_url"] = installed.source_url if installed else None
+        addon["can_update"] = bool(addon["source_url"])
+
     if category == "supplier":
         from app.addons.registry import addon_registry
 
@@ -550,6 +557,72 @@ async def admin_addon_install_url(
     redirect_url = _addon_list_path(result.category)
     resp = RedirectResponse(url=redirect_url, status_code=302)
     set_flash_cookie(resp, _addon_install_success_message(result))
+    return resp
+
+
+@router.post("/addons/{addon_id}/update")
+async def admin_addon_update(
+    request: Request,
+    addon_id: str,
+    csrf_token: str = Form(..., max_length=128),
+    db=Depends(require_admin_session),
+):
+    """Re-install an addon from its recorded source_url (force replace)."""
+    from app.addons.registry import addon_registry
+    from app.core.exceptions import ValidationError
+    from app.services.addon_install import install_addon_from_url, read_installed_manifest
+
+    _require_csrf(request, csrf_token)
+
+    addon = addon_registry.get(addon_id)
+    if addon is None:
+        return _addon_install_error_redirect(request, f"Unknown addon: {addon_id}")
+
+    manifest = read_installed_manifest(addon_id, addon.addon_category)
+    if manifest is None or not manifest.source_url:
+        return _addon_install_error_redirect(
+            request,
+            f"Addon '{addon_id}' has no source_url in oshkelosh-addon.json; "
+            "reinstall from URL once to enable updates.",
+        )
+
+    try:
+        result = await install_addon_from_url(manifest.source_url, force=True)
+    except ValidationError as exc:
+        return _addon_install_error_redirect(request, exc.message)
+    except Exception as exc:
+        return _addon_install_error_redirect(request, f"Update failed: {exc}")
+
+    if db is not None:
+        from app.services.audit import admin_request_meta, log_change
+
+        actor_user_id, ip_address = admin_request_meta(request)
+        await log_change(
+            db,
+            actor_user_id=actor_user_id,
+            action="update",
+            resource_type="addon",
+            resource_id=result.addon_id,
+            changes={
+                "addon_id": result.addon_id,
+                "category": result.category,
+                "version": result.version,
+                "source_url": manifest.source_url,
+            },
+            ip_address=ip_address,
+            detail=f"Updated addon '{result.addon_name}' to v{result.version}",
+        )
+        await db.commit()
+
+    redirect_url = _addon_list_path(result.category)
+    resp = RedirectResponse(url=redirect_url, status_code=302)
+    msg = (
+        f"{result.addon_name} updated to v{result.version}. "
+        "Restart the server to load the new version."
+    )
+    if result.restart_flag_written and result.restart_flag_path:
+        msg += f" A restart flag was written to {result.restart_flag_path}."
+    set_flash_cookie(resp, msg)
     return resp
 
 

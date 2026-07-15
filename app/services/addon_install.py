@@ -395,11 +395,33 @@ def _install_tree(addon_root: Path, manifest: AddonManifest, force: bool) -> Pat
     return target
 
 
+def _write_manifest_source_url(target: Path, source_url: str) -> None:
+    """Persist normalized source_url onto the installed oshkelosh-addon.json."""
+    manifest_path = target / _MANIFEST_NAME
+    if not manifest_path.is_file():
+        return
+    raw = json.loads(manifest_path.read_text(encoding="utf-8"))
+    raw["source_url"] = source_url
+    manifest_path.write_text(json.dumps(raw, indent=2) + "\n", encoding="utf-8")
+
+
+def read_installed_manifest(addon_id: str, category: str) -> AddonManifest | None:
+    """Load oshkelosh-addon.json for an installed addon, if present."""
+    path = get_addons_root() / _category_install_dir(category) / addon_id / _MANIFEST_NAME
+    if not path.is_file():
+        return None
+    try:
+        return AddonManifest.model_validate(json.loads(path.read_text(encoding="utf-8")))
+    except (json.JSONDecodeError, ValueError):
+        return None
+
+
 def install_addon_archive(
     archive_bytes: bytes,
     *,
     force: bool = False,
     write_restart_flag: bool = True,
+    source_url: str | None = None,
     cfg: Settings | None = None,
 ) -> AddonInstallResult:
     """Validate and install an addon ZIP archive."""
@@ -415,7 +437,9 @@ def install_addon_archive(
         _check_host_version(manifest, cfg.app_version)
         _check_python_requires(manifest.python_requires)
         _verify_addon_class(addon_root, manifest)
-        _install_tree(addon_root, manifest, force=force)
+        target = _install_tree(addon_root, manifest, force=force)
+        if source_url:
+            _write_manifest_source_url(target, source_url)
 
     flag_path = _write_restart_flag(manifest, cfg) if write_restart_flag else None
     return AddonInstallResult(
@@ -437,10 +461,12 @@ async def install_addon_from_url(
     cfg: Settings | None = None,
 ) -> AddonInstallResult:
     cfg = cfg or settings
-    archive_bytes = await download_addon_archive(url, cfg)
+    normalized = validate_install_url(url, cfg)
+    archive_bytes = await download_addon_archive(normalized, cfg)
     return install_addon_archive(
         archive_bytes,
         force=force,
         write_restart_flag=write_restart_flag,
+        source_url=normalized,
         cfg=cfg,
     )

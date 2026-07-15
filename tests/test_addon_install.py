@@ -363,6 +363,29 @@ async def test_install_from_url(install_root: Path, install_settings: Settings):
 
     assert result.addon_id == "test_install"
     assert (install_root / "tools" / "test_install").is_dir()
+    installed = addon_install.read_installed_manifest("test_install", "tool")
+    assert installed is not None
+    assert installed.source_url == url
+
+
+def test_install_archive_persists_source_url_override(
+    install_root: Path,
+    install_settings: Settings,
+):
+    data = _build_addon_zip()
+    source = "https://github.com/Oshkelosh/example"
+    addon_install.install_addon_archive(
+        data,
+        cfg=install_settings,
+        source_url=source,
+    )
+    installed = addon_install.read_installed_manifest("test_install", "tool")
+    assert installed is not None
+    assert installed.source_url == source
+
+
+def test_read_installed_manifest_missing(install_root: Path):
+    assert addon_install.read_installed_manifest("nope", "tool") is None
 
 
 def test_install_archive_respects_write_restart_flag_false(
