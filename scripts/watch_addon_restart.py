@@ -49,7 +49,7 @@ def _resolve_restart_command() -> str:
     return command
 
 
-def _run_restart(command: str) -> None:
+def _run_restart(command: str) -> bool:
     print(f"Running restart command: {command}")
     result = subprocess.run(
         command,
@@ -64,7 +64,8 @@ def _run_restart(command: str) -> None:
         print(result.stderr, end="" if result.stderr.endswith("\n") else "\n", file=sys.stderr)
     if result.returncode != 0:
         print(f"Restart command failed with exit code {result.returncode}", file=sys.stderr)
-        raise SystemExit(result.returncode)
+        return False
+    return True
 
 
 def _handle_flag(flag_path: Path, restart_command: str) -> None:
@@ -78,13 +79,15 @@ def _handle_flag(flag_path: Path, restart_command: str) -> None:
         print(f"Restart flag detected at {flag_path}")
         print(payload)
 
-    _run_restart(restart_command)
-
+    # Consume the flag before restarting so an interrupted restart cannot loop.
     try:
         flag_path.unlink(missing_ok=True)
         print(f"Removed flag file {flag_path}")
     except OSError as exc:
         print(f"Warning: could not remove flag file {flag_path}: {exc}", file=sys.stderr)
+        return
+
+    _run_restart(restart_command)
 
 
 def watch(flag_path: Path, restart_command: str, poll_interval: float) -> None:

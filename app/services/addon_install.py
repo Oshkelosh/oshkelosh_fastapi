@@ -301,44 +301,105 @@ def _validate_layout(addon_root: Path, extract_dir: Path, manifest: AddonManifes
 
 
 def _verify_addon_class(addon_root: Path, manifest: AddonManifest) -> None:
-    addon_py = addon_root / "addon.py"
-    module_name = f"oshkelosh_addon_verify.{manifest.category}.{manifest.addon_id}"
-    spec = importlib.util.spec_from_file_location(module_name, addon_py)
-    if spec is None or spec.loader is None:
-        raise ValidationError(message="Could not load addon.py for verification")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    """Load extracted addon as ``app.addons.<plural>.<addon_id>`` so sibling imports work."""
+    import types
 
-    candidates: list[type] = []
-    for _, obj in inspect.getmembers(module, inspect.isclass):
-        if (
-            issubclass(obj, BaseAddon)
-            and obj is not BaseAddon
-            and not inspect.isabstract(obj)
-            and obj.__module__ == module.__name__
-        ):
-            candidates.append(obj)
+    plural = _category_install_dir(manifest.category)
+    parent_name = f"app.addons.{plural}"
+    package_name = f"{parent_name}.{manifest.addon_id}"
+    addon_module_name = f"{package_name}.addon"
 
-    if len(candidates) != 1:
-        raise ValidationError(
-            message="addon.py must define exactly one concrete BaseAddon subclass"
-        )
+    # Remember what we inject so we can remove temp extract shadowing afterward.
+    registered: list[str] = []
+    preexisting = {
+        name: sys.modules[name]
+        for name in list(sys.modules)
+        if name == package_name or name.startswith(package_name + ".")
+    }
 
-    instance = candidates[0]()
-    if instance.addon_id != manifest.addon_id:
-        raise ValidationError(
-            message=(
-                f"Addon class addon_id '{instance.addon_id}' "
-                f"does not match manifest '{manifest.addon_id}'"
+    try:
+        try:
+            importlib.import_module(parent_name)
+        except ModuleNotFoundError as exc:
+            raise ValidationError(
+                message=f"Host package '{parent_name}' is not available for addon verification"
+            ) from exc
+
+        init_py = addon_root / "__init__.py"
+        pkg = types.ModuleType(package_name)
+        pkg.__path__ = [str(addon_root.resolve())]
+        pkg.__file__ = str(init_py.resolve()) if init_py.is_file() else None
+        pkg.__package__ = package_name
+        sys.modules[package_name] = pkg
+        registered.append(package_name)
+
+        if init_py.is_file():
+            init_spec = importlib.util.spec_from_file_location(
+                package_name,
+                init_py,
+                submodule_search_locations=[str(addon_root.resolve())],
             )
-        )
-    if instance.addon_category != manifest.category:
-        raise ValidationError(
-            message=(
-                f"Addon class category '{instance.addon_category}' "
-                f"does not match manifest '{manifest.category}'"
+            if init_spec is None or init_spec.loader is None:
+                raise ValidationError(message="Could not load addon __init__.py for verification")
+            init_spec.loader.exec_module(pkg)
+
+        addon_py = addon_root / "addon.py"
+        spec = importlib.util.spec_from_file_location(addon_module_name, addon_py)
+        if spec is None or spec.loader is None:
+            raise ValidationError(message="Could not load addon.py for verification")
+        module = importlib.util.module_from_spec(spec)
+        module.__package__ = package_name
+        sys.modules[addon_module_name] = module
+        registered.append(addon_module_name)
+        spec.loader.exec_module(module)
+
+        # Track any sibling modules pulled in during exec (catalog, client, …).
+        for name in list(sys.modules):
+            if name == package_name or name.startswith(package_name + "."):
+                if name not in registered:
+                    registered.append(name)
+
+        candidates: list[type] = []
+        for _, obj in inspect.getmembers(module, inspect.isclass):
+            if (
+                issubclass(obj, BaseAddon)
+                and obj is not BaseAddon
+                and not inspect.isabstract(obj)
+                and obj.__module__ == module.__name__
+            ):
+                candidates.append(obj)
+
+        if len(candidates) != 1:
+            raise ValidationError(
+                message="addon.py must define exactly one concrete BaseAddon subclass"
             )
-        )
+
+        instance = candidates[0]()
+        if instance.addon_id != manifest.addon_id:
+            raise ValidationError(
+                message=(
+                    f"Addon class addon_id '{instance.addon_id}' "
+                    f"does not match manifest '{manifest.addon_id}'"
+                )
+            )
+        if instance.addon_category != manifest.category:
+            raise ValidationError(
+                message=(
+                    f"Addon class category '{instance.addon_category}' "
+                    f"does not match manifest '{manifest.category}'"
+                )
+            )
+    except ValidationError:
+        raise
+    except Exception as exc:
+        raise ValidationError(
+            message=f"Failed to verify addon.py: {exc}"
+        ) from exc
+    finally:
+        for name in registered:
+            sys.modules.pop(name, None)
+        # Restore any pre-existing modules of the same names (already-installed addon).
+        sys.modules.update(preexisting)
 
 
 def _write_restart_flag(manifest: AddonManifest, cfg: Settings) -> Path | None:

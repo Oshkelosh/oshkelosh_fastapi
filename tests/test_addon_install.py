@@ -94,6 +94,37 @@ class TestFrontendAddon(FrontendAddon):
         return str(Path(__file__).resolve().parent / "dist")
 '''
 
+MULTI_MODULE_ADDON_PY = '''
+from pydantic import BaseModel
+
+from app.addons.tools.base import ToolAddon
+from app.addons.tools.test_install.helper import FLAG
+
+
+class TestInstallConfig(BaseModel):
+    pass
+
+
+class TestInstallAddon(ToolAddon):
+    addon_id = "test_install"
+    addon_name = "Test Install"
+    addon_description = "Test addon for install"
+    version = "1.0.0"
+    helper_flag = FLAG
+
+    @classmethod
+    def config_schema(cls):
+        return TestInstallConfig
+
+    async def initialize(self, config: dict) -> None:
+        pass
+
+    async def shutdown(self) -> None:
+        pass
+'''
+
+MULTI_MODULE_HELPER_PY = 'FLAG = "from-helper-module"\n'
+
 
 def _build_addon_zip(
     *,
@@ -184,6 +215,19 @@ def test_install_valid_zip(install_root: Path, install_settings: Settings):
     flag = json.loads(install_settings.addon_install_restart_flag_path.read_text())
     assert flag["addon_id"] == "test_install"
     assert flag["host_version"] == "0.1.0"
+
+
+def test_install_multimodule_sibling_imports(install_root: Path, install_settings: Settings):
+    """Sibling absolute imports (as Printful uses) must verify from the extract tree."""
+    data = _build_addon_zip(
+        addon_py=MULTI_MODULE_ADDON_PY,
+        extra_files={"helper.py": MULTI_MODULE_HELPER_PY.encode()},
+    )
+    result = addon_install.install_addon_archive(data, cfg=install_settings)
+    assert result.addon_id == "test_install"
+    assert (install_root / "tools" / "test_install" / "helper.py").is_file()
+    # Temp verify modules must not shadow the installed package path permanently.
+    assert "app.addons.tools.test_install" not in __import__("sys").modules
 
 
 def test_reject_zip_slip(install_root: Path, install_settings: Settings):

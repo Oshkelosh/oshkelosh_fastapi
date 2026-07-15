@@ -340,13 +340,12 @@ First create `/etc/sudoers.d/oshkelosh` (as root, preferably with `sudo visudo -
 oshkelosh ALL=NOPASSWD: /bin/systemctl restart oshkelosh
 ```
 
-Then create `/etc/systemd/system/oshkelosh-restart-watcher.service`:
+Then create `/etc/systemd/system/oshkelosh-restart-watcher.service`. Use `After=` only — do **not** use `Requires=` / `BindsTo=` / `PartOf=` on `oshkelosh.service`, or restarting the app will stop the watcher mid-cycle and can leave a stale flag that loops until start-limit.
 
 ```ini
 [Unit]
 Description=Oshkelosh addon restart watcher
 After=oshkelosh.service
-Requires=oshkelosh.service
 
 [Service]
 Type=simple

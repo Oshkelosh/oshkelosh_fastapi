@@ -48,6 +48,7 @@ def test_restarts_and_removes_flag(tmp_path: Path):
 
     def fake_run(command, **kwargs):
         ran.append(command)
+        assert not flag.exists(), "flag should be consumed before restart"
 
         class Result:
             returncode = 0
@@ -61,4 +62,28 @@ def test_restarts_and_removes_flag(tmp_path: Path):
         watcher._handle_flag(flag, "echo restarted")
 
     assert ran == ["echo restarted"]
+    assert not flag.exists()
+
+
+def test_failed_restart_still_consumes_flag(tmp_path: Path):
+    flag = tmp_path / "restart.flag"
+    flag.write_text('{"reason": "addon_installed"}\n', encoding="utf-8")
+    ran: list[str] = []
+
+    def fake_run(command, **kwargs):
+        ran.append(command)
+        assert not flag.exists(), "flag should be consumed before restart"
+
+        class Result:
+            returncode = 1
+            stdout = ""
+            stderr = "boom\n"
+
+        return Result()
+
+    watcher = _load_watcher()
+    with patch("subprocess.run", side_effect=fake_run):
+        watcher._handle_flag(flag, "false")
+
+    assert ran == ["false"]
     assert not flag.exists()
