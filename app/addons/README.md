@@ -205,6 +205,8 @@ With `uvicorn --reload`, file changes under `app/addons/` may reload automatical
 
 Other install settings: `ADDON_INSTALL_MAX_BYTES` (default 25 MB), `ADDON_INSTALL_ALLOWED_HOSTS` (comma-separated HTTPS host allowlist for URL installs).
 
+**URL install:** paste either a direct HTTPS ZIP URL or a bare GitHub repository URL such as `https://github.com/Oshkelosh/stripe`. Repo page URLs are expanded automatically to `https://github.com/Oshkelosh/stripe/archive/refs/heads/main.zip`.
+
 ## BaseAddon contract
 
 ```python

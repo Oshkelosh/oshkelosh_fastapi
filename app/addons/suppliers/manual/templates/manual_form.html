@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+
+{% block title %}{{ 'Edit Manual Supplier' if supplier else 'New Manual Supplier' }}{% endblock %}
+
+{% block content %}
+<h1>{{ 'Edit Manual Supplier' if supplier else 'New Manual Supplier' }}</h1>
+
+<form method="post" action="{{ action_url }}" class="form card" style="max-width:560px;">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+
+  <div class="form-group">
+    <label for="name">Name *</label>
+    <input type="text" id="name" name="name" required maxlength="255"
+           value="{{ supplier.name if supplier else (form.name if form else '') }}" />
+  </div>
+
+  <div class="form-group">
+    <label for="slug">Slug {% if not supplier %}*{% endif %}</label>
+    <input type="text" id="slug" name="slug" maxlength="100"
+           {% if not supplier %}required{% else %}readonly{% endif %}
+           value="{{ supplier.slug if supplier else (form.slug if form else '') }}"
+           placeholder="local_workshop" />
+    <small style="color:var(--clr-text-muted);">Used in product tags (lowercase, underscores).</small>
+    {% if supplier %}
+    <pre style="margin:8px 0 0;padding:10px;background:var(--clr-bg-muted, #f4f4f5);border-radius:6px;font-size:12px;overflow-x:auto;"><code>{
+  "supplier_addon_id": "manual",
+  "manual_supplier_slug": "{{ supplier.slug }}",
+  "supplier_product_id": "SKU-123"
+}</code></pre>
+    {% endif %}
+  </div>
+
+  <div class="form-group">
+    <label for="contact_email">Contact email</label>
+    <input type="email" id="contact_email" name="contact_email" maxlength="255"
+           value="{{ supplier.contact_email if supplier and supplier.contact_email else (form.contact_email if form else '') }}" />
+  </div>
+
+  <div class="form-group">
+    <label for="contact_phone">Contact phone</label>
+    <input type="text" id="contact_phone" name="contact_phone" maxlength="50"
+           value="{{ supplier.contact_phone if supplier and supplier.contact_phone else (form.contact_phone if form else '') }}" />
+  </div>
+
+  <div class="form-group">
+    <label for="notes">Internal notes</label>
+    <textarea id="notes" name="notes" rows="3" maxlength="2000">{{ supplier.notes if supplier and supplier.notes else (form.notes if form else '') }}</textarea>
+  </div>
+
+  <div class="form-group">
+    <label>
+      <input type="checkbox" name="is_active"
+             {% if supplier is none or supplier.is_active %}checked{% endif %} />
+      Active
+    </label>
+  </div>
+
+  <div class="form-actions">
+    <button type="submit" class="btn btn--primary">Save</button>
+    <a href="/admin/suppliers/manual" class="btn btn--secondary">Cancel</a>
+  </div>
+</form>
+{% endblock %}

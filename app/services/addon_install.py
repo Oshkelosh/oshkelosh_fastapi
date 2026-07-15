@@ -118,8 +118,32 @@ def _is_private_ip(host: str) -> bool:
     return False
 
 
+def normalize_addon_install_url(url: str) -> str:
+    """Expand bare github.com/{owner}/{repo} URLs to the main.zip archive."""
+    cleaned = url.strip()
+    parsed = urlparse(cleaned)
+    host = (parsed.hostname or "").lower()
+    if host not in {"github.com", "www.github.com"}:
+        return cleaned
+    if parsed.scheme and parsed.scheme.lower() != "https":
+        return cleaned
+
+    parts = [p for p in parsed.path.split("/") if p]
+    if len(parts) != 2:
+        return cleaned
+
+    owner, repo = parts
+    if repo.endswith(".git"):
+        repo = repo[: -len(".git")]
+    if not owner or not repo:
+        return cleaned
+
+    return f"https://github.com/{owner}/{repo}/archive/refs/heads/main.zip"
+
+
 def validate_install_url(url: str, cfg: Settings) -> str:
-    parsed = urlparse(url.strip())
+    url = normalize_addon_install_url(url.strip())
+    parsed = urlparse(url)
     if parsed.scheme != "https":
         raise ValidationError(message="Addon URL must use HTTPS")
     if not parsed.netloc or not parsed.hostname:
@@ -132,7 +156,7 @@ def validate_install_url(url: str, cfg: Settings) -> str:
     if cfg.addon_install_allowed_hosts and host not in cfg.addon_install_allowed_hosts:
         allowed = ", ".join(cfg.addon_install_allowed_hosts)
         raise ValidationError(message=f"URL host not allowed. Permitted hosts: {allowed}")
-    return url.strip()
+    return url
 
 
 async def download_addon_archive(url: str, cfg: Settings | None = None) -> bytes:

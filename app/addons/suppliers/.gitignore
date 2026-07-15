@@ -1,3 +1,4 @@
 # Ignore supplier addon packages (printful/, gelato/, etc.). Only built-in manual/ is tracked.
 */
 !manual/
+!manual/**

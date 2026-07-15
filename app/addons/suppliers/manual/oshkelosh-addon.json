@@ -1,0 +1,9 @@
+{
+  "addon_id": "manual",
+  "addon_name": "Manual suppliers",
+  "addon_description": "Fulfill orders through admin-defined suppliers without an external API.",
+  "category": "supplier",
+  "version": "1.0.0",
+  "min_oshkelosh_version": "0.1.0",
+  "python_requires": ">=3.11"
+}

@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+
+{% block title %}SSO Login{% endblock %}
+
+{% block content %}
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+  <h2 style="margin:0;">SSO Login</h2>
+  <a href="/admin/tools" class="btn btn--secondary">← Back to Tools</a>
+</div>
+
+<p style="color:var(--clr-text-muted);margin:0 0 20px;font-size:14px;">
+  Configure social sign-in providers. Register the callback URLs below in each provider's developer console.
+  Set <code>PUBLIC_APP_URL</code> in your environment to match the URL customers use (currently
+  <strong>{{ public_app_url }}</strong>).
+</p>
+
+<form method="POST" action="/admin/tools/sso/settings">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+
+  <div class="card" style="margin-bottom:16px;">
+    <h3 style="margin-top:0;">Addon status</h3>
+    <label style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
+      <input type="checkbox" name="is_enabled" value="on" {% if addon and addon.is_enabled %}checked{% endif %}>
+      Enable SSO addon
+    </label>
+    <label style="display:flex;align-items:center;gap:8px;">
+      <input type="checkbox" name="is_active" value="on" {% if config.get('is_active', True) %}checked{% endif %}>
+      Active (providers below must also be enabled)
+    </label>
+  </div>
+
+  <div class="card" style="margin-bottom:16px;">
+    <h3 style="margin-top:0;">Google</h3>
+    <p style="font-size:13px;color:var(--clr-text-muted);">Callback URL: <code>{{ callback_urls.google }}</code></p>
+    <label style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
+      <input type="checkbox" name="google_enabled" value="on" {% if google.get('enabled') %}checked{% endif %}>
+      Enable Google sign-in
+    </label>
+    <div class="form-group">
+      <label class="form-label">Client ID</label>
+      <input type="text" name="google_client_id" class="form-input" value="{{ google.get('client_id', '') }}">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Client secret</label>
+      <input type="password" name="google_client_secret" class="form-input" placeholder="Leave blank to keep existing">
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:16px;">
+    <h3 style="margin-top:0;">Facebook</h3>
+    <p style="font-size:13px;color:var(--clr-text-muted);">Callback URL: <code>{{ callback_urls.facebook }}</code></p>
+    <label style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
+      <input type="checkbox" name="facebook_enabled" value="on" {% if facebook.get('enabled') %}checked{% endif %}>
+      Enable Facebook sign-in
+    </label>
+    <div class="form-group">
+      <label class="form-label">App ID</label>
+      <input type="text" name="facebook_app_id" class="form-input" value="{{ facebook.get('app_id', '') }}">
+    </div>
+    <div class="form-group">
+      <label class="form-label">App secret</label>
+      <input type="password" name="facebook_app_secret" class="form-input" placeholder="Leave blank to keep existing">
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:16px;">
+    <h3 style="margin-top:0;">Custom OIDC provider</h3>
+    <p style="font-size:13px;color:var(--clr-text-muted);">
+      Callback URL: <code>{{ callback_urls.oidc }}</code> (updates when provider id changes)
+    </p>
+    <label style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
+      <input type="checkbox" name="oidc_enabled" value="on" {% if oidc.get('enabled') %}checked{% endif %}>
+      Enable custom OIDC provider
+    </label>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+      <div class="form-group">
+        <label class="form-label">Provider ID (URL slug)</label>
+        <input type="text" name="oidc_provider_id" class="form-input" value="{{ oidc.get('provider_id', 'custom') }}">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Display name</label>
+        <input type="text" name="oidc_display_name" class="form-input" value="{{ oidc.get('display_name', 'SSO') }}">
+      </div>
+      <div class="form-group" style="grid-column:1 / -1;">
+        <label class="form-label">Issuer URL</label>
+        <input type="url" name="oidc_issuer_url" class="form-input" value="{{ oidc.get('issuer_url', '') }}"
+               placeholder="https://accounts.example.com">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Client ID</label>
+        <input type="text" name="oidc_client_id" class="form-input" value="{{ oidc.get('client_id', '') }}">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Client secret</label>
+        <input type="password" name="oidc_client_secret" class="form-input" placeholder="Leave blank to keep existing">
+      </div>
+      <div class="form-group" style="grid-column:1 / -1;">
+        <label class="form-label">Scopes</label>
+        <input type="text" name="oidc_scopes" class="form-input" value="{{ oidc.get('scopes', 'openid email profile') }}">
+      </div>
+    </div>
+  </div>
+
+  <button type="submit" class="btn btn--primary">Save SSO settings</button>
+</form>
+{% endblock %}

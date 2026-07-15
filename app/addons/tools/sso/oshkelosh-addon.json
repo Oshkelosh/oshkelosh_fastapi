@@ -1,0 +1,9 @@
+{
+  "addon_id": "sso",
+  "addon_name": "SSO Login",
+  "addon_description": "Sign in with Google, Facebook, or a custom OpenID Connect provider.",
+  "category": "tool",
+  "version": "1.0.0",
+  "min_oshkelosh_version": "0.1.0",
+  "python_requires": ">=3.11"
+}

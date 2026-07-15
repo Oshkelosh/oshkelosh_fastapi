@@ -282,6 +282,43 @@ def test_validate_install_url_rejects_http(install_settings: Settings):
         addon_install.validate_install_url("http://example.com/addon.zip", install_settings)
 
 
+def test_normalize_github_repo_url_to_main_zip():
+    expected = "https://github.com/Oshkelosh/stripe/archive/refs/heads/main.zip"
+    assert addon_install.normalize_addon_install_url(
+        "https://github.com/Oshkelosh/stripe"
+    ) == expected
+    assert addon_install.normalize_addon_install_url(
+        "https://github.com/Oshkelosh/stripe/"
+    ) == expected
+    assert addon_install.normalize_addon_install_url(
+        "https://github.com/Oshkelosh/stripe.git"
+    ) == expected
+    assert addon_install.normalize_addon_install_url(
+        "https://www.github.com/Oshkelosh/stripe"
+    ) == expected
+
+
+def test_normalize_leaves_non_repo_urls_unchanged():
+    archive = "https://github.com/Oshkelosh/stripe/archive/refs/heads/main.zip"
+    assert addon_install.normalize_addon_install_url(archive) == archive
+    other = "https://example.com/addons/test.zip"
+    assert addon_install.normalize_addon_install_url(other) == other
+    release = "https://github.com/Oshkelosh/stripe/releases/download/v1.0.0/stripe.zip"
+    assert addon_install.normalize_addon_install_url(release) == release
+
+
+def test_validate_install_url_expands_github_repo(
+    install_settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setattr(addon_install, "_is_private_ip", lambda host: False)
+    result = addon_install.validate_install_url(
+        "https://github.com/Oshkelosh/stripe",
+        install_settings,
+    )
+    assert result == "https://github.com/Oshkelosh/stripe/archive/refs/heads/main.zip"
+
+
 @pytest.mark.asyncio
 async def test_install_from_url(install_root: Path, install_settings: Settings):
     zip_bytes = _build_addon_zip()

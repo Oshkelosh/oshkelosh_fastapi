@@ -288,9 +288,13 @@
                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                 <h3 style="margin:0 0 12px;font-size:15px;">Install from URL</h3>
                 <div class="form-group">
-                    <label class="form-label" for="addon_url">HTTPS URL to .zip</label>
+                    <label class="form-label" for="addon_url">HTTPS ZIP URL or GitHub repo</label>
                     <input type="url" id="addon_url" name="url" required class="form-input"
-                           placeholder="https://example.com/addons/my-addon.zip">
+                           placeholder="https://github.com/Oshkelosh/stripe">
+                    <p style="color:var(--clr-text-muted);margin:6px 0 0;font-size:12px;">
+                        Bare <code>github.com/org/repo</code> URLs are expanded to
+                        <code>/archive/refs/heads/main.zip</code>.
+                    </p>
                 </div>
                 <label style="display:flex;align-items:center;gap:8px;margin-bottom:12px;font-size:14px;">
                     <input type="checkbox" name="force" value="on">

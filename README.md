@@ -353,7 +353,7 @@ Type=simple
 User=oshkelosh
 Group=oshkelosh
 WorkingDirectory=/opt/oshkelosh
-Environment=ADDON_INSTALL_RESTART_COMMAND=sudo systemctl restart oshkelosh
+Environment="ADDON_INSTALL_RESTART_COMMAND=sudo systemctl restart oshkelosh"
 ExecStart=/opt/oshkelosh/.venv/bin/python scripts/watch_addon_restart.py
 Restart=on-failure
 
