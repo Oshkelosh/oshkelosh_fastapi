@@ -220,6 +220,16 @@ async def admin_suppliers_sync_all(
         set_flash_cookie(resp, "Supplier catalog sync started")
         return resp
     except Exception as exc:
+        from app.core.exceptions import ValidationError
+
+        if isinstance(exc, ValidationError) and "already running" in exc.message:
+            job_id = (exc.details or {}).get("job_id") if isinstance(exc.details, dict) else None
+            if job_id:
+                resp = RedirectResponse(
+                    url=f"{settings.admin_prefix}/jobs/{job_id}", status_code=303
+                )
+                set_flash_cookie(resp, "A supplier sync job is already running")
+                return resp
         return _render_error(request, f"Failed to start sync: {exc}")
 
 

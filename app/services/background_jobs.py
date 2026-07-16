@@ -67,6 +67,13 @@ async def start_supplier_catalog_sync_job(
     if options.import_status not in ("draft", "published"):
         raise ValidationError(message="import_status must be 'draft' or 'published'")
 
+    existing = await get_active_supplier_sync_job(session)
+    if existing is not None:
+        raise ValidationError(
+            message="A supplier sync job is already running",
+            details={"job_id": existing.id},
+        )
+
     addon_ids = _resolve_addon_ids(
         {
             "addon_ids": options.addon_ids,
@@ -172,6 +179,7 @@ async def tick_supplier_catalog_sync_job(session: Any, job_id: str) -> Backgroun
             sync_options,
             actor_user_id=payload.get("actor_user_id"),
             ip_address=payload.get("ip_address"),
+            for_job_id=job.id,
         )
         results[addon_id] = result.to_dict()
     except Exception as exc:

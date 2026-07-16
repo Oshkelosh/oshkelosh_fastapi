@@ -91,6 +91,116 @@ async def test_get_job_not_found(db_session):
         await get_job(db_session, "missing-id")
 
 
+@pytest.mark.asyncio
+async def test_start_job_rejects_when_already_running(db_session):
+    from app.core.exceptions import ValidationError
+
+    syncable = [_mock_syncable("only", "Only")]
+    with patch("app.services.background_jobs.list_syncable_suppliers", return_value=syncable):
+        job = await start_supplier_catalog_sync_job(
+            db_session,
+            SupplierCatalogSyncJobOptions(),
+        )
+        await db_session.commit()
+
+        with pytest.raises(ValidationError, match="already running") as exc_info:
+            await start_supplier_catalog_sync_job(
+                db_session,
+                SupplierCatalogSyncJobOptions(),
+            )
+
+    assert exc_info.value.details == {"job_id": job.id}
+
+
+@pytest.mark.asyncio
+async def test_sync_supplier_catalog_rejects_when_job_running(db_session):
+    from app.core.exceptions import ValidationError
+    from app.services.supplier_catalog_sync import (
+        SupplierCatalogSyncOptions,
+        sync_supplier_catalog,
+    )
+
+    syncable = [_mock_syncable("only", "Only")]
+    with patch("app.services.background_jobs.list_syncable_suppliers", return_value=syncable):
+        job = await start_supplier_catalog_sync_job(
+            db_session,
+            SupplierCatalogSyncJobOptions(),
+        )
+        await db_session.commit()
+
+    with pytest.raises(ValidationError, match="already running") as exc_info:
+        await sync_supplier_catalog(
+            db_session,
+            "only",
+            SupplierCatalogSyncOptions(),
+        )
+
+    assert exc_info.value.details == {"job_id": job.id}
+
+
+@pytest.mark.asyncio
+async def test_sync_supplier_catalog_allows_matching_job_id(db_session, test_user):
+    from app.services.supplier_catalog_sync import (
+        SupplierCatalogSyncOptions,
+        sync_supplier_catalog,
+    )
+
+    syncable = [_mock_syncable("only", "Only")]
+    with patch("app.services.background_jobs.list_syncable_suppliers", return_value=syncable):
+        job = await start_supplier_catalog_sync_job(
+            db_session,
+            SupplierCatalogSyncJobOptions(),
+        )
+        await db_session.commit()
+
+    mock_addon = MagicMock()
+    mock_addon.is_enabled = True
+    mock_addon.supports_catalog_sync = MagicMock(return_value=True)
+    mock_addon.fetch_catalog_for_import = AsyncMock(return_value=[])
+
+    with patch(
+        "app.services.supplier_catalog_sync.get_supplier_addon",
+        return_value=mock_addon,
+    ):
+        result = await sync_supplier_catalog(
+            db_session,
+            "only",
+            SupplierCatalogSyncOptions(),
+            actor_user_id=test_user.id,
+            for_job_id=job.id,
+        )
+
+    assert result.errors == []
+    assert result.created == 0
+
+
+@pytest.mark.asyncio
+async def test_api_start_sync_job_rejects_when_already_running(
+    client: AsyncClient, test_user, db_session
+):
+    syncable = [_mock_syncable("only", "Only")]
+    with patch("app.services.background_jobs.list_syncable_suppliers", return_value=syncable):
+        job = await start_supplier_catalog_sync_job(
+            db_session,
+            SupplierCatalogSyncJobOptions(),
+        )
+        job_id = job.id
+        await db_session.commit()
+
+        headers = await _auth_headers(client, test_user.email, "SecurePass123!")
+        response = await client.post(
+            "/api/v1/admin/jobs/supplier-catalog-sync",
+            headers=headers,
+            json={"import_status": "draft"},
+        )
+
+    assert response.status_code == 422
+    body = response.json()
+    assert body["error"] == "validation_error"
+    assert "already running" in body["message"]
+    assert body["details"] == {"job_id": job_id}
+
+
 async def _auth_headers(client: AsyncClient, email: str, password: str) -> dict[str, str]:
     response = await client.post(
         "/api/v1/auth/login",

@@ -345,10 +345,21 @@ async def sync_supplier_catalog(
     *,
     actor_user_id: int | None = None,
     ip_address: str | None = None,
+    for_job_id: str | None = None,
 ) -> SupplierCatalogSyncResult:
     """Pull supplier catalog and upsert local products with variants."""
     if options.import_status not in ("draft", "published"):
         raise ValidationError(message="import_status must be 'draft' or 'published'")
+
+    # Lazy import avoids circular dependency with background_jobs.
+    from app.services.background_jobs import get_active_supplier_sync_job
+
+    active = await get_active_supplier_sync_job(session)
+    if active is not None and for_job_id != active.id:
+        raise ValidationError(
+            message="A supplier sync job is already running",
+            details={"job_id": active.id},
+        )
 
     addon = get_supplier_addon(addon_id)
     if addon is None:

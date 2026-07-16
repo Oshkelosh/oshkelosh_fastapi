@@ -19,8 +19,10 @@ from app.addons.admin_helpers import (
 from app.addons.log import exception
 from app.addons.registry import addon_registry
 from app.admin.routes import require_admin_session
+from app.config import settings
 from app.db.connection import get_session
 from app.services.payment_webhooks import process_payment_webhook
+from app.services.site_settings import resolve_public_site_url
 
 
 def build_payment_routers(
@@ -46,6 +48,15 @@ def build_payment_routers(
             return redact_secret_values(dict(addon._config), *secret_keys)
         return {}
 
+    def _webhook_context(request: Request) -> dict[str, str]:
+        public_app_url = resolve_public_site_url(request=request)
+        return {
+            "public_app_url": public_app_url,
+            "webhook_url": (
+                f"{public_app_url}{settings.api_v1_prefix}/payments/{addon_id}/webhook"
+            ),
+        }
+
     @admin_router.get("")
     async def config_page(request: Request, db=Depends(require_admin_session)):
         addon = addon_registry.get(addon_id)
@@ -57,6 +68,7 @@ def build_payment_routers(
                 page_title,
                 addon=addon,
                 config=_masked_config(addon),
+                **_webhook_context(request),
             ),
         )
 
@@ -92,6 +104,7 @@ def build_payment_routers(
                     flash_type="error",
                     addon=addon,
                     config=_masked_config(addon),
+                    **_webhook_context(request),
                 ),
             )
 
