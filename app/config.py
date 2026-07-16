@@ -480,10 +480,14 @@ def get_settings() -> Settings:
 
 
 def reload_settings() -> Settings:
-    """Clear cached settings (useful in tests)."""
-    global _settings, settings
-    _settings = None
-    settings = get_settings()
+    """Re-read settings from the environment, updating the singleton in place.
+
+    Identity is preserved so modules that did ``from app.config import settings``
+    at import time see the reloaded values too (useful in tests).
+    """
+    fresh = Settings()
+    settings.__dict__.update(fresh.__dict__)
+    settings.__pydantic_fields_set__ = fresh.__pydantic_fields_set__
     return settings
 
 

@@ -2,12 +2,22 @@
 
 from __future__ import annotations
 
+import re
+
 import pytest
 from httpx import AsyncClient
 
 from app.config import Settings, validate_backends
 from app.core.security import create_refresh_token, hash_password
 from models.user import User
+
+
+async def _login_csrf_token(client: AsyncClient) -> str:
+    """Fetch the admin login page and extract the CSRF form token."""
+    page = await client.get("/admin/login")
+    match = re.search(r'name="csrf_token" value="([^"]+)"', page.text)
+    assert match is not None
+    return match.group(1)
 
 
 @pytest.mark.asyncio
@@ -39,9 +49,10 @@ async def test_auth_refresh_rejects_banned_user(client: AsyncClient, db_session,
 
 @pytest.mark.asyncio
 async def test_admin_login_success(client: AsyncClient, test_user):
+    csrf = await _login_csrf_token(client)
     response = await client.post(
         "/admin/login",
-        data={"email": test_user.email, "password": "SecurePass123!"},
+        data={"email": test_user.email, "password": "SecurePass123!", "csrf_token": csrf},
         follow_redirects=False,
     )
     assert response.status_code == 302
@@ -60,9 +71,10 @@ async def test_admin_login_rejects_non_admin(client: AsyncClient, db_session):
     db_session.add(user)
     await db_session.flush()
 
+    csrf = await _login_csrf_token(client)
     response = await client.post(
         "/admin/login",
-        data={"email": user.email, "password": "SecurePass123!"},
+        data={"email": user.email, "password": "SecurePass123!", "csrf_token": csrf},
         follow_redirects=False,
     )
     assert response.status_code == 200

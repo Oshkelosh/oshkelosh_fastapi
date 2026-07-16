@@ -16,28 +16,30 @@ def local_storage(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("DEPLOYMENT_PROFILE", "local")
     monkeypatch.setenv("PUBLIC_APP_URL", "http://testserver")
-    reload_settings()
     reset_storage()
     cfg = Settings()
     backend = create_storage(cfg)
     yield backend, tmp_path
     reset_storage()
-    reload_settings()
 
 
 def test_local_media_base_url_derived_from_public_app_url(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("PUBLIC_APP_URL", "https://shop.example.com")
-    reload_settings()
     cfg = Settings()
     assert cfg.local_media_base_url == "https://shop.example.com/media/files"
-    reload_settings()
 
 
-def test_reload_settings_rebinds_module_singleton(monkeypatch: pytest.MonkeyPatch):
+def test_reload_settings_updates_singleton_in_place(monkeypatch: pytest.MonkeyPatch):
+    original_prefix = config_module.settings.admin_prefix
+
     monkeypatch.setenv("ADMIN_PREFIX", "/control")
     reloaded = reload_settings()
-    assert reloaded.admin_prefix == "/control"
+    assert reloaded is config_module.settings
     assert config_module.settings.admin_prefix == "/control"
+
+    monkeypatch.delenv("ADMIN_PREFIX")
+    reload_settings()
+    assert config_module.settings.admin_prefix == original_prefix
 
 
 @pytest.mark.asyncio

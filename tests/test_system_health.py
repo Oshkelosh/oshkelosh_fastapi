@@ -19,21 +19,25 @@ async def test_build_health_summary_healthy_when_infra_ok(db_session):
 
     await update_site_settings(db_session, {"site_url": "https://shop.example.com"})
 
-    with patch(
-        "app.services.system_health.run_infrastructure_checks",
-        AsyncMock(return_value=({"database": "ok", "storage": "ok"}, True)),
-    ):
-        with patch("app.services.addons.get_payment_addon", return_value=_mock_addon("Stripe")):
-            with patch("app.services.addons.get_frontend_addon", return_value=_mock_addon("Default")):
-                with patch(
-                    "app.services.addons.get_notification_addon_for_channel",
-                    return_value=_mock_addon("Postmark"),
-                ):
+    # Neutralize env-provided PUBLIC_APP_URL so the configured site_url wins.
+    with patch("app.services.site_settings.settings") as mock_settings:
+        mock_settings.public_app_url = None
+        mock_settings.cors_origins = []
+        with patch(
+            "app.services.system_health.run_infrastructure_checks",
+            AsyncMock(return_value=({"database": "ok", "storage": "ok"}, True)),
+        ):
+            with patch("app.services.addons.get_payment_addon", return_value=_mock_addon("Stripe")):
+                with patch("app.services.addons.get_frontend_addon", return_value=_mock_addon("Default")):
                     with patch(
-                        "app.services.addons.get_enabled",
-                        return_value=[_mock_addon("Printful", addon_id="printful")],
+                        "app.services.addons.get_notification_addon_for_channel",
+                        return_value=_mock_addon("Postmark"),
                     ):
-                        summary = await build_health_summary(db_session)
+                        with patch(
+                            "app.services.addons.get_enabled",
+                            return_value=[_mock_addon("Printful", addon_id="printful")],
+                        ):
+                            summary = await build_health_summary(db_session)
 
     assert summary.overall == "healthy"
     assert any(c.id == "database" and c.status == "ok" for c in summary.checks)

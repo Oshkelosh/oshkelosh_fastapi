@@ -198,7 +198,7 @@ async def admin_dashboard(request: Request, db=Depends(require_admin_session)):
                         "id": order.id,
                         "status": order.status,
                         "total_cents": order.total_cents,
-                        "created_at": order.created_at,
+                        "created_at": str(order.created_at)[:10],
                         "product_name": product_name or "—",
                         "quantity": qty or 0,
                     }

@@ -434,7 +434,7 @@ async def test_reprice_pending_order_uses_frozen_line_prices(db_session):
         sku="FROZEN-001",
         inventory_quantity=10,
         status="published",
-        created_by=1,
+        created_by=None,
     )
     db_session.add(product)
     await db_session.flush()

@@ -212,7 +212,7 @@ async def test_mixed_order_fans_out_to_multiple_suppliers(db_session):
     await db_session.flush()
 
     order = Order(
-        user_id=1,
+        user_id=None,
         status="paid",
         total_cents=3500,
         shipping_address={
@@ -332,7 +332,7 @@ async def test_disabled_supplier_skipped_other_still_fulfills(db_session):
     db_session.add(variant)
     await db_session.flush()
 
-    order = Order(user_id=1, status="paid", total_cents=1000, shipping_address={})
+    order = Order(user_id=None, status="paid", total_cents=1000, shipping_address={})
     db_session.add(order)
     await db_session.flush()
     items = [
@@ -380,7 +380,7 @@ async def test_supplier_failure_raises_validation_error(db_session):
     db_session.add(variant)
     await db_session.flush()
 
-    order = Order(user_id=1, status="paid", total_cents=1000, shipping_address={})
+    order = Order(user_id=None, status="paid", total_cents=1000, shipping_address={})
     db_session.add(order)
     await db_session.flush()
     item = OrderItem(

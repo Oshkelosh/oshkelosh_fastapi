@@ -3,6 +3,7 @@
 import os
 import subprocess
 import sys
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 import pytest
@@ -23,8 +24,19 @@ def _teardown_app_state():
     app.state.needs_setup = False
 
 
+def _override_session_scope(monkeypatch, db_session):
+    """Point SetupRedirectMiddleware's DB re-check at the test session."""
+
+    @asynccontextmanager
+    async def _scope():
+        yield db_session
+
+    monkeypatch.setattr("app.db.connection.session_scope", _scope)
+
+
 @pytest.mark.asyncio
-async def test_root_redirects_to_setup_when_no_admin(db_session):
+async def test_root_redirects_to_setup_when_no_admin(db_session, monkeypatch):
+    _override_session_scope(monkeypatch, db_session)
     app.dependency_overrides[get_session] = _session_override(db_session)
     app.state.needs_setup = True
     transport = ASGITransport(app=app)
@@ -36,7 +48,8 @@ async def test_root_redirects_to_setup_when_no_admin(db_session):
 
 
 @pytest.mark.asyncio
-async def test_admin_login_redirects_to_setup_when_no_admin(db_session):
+async def test_admin_login_redirects_to_setup_when_no_admin(db_session, monkeypatch):
+    _override_session_scope(monkeypatch, db_session)
     app.dependency_overrides[get_session] = _session_override(db_session)
     app.state.needs_setup = True
     transport = ASGITransport(app=app)
@@ -48,7 +61,8 @@ async def test_admin_login_redirects_to_setup_when_no_admin(db_session):
 
 
 @pytest.mark.asyncio
-async def test_health_not_redirected_when_no_admin(db_session):
+async def test_health_not_redirected_when_no_admin(db_session, monkeypatch):
+    _override_session_scope(monkeypatch, db_session)
     app.dependency_overrides[get_session] = _session_override(db_session)
     app.state.needs_setup = True
     transport = ASGITransport(app=app)
@@ -59,7 +73,8 @@ async def test_health_not_redirected_when_no_admin(db_session):
 
 
 @pytest.mark.asyncio
-async def test_setup_get_renders_form(db_session):
+async def test_setup_get_renders_form(db_session, monkeypatch):
+    _override_session_scope(monkeypatch, db_session)
     app.dependency_overrides[get_session] = _session_override(db_session)
     app.state.needs_setup = True
     transport = ASGITransport(app=app)
@@ -71,7 +86,8 @@ async def test_setup_get_renders_form(db_session):
 
 
 @pytest.mark.asyncio
-async def test_setup_post_creates_admin_and_redirects(db_session):
+async def test_setup_post_creates_admin_and_redirects(db_session, monkeypatch):
+    _override_session_scope(monkeypatch, db_session)
     app.dependency_overrides[get_session] = _session_override(db_session)
     app.state.needs_setup = True
     transport = ASGITransport(app=app)
@@ -151,16 +167,9 @@ async def test_has_admin_user_true_with_admin(db_session, test_user):
     assert await has_admin_user(db_session) is True
 
 
-def test_create_admin_cli_idempotent(tmp_path, monkeypatch):
+def test_create_admin_cli_idempotent(tmp_path):
     """CLI exits 0 when admin already exists (uses isolated sqlite file)."""
     (tmp_path / "data").mkdir()
-    monkeypatch.setenv("DEPLOYMENT_PROFILE", "local")
-
-    from app.config import reload_settings
-    from app.db.connection import reset_session_factory
-
-    reload_settings()
-    reset_session_factory()
 
     env = {
         **os.environ,
@@ -199,6 +208,3 @@ def test_create_admin_cli_idempotent(tmp_path, monkeypatch):
     )
     assert result2.returncode == 0
     assert "already exists" in result2.stdout
-
-    reload_settings()
-    reset_session_factory()

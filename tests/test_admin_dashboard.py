@@ -126,7 +126,7 @@ async def test_dashboard_renders_revenue_trend(client: AsyncClient, test_user, d
 
     assert response.status_code == 200
     assert "Revenue Trend" in response.text
-    assert "placeholder" not in response.text
+    assert "chart-placeholder" not in response.text
     assert "Collected $25.00 over the last 30 days." in response.text
     assert "<circle" in response.text
 

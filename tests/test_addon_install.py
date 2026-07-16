@@ -10,7 +10,7 @@ from unittest.mock import patch
 
 import pytest
 
-from app.config import Settings, reload_settings
+from app.config import Settings
 from app.core.exceptions import ValidationError
 from app.services import addon_install
 
@@ -191,7 +191,6 @@ def install_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 @pytest.fixture
 def install_settings(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Settings:
-    reload_settings()
     cfg = Settings(
         app_version="0.1.0",
         addon_install_restart_flag_file=str(tmp_path / "restart.flag"),
