@@ -5,7 +5,6 @@ from typing import Optional
 
 import boto3
 from botocore.client import Config
-from fastapi import UploadFile
 
 logger = logging.getLogger(__name__)
 
@@ -58,13 +57,6 @@ class R2Service:
         )
         return self.public_url(key)
 
-    async def upload_file(
-        self, key: str, file: UploadFile, content_type: str = "application/octet-stream"
-    ) -> str:
-        """Upload a file to R2 and return the public URL."""
-        contents = await file.read()
-        return await self.upload_bytes(key, contents, content_type)
-
     async def generate_presigned_url(self, key: str, expires_in: int = 3600) -> str:
         """Generate a presigned URL for a file."""
         return self.client.generate_presigned_url(
@@ -81,25 +73,3 @@ class R2Service:
         except Exception as e:
             logger.error("Failed to delete %s: %s", key, e)
             return False
-
-    async def file_exists(self, key: str) -> bool:
-        """Check if a file exists in R2."""
-        try:
-            self.client.head_object(Bucket=self.bucket, Key=key)
-            return True
-        except self.client.exceptions.ClientError:
-            return False
-
-    @staticmethod
-    def validate_image(file: UploadFile) -> tuple[bool, str]:
-        """Validate that an uploaded file is an acceptable image."""
-        allowed_types = {"image/jpeg", "image/png", "image/webp", "image/gif"}
-        if file.content_type not in allowed_types:
-            return (
-                False,
-                f"Unsupported type: {file.content_type}. "
-                f"Allowed: {', '.join(sorted(allowed_types))}",
-            )
-        if file.size and file.size > 5 * 1024 * 1024:
-            return False, "File too large. Maximum size is 5MB."
-        return True, ""

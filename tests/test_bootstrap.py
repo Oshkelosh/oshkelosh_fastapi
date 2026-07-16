@@ -67,7 +67,7 @@ async def test_health_not_redirected_when_no_admin(db_session, monkeypatch):
     app.state.needs_setup = True
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        response = await client.get("/api/v1/health", follow_redirects=False)
+        response = await client.get("/health", follow_redirects=False)
     _teardown_app_state()
     assert response.status_code == 200
 

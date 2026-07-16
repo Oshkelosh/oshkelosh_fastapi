@@ -175,6 +175,14 @@ def create_app() -> FastAPI:
 
         mount_addon_routers(app, settings.api_v1_prefix, admin_router)
         app.include_router(admin_router, prefix=settings.admin_prefix)
+
+        # The SPA catch-all mount at "/" swallows Starlette's automatic
+        # trailing-slash redirect, so map /admin -> /admin/ explicitly.
+        @app.get(settings.admin_prefix, include_in_schema=False)
+        async def admin_root_redirect():
+            from fastapi.responses import RedirectResponse
+
+            return RedirectResponse(url=f"{settings.admin_prefix}/", status_code=307)
     except ImportError:
         logger.warning("Admin router not found – skipping admin routes")
         from app.addons.mount import mount_addon_routers

@@ -31,13 +31,3 @@ router.include_router(storefront.router, tags=["storefront"])
 
 # Admin endpoints
 router.include_router(admin.router, tags=["admin"])
-
-
-@router.get("/health", tags=["status"])
-async def api_health():
-    """Confirm the API is responding."""
-    from app.config import settings
-
-    if settings.app_env == "production" and not settings.debug:
-        return {"status": "ok"}
-    return {"status": "running", "version": "v1"}

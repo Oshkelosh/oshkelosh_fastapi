@@ -212,28 +212,6 @@ async def test_suppliers_sync_all_starts_job_and_redirects(
 
 
 @pytest.mark.asyncio
-async def test_admin_health_api(client: AsyncClient, test_user):
-    from tests.test_supplier_catalog_sync import _auth_headers
-
-    headers = await _auth_headers(client, test_user.email, "SecurePass123!")
-    with patch(
-        "app.services.system_health.build_health_summary",
-        AsyncMock(
-            return_value=MagicMock(
-                overall="healthy",
-                checks=[MagicMock(id="database", label="Database", status="ok", detail="Reachable")],
-            )
-        ),
-    ):
-        response = await client.get("/api/v1/admin/health", headers=headers)
-
-    assert response.status_code == 200
-    body = response.json()
-    assert body["overall"] == "healthy"
-    assert body["checks"][0]["id"] == "database"
-
-
-@pytest.mark.asyncio
 async def test_get_last_sync_times_from_audit(db_session):
     from app.services.supplier_catalog_sync import get_last_sync_times
 

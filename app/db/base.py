@@ -13,7 +13,6 @@ from loguru import logger
 from sqlmodel import Field, SQLModel
 
 from app.config import settings
-from app.db.backends.d1_binding import D1BindingNotConfiguredError
 from app.db.sqlite_utils import configure_sqlite_foreign_keys
 
 # ------------------------------------------------------------------
@@ -36,25 +35,11 @@ def utc_now() -> datetime:
 # ------------------------------------------------------------------
 
 
-def auto_create_tables() -> None:
-    """Create all tables for the active database backend (sync — CLI only)."""
-    import asyncio
-
-    try:
-        asyncio.get_running_loop()
-    except RuntimeError:
-        asyncio.run(auto_create_tables_async())
-        return
-    raise RuntimeError(
-        "auto_create_tables() cannot run inside an async context; use await auto_create_tables_async()"
-    )
-
-
 async def auto_create_tables_async() -> None:
     """Create all tables for the active database backend."""
     import models  # noqa: F401 — register SQLModel tables
 
-    if settings.database_backend in ("d1_http", "d1_binding"):
+    if settings.database_backend == "d1_http":
         await _create_d1_tables_async()
     else:
         _create_sqlite_tables()
@@ -90,17 +75,10 @@ async def _list_existing_tables_d1(d1: Any) -> set[str]:
 
 
 async def _create_d1_tables_async() -> None:
-    """Create tables in D1 via HTTP API or Workers binding."""
-    from app.config import settings as cfg
+    """Create tables in D1 via the HTTP API."""
+    from app.db.d1_client import D1Connection
 
-    if cfg.database_backend == "d1_binding":
-        from app.db.d1_binding_connection import D1BindingConnection
-
-        d1 = D1BindingConnection()
-    else:
-        from app.db.d1_client import D1Connection
-
-        d1 = D1Connection()
+    d1 = D1Connection()
     existing = await _list_existing_tables_d1(d1)
 
     for model in _all_table_models():

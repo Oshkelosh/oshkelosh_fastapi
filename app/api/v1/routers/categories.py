@@ -1,24 +1,18 @@
 """Category endpoints.
 
-Provides a tree-structured public listing of categories as well as
-admin CRUD operations.
+Public tree-structured category listing for the storefront.
+Category administration lives in the server-rendered admin panel.
 """
 
-from typing import List, Optional
+from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends
 from sqlmodel import col, select
 
-from app.core.dependencies import CurrentUser, get_admin_user, get_current_user
-from app.core.exceptions import NotFound, ValidationError
-from app.db.connection import get_session, mark_instance_dirty
-from app.services.categories import (
-    ensure_category_slug_available,
-    require_category_by_slug,
-    validate_category_parent,
-)
+from app.core.exceptions import NotFound
+from app.db.connection import get_session
 from models.category import Category
-from schemas.category import CategoryCreate, CategoryRead, CategoryUpdate
+from schemas.category import CategoryRead
 
 router = APIRouter(prefix="/categories", tags=["categories"])
 
@@ -113,107 +107,3 @@ async def get_category(
     return await _load_category_read(session, category)
 
 
-# ------------------------------------------------------------------
-# Admin endpoints
-# ------------------------------------------------------------------
-
-@router.post(
-    "",
-    response_model=CategoryRead,
-    status_code=status.HTTP_201_CREATED,
-    summary="Create category",
-    description="Create a new category (admin only).",
-)
-async def create_category(
-    body: CategoryCreate,
-    current_user: CurrentUser = Depends(get_admin_user),
-    session=Depends(get_session),
-) -> CategoryRead:
-    """Create a new category."""
-    # Check for duplicate slug
-    await ensure_category_slug_available(session, body.slug)
-    await validate_category_parent(session, 0, body.parent_id)
-
-    category = Category(
-        name=body.name,
-        slug=body.slug,
-        description=body.description,
-        meta_title=body.meta_title,
-        meta_description=body.meta_description,
-        parent_id=body.parent_id,
-        sort_order=body.sort_order,
-    )
-    session.add(category)
-    await session.flush()
-    from app.services.category_defaults import apply_category_creation_defaults
-    from app.services.site_settings import get_site_settings
-
-    site_settings = await get_site_settings(session)
-    store_name = site_settings.store_name or "Store"
-    await apply_category_creation_defaults(session, category, store_name=store_name)
-    await session.flush()
-    await session.refresh(category)
-    return _category_read(category)
-
-
-@router.patch(
-    "/{category_slug}",
-    response_model=CategoryRead,
-    summary="Update category",
-    description="Update an existing category (admin only).",
-)
-async def update_category(
-    category_slug: str,
-    body: CategoryUpdate,
-    current_user: CurrentUser = Depends(get_admin_user),
-    session=Depends(get_session),
-) -> CategoryRead:
-    """Update an existing category."""
-    category = await require_category_by_slug(session, category_slug)
-
-    update_data = body.model_dump(exclude_unset=True)
-
-    if "slug" in update_data and update_data["slug"] != category.slug:
-        await ensure_category_slug_available(
-            session,
-            update_data["slug"],
-            exclude_id=category.id,
-        )
-
-    if "parent_id" in update_data and update_data["parent_id"] is not None:
-        await validate_category_parent(session, category.id, update_data["parent_id"])
-
-    for key, value in update_data.items():
-        setattr(category, key, value)
-    mark_instance_dirty(session, category)
-
-    await session.flush()
-    await session.refresh(category)
-    return _category_read(category)
-
-
-@router.delete(
-    "/{category_slug}",
-    response_model=dict,
-    summary="Delete category",
-    description="Delete a category (admin only).",
-)
-async def delete_category(
-    category_slug: str,
-    current_user: CurrentUser = Depends(get_admin_user),
-    session=Depends(get_session),
-) -> dict:
-    """Delete a category."""
-    category = await require_category_by_slug(session, category_slug)
-
-    # Check if this category has children – cascade will handle deletion
-    children_result = await session.execute(
-        select(Category).where(col(Category.parent_id) == category.id)
-    )
-    children = children_result.scalars().all()
-    if children:
-        # Children will be cascade-deleted; warn the caller
-        pass
-
-    await session.delete(category)
-    return {"message": f"Category '{category_slug}' deleted"}

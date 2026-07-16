@@ -24,16 +24,6 @@ class OtherFixtureFrontend(DefaultFrontendAddon):
 
 
 @pytest.fixture
-def disable_legacy_storefront(monkeypatch):
-    """Prevent legacy frontend/dist from masking disabled-addon behavior."""
-    missing = Path(__file__).parent / "fixtures" / "frontends" / "missing"
-    monkeypatch.setattr(
-        "app.services.storefront_resolver._LEGACY_DIST",
-        missing,
-    )
-
-
-@pytest.fixture
 def other_fixture_frontend():
     from app.addons.registry import addon_registry
 
@@ -187,7 +177,6 @@ class TestDynamicStorefrontStatic:
         self,
         client: AsyncClient,
         db_session,
-        disable_legacy_storefront,
     ):
         from app.addons.registry import addon_registry
 

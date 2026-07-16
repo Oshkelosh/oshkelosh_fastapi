@@ -19,12 +19,10 @@ class D1Connection:
         self,
         account_id: Optional[str] = None,
         database_id: Optional[str] = None,
-        database_name: Optional[str] = None,
         api_token: Optional[str] = None,
     ) -> None:
         self.account_id = account_id or settings.d1_account_id
         self.database_id = database_id or settings.d1_database_id
-        self.database_name = database_name or settings.d1_database_name
         self.api_token = api_token or settings.d1_api_token
         self._http: Optional[httpx.AsyncClient] = None
 

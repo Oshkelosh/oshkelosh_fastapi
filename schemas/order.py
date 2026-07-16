@@ -6,7 +6,7 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from schemas.base import PaginatedResponse, cents_to_decimal, inject_cents_decimals
+from schemas.base import cents_to_decimal, inject_cents_decimals
 
 
 # ── Helpers ─────────────────────────────────────────────────────────
@@ -189,7 +189,3 @@ class OrderRead(BaseModel):
             return v
         cents = info.data.get("shipping_cents", 0) if isinstance(info.data, dict) else 0
         return cents_to_decimal(cents)
-
-
-class OrderList(PaginatedResponse["OrderRead"]):
-    """Paginated order list (admin use)."""

@@ -14,7 +14,6 @@ from sqlmodel import col, select
 from app.core.dependencies import CurrentUser, get_current_user
 from app.core.exceptions import NotFound, ValidationError
 from app.services.commerce import (
-    ensure_product_in_stock,
     ensure_product_purchasable,
     load_cart_items,
     load_products_for_cart_items,

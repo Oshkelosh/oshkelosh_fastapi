@@ -333,7 +333,7 @@ await save_addon_from_form(
 )
 ```
 
-Or call `persist_addon_config()` directly from JSON admin API: `PUT /api/v1/admin/addons/{addon_id}`.
+Or call `persist_addon_config()` directly from your own code paths.
 
 ## How core commerce uses addons
 
@@ -370,7 +370,7 @@ You do **not** need to patch core routers if you hook through these flows or exp
 **Host compatibility:** Set `min_host_version` on your `BaseAddon` subclass (default `"0.0.0"`). `AddonRegistry.enable_async()` and startup refuse to enable when `APP_VERSION` is older than the addon requires (same semver rules as install manifests).
 
 3. **Enable/disable only**  
-   List appears on `/admin/addons`; secrets live in `addon_configs` (admin UI or `PUT /api/v1/admin/addons/{addon_id}`), not in `.env`.
+   List appears on `/admin/addons`; secrets live in `addon_configs` (managed via the admin UI), not in `.env`.
 
 ## Logging
 

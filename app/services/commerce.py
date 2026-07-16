@@ -22,17 +22,17 @@ from models.product import Product
 from models.product_variant import ProductVariant
 from app.services.product_variants import (
     build_variant_snapshot,
-    ensure_variant_purchasable,
     refresh_product_listing_cache,
 )
 
-_INVENTORY_RESERVED = frozenset({"pending", "paid", "shipped", "delivered"})
 _INVENTORY_RESTORABLE = frozenset({"pending", "paid"})
 
 VALID_TRANSITIONS: dict[str, frozenset[str]] = {
     "pending": frozenset({"paid", "cancelled"}),
     "paid": frozenset({"shipped", "cancelled"}),
-    "shipped": frozenset({"delivered", "cancelled"}),
+    # shipped -> cancelled is intentionally absent: inventory is not restorable
+    # after shipment; returns need a dedicated restock workflow.
+    "shipped": frozenset({"delivered"}),
     "delivered": frozenset(),
     "cancelled": frozenset(),
 }
@@ -111,11 +111,6 @@ def ensure_product_purchasable(product: Product) -> None:
         raise ValidationError(
             message=f"Product '{product.name}' is not available for purchase"
         )
-
-
-def ensure_product_in_stock(product: Product, variant: ProductVariant, quantity: int = 1) -> None:
-    """Raise if published product variant does not have enough inventory."""
-    ensure_variant_purchasable(product, variant, quantity)
 
 
 async def load_variants_for_cart_items(

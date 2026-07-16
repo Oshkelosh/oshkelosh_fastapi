@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from typing import Any
 
 from sqlalchemy import func
 from sqlmodel import col, select
 
+from app.db.base import utc_now
 from app.db.connection import mark_instance_dirty
 from app.services.lifecycle_events import (
     EVENT_CART_ABANDONED,
@@ -22,6 +23,7 @@ from models.cart import Cart
 from models.cart_item import CartItem
 from models.order import Order
 from models.product import Product
+from models.product_variant import ProductVariant
 from models.user import User
 
 logger = logging.getLogger(__name__)
@@ -37,15 +39,13 @@ class AbandonedCartRunResult:
         return f"Scanned {self.scanned} cart(s); sent {self.sent} reminder(s); skipped {self.skipped}."
 
 
-def _utc_now() -> datetime:
-    return datetime.now(timezone.utc)
-
-
 async def _cart_subtotal_cents(session: Any, cart_id: int) -> int:
+    # Cart lines are variant-priced (see commerce.build_cart_pricing_lines).
     stmt = (
-        select(func.coalesce(func.sum(Product.price_cents * CartItem.quantity), 0))
+        select(func.coalesce(func.sum(ProductVariant.price_cents * CartItem.quantity), 0))
         .select_from(CartItem)
         .join(Product, col(Product.id) == col(CartItem.product_id))
+        .join(ProductVariant, col(ProductVariant.id) == col(CartItem.variant_id))
         .where(col(CartItem.cart_id) == cart_id)
         .where(col(Product.status) == "published")
     )
@@ -71,7 +71,7 @@ async def process_abandoned_carts(session: Any) -> AbandonedCartRunResult:
 
     delay = timedelta(hours=max(1, site.abandoned_cart_delay_hours))
     max_reminders = max(1, site.abandoned_cart_max_reminders)
-    cutoff = _utc_now() - delay
+    cutoff = utc_now() - delay
     cart_url = f"{resolve_public_site_url(site_settings=site)}/cart"
 
     result = AbandonedCartRunResult()
@@ -129,7 +129,6 @@ async def process_abandoned_carts(session: Any) -> AbandonedCartRunResult:
             },
         )
         await dispatch_lifecycle_event(
-            session,
             EVENT_CART_ABANDONED,
             build_cart_abandoned_payload(
                 user=user,
@@ -139,7 +138,7 @@ async def process_abandoned_carts(session: Any) -> AbandonedCartRunResult:
             ),
         )
 
-        cart.abandoned_reminded_at = _utc_now()
+        cart.abandoned_reminded_at = utc_now()
         cart.abandoned_reminder_count += 1
         mark_instance_dirty(session, cart)
         result.sent += 1

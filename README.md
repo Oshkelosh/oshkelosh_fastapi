@@ -104,7 +104,6 @@ oshkelosh/
 │   └── utils/                   # Utility functions
 ├── docs/                        # Developer documentation index
 ├── app/addons/frontends/*/dist/ # Built storefront SPAs (per addon)
-├── frontend/dist/               # Legacy SPA fallback (optional)
 ├── models/                      # SQLModel model definitions (top-level import)
 ├── schemas/                     # Pydantic schemas (top-level import)
 ├── tests/                       # Test suite
@@ -161,7 +160,7 @@ uvicorn app.main:app --reload --port 8000
 # or: ./scripts/run_dev.sh
 ```
 
-The API is available at `http://localhost:8000/api/v1/health`.
+The API is available at `http://localhost:8000/health`.
 
 The admin panel is at `http://localhost:8000/admin` by default (`ADMIN_PREFIX` can change it).
 
@@ -220,7 +219,6 @@ Backends are selected explicitly via `DEPLOYMENT_PROFILE` (or individual `DATABA
 |---------|----------|---------------|----------|
 | `local` (default) | SQLite file | Local disk (`data/uploads`) | Development or a single VM without Cloudflare |
 | `cloudflare_remote` | D1 HTTP API | R2 (S3 API) | FastAPI on a VPS with Cloudflare D1/R2 |
-| `cloudflare_workers` | D1 binding (stub) | R2 binding (stub) | Future Workers Python runtime |
 
 ### Local (`DEPLOYMENT_PROFILE=local`)
 
@@ -249,15 +247,11 @@ R2_BUCKET_NAME=oshkelosh-media
 - Media uploads use the R2 S3-compatible API (`boto3`).
 - Startup validates that all required credentials are present (no silent fallback).
 
-### Cloudflare Workers (`DEPLOYMENT_PROFILE=cloudflare_workers`)
-
-Not yet implemented. The app exposes `app.db.backends.d1_binding.set_d1_binding()` for a future Worker entrypoint that injects `env.DB`. Use `cloudflare_remote` until Workers support lands.
-
 ### Running migrations
 
 ```bash
 # SQLite (local profile) — tables are created on startup; supplements run once:
-python -c "from app.db.migrations import apply_migrations; apply_migrations()"
+python -c "import asyncio; from app.db.migrations import apply_migrations_async; asyncio.run(apply_migrations_async())"
 
 # D1 (tables also auto-created on startup for cloudflare_remote)
 wrangler d1 execute <database-name> --file=migrations/d1/000_initial.sql

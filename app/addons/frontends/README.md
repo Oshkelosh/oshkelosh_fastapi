@@ -220,10 +220,6 @@ After hosted payment, customers return to `/orders/{id}?payment=return`. Handle 
 
 Browse Swagger at `/docs` when `DEBUG=true`.
 
-## Legacy fallback
-
-If no frontend addon is enabled, the app serves `frontend/dist/` at the repo root when that folder exists. New work should use `app/addons/frontends/*/dist/`.
-
 ## Reference addon
 
 See [`default/README.md`](default/README.md) — SvelteKit storefront with catalog, auth, cart, checkout, orders, and SSO callback. Includes full bootstrap example and admin layout options.

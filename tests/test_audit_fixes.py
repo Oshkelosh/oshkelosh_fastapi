@@ -322,7 +322,9 @@ class TestAdminOrderStatus:
             data={"status": "cancelled", "csrf_token": csrf},
         )
         assert response.status_code == 200
-        assert "Cannot cancel shipped or delivered orders" in response.text
+        # shipped -> cancelled is no longer a valid transition, so the
+        # route rejects it before reaching the admin cancel flow.
+        assert "Cannot transition from &#39;shipped&#39; to &#39;cancelled&#39;" in response.text
 
         await db_session.refresh(order)
         assert order.status == "shipped"

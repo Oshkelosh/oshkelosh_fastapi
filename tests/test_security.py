@@ -53,20 +53,9 @@ class TestRegistrationSecurity:
         db_session.add(test_user)
         await db_session.commit()
 
-        response = await client.get(
-            "/api/v1/products",
-            headers={"Authorization": f"Bearer {token}"},
-            params={"status": "draft"},
-        )
-        assert response.status_code == 422
         response_admin = await client.post(
-            "/api/v1/products",
+            "/api/v1/admin/jobs/pending-orders",
             headers={"Authorization": f"Bearer {token}"},
-            json={
-                "name": "Blocked",
-                "price_cents": 100,
-                "status": "draft",
-            },
         )
         assert response_admin.status_code == 403
 
@@ -196,24 +185,11 @@ class TestAdminLoginSecurity:
 
 
 class TestSingleAdminConstraint:
-    async def test_admin_create_user_rejects_second_admin(self, client: AsyncClient, test_user):
-        login = await client.post(
-            "/api/v1/auth/login",
-            json={"email": test_user.email, "password": "SecurePass123!"},
-        )
-        headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
+    async def test_second_admin_slot_rejected(self, db_session, test_user):
+        from app.core.exceptions import ValidationError
+        from app.services.user_accounts import ensure_admin_slot_available
 
-        response = await client.post(
-            "/api/v1/admin/users",
-            headers=headers,
-            json={
-                "email": "second-admin@example.com",
-                "password": "SecurePass123!",
-                "full_name": "Second Admin",
-                "is_admin": True,
-                "verified": True,
-                "banned": False,
-            },
-        )
-        assert response.status_code == 422
-        assert response.json()["message"] == "Only one admin user is allowed"
+        import pytest
+
+        with pytest.raises(ValidationError, match="Only one admin user is allowed"):
+            await ensure_admin_slot_available(db_session, make_admin=True)

@@ -11,7 +11,7 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from schemas.base import PaginatedResponse, cents_to_decimal, inject_cents_decimals
+from schemas.base import cents_to_decimal, inject_cents_decimals
 
 
 VALID_STATUSES = {"draft", "published", "archived"}
@@ -213,7 +213,3 @@ class ProductRead(BaseModel):
 
 class ProductDetailRead(ProductRead):
     variants: List[ProductVariantRead] = Field(default_factory=list)
-
-
-class ProductList(PaginatedResponse["ProductRead"]):
-    """Paginated product list."""

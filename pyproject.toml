@@ -40,10 +40,6 @@ dev = [
     "mypy>=1.10",
     "pre-commit>=3.7",
 ]
-workers = [
-    "cloudflare-workers>=0.0.1",
-    "wrangler>=3.0",
-]
 
 [tool.hatch.build.targets.wheel]
 packages = ["app", "models", "schemas"]

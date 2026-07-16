@@ -50,17 +50,6 @@ def require_payment_addon() -> PaymentAddon:
     return addon
 
 
-def get_notification_addon() -> NotificationAddon | None:
-    """Return the first enabled notification addon, or None.
-
-    Prefer ``get_notification_addon_for_channel`` for multi-channel dispatch.
-    """
-    enabled = get_enabled("notification")
-    if not enabled:
-        return None
-    return enabled[0]  # type: ignore[return-value]
-
-
 def get_notification_addon_for_channel(channel: str) -> NotificationAddon | None:
     """Return the enabled notification addon that supports ``channel``."""
     for addon in get_enabled("notification"):

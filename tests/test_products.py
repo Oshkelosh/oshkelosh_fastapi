@@ -1,13 +1,20 @@
-"""Tests for product CRUD endpoints."""
+"""Tests for product endpoints."""
 
 import pytest
 from httpx import AsyncClient
 from sqlmodel import select
 
+from app.admin.session import SESSION_COOKIE_NAME, decode_session, encode_session
 from models.category import Category
 from models.product import Product
 from models.product_variant import ProductVariant
 from app.services.product_variants import refresh_product_listing_cache
+
+
+def _admin_session(user_id: int) -> tuple[dict[str, str], str]:
+    token = encode_session(user_id)
+    csrf = decode_session(token)["csrf"]
+    return {SESSION_COOKIE_NAME: token}, csrf
 
 
 class TestProductListing:
@@ -127,99 +134,10 @@ class TestProductListing:
         assert data["total"] == 0
 
 
-class TestProductAdminCRUD:
-    """Test admin product CRUD endpoints."""
+class TestProductAdminDelete:
+    """Product deletion happens through the Jinja admin panel."""
 
-    async def test_create_product(self, client: AsyncClient, test_user, test_category):
-        """Test creating a product as admin."""
-        # Login as admin
-        login = await client.post("/api/v1/auth/login", json={
-            "email": test_user.email,
-            "password": "SecurePass123!",
-        })
-        token = login.json()["access_token"]
-
-        response = await client.post(
-            "/api/v1/admin/products",
-            json={
-                "name": "New Product",
-                "description": "A new product",
-                "price_cents": 2999,
-                "sku": "NEW-001",
-                "inventory_quantity": 50,
-                "status": "draft",
-                "category_id": test_category.id,
-            },
-            headers={"Authorization": f"Bearer {token}"},
-        )
-        assert response.status_code in (200, 201)
-        data = response.json()
-        assert data["name"] == "New Product"
-        assert data["price_cents"] == 2999
-
-    async def test_create_product_generates_default_variant(
-        self, client: AsyncClient, test_user, test_category, db_session
-    ):
-        login = await client.post("/api/v1/auth/login", json={
-            "email": test_user.email,
-            "password": "SecurePass123!",
-        })
-        token = login.json()["access_token"]
-
-        response = await client.post(
-            "/api/v1/admin/products",
-            json={
-                "name": "Variant Product",
-                "description": "A new product",
-                "price_cents": 3499,
-                "sku": "VAR-001",
-                "inventory_quantity": 25,
-                "status": "draft",
-                "category_id": test_category.id,
-            },
-            headers={"Authorization": f"Bearer {token}"},
-        )
-        assert response.status_code in (200, 201)
-
-        result = await db_session.execute(
-            select(ProductVariant).where(ProductVariant.product_id == response.json()["id"])
-        )
-        assert len(result.scalars().all()) == 1
-
-    async def test_update_product(self, client: AsyncClient, test_product, test_user):
-        """Test updating a product."""
-        from passlib.context import CryptContext
-        login = await client.post("/api/v1/auth/login", json={
-            "email": test_user.email,
-            "password": "SecurePass123!",
-        })
-        token = login.json()["access_token"]
-
-        response = await client.patch(
-            f"/api/v1/admin/products/{test_product.id}",
-            json={"price_cents": 2499, "name": "Updated Product"},
-            headers={"Authorization": f"Bearer {token}"},
-        )
-        assert response.status_code == 200
-        data = response.json()
-        assert data["name"] == "Updated Product"
-        assert data["price_cents"] == 2499
-
-    async def test_delete_product(self, client: AsyncClient, test_product, test_user):
-        """Test deleting a product."""
-        login = await client.post("/api/v1/auth/login", json={
-            "email": test_user.email,
-            "password": "SecurePass123!",
-        })
-        token = login.json()["access_token"]
-
-        response = await client.delete(
-            f"/api/v1/admin/products/{test_product.id}",
-            headers={"Authorization": f"Bearer {token}"},
-        )
-        assert response.status_code == 204
-
-    async def test_public_admin_delete_blocks_products_on_existing_orders(
+    async def test_admin_delete_blocks_products_on_existing_orders(
         self, client: AsyncClient, test_product, test_variant, test_user, db_session
     ):
         from models.order import Order
@@ -249,20 +167,21 @@ class TestProductAdminCRUD:
         )
         await db_session.commit()
 
-        login = await client.post("/api/v1/auth/login", json={
-            "email": test_user.email,
-            "password": "SecurePass123!",
-        })
-        token = login.json()["access_token"]
-
-        response = await client.delete(
-            f"/api/v1/products/{test_product.id}",
-            headers={"Authorization": f"Bearer {token}"},
+        cookies, csrf = _admin_session(test_user.id)
+        response = await client.post(
+            f"/admin/products/{test_product.id}/delete",
+            cookies=cookies,
+            data={"csrf_token": csrf},
+            follow_redirects=False,
         )
-        assert response.status_code == 422
-        assert "existing orders" in response.json()["message"].lower()
+        assert response.status_code == 302
 
-    async def test_admin_product_requires_auth(self, client: AsyncClient):
-        """Test that admin product endpoints require authentication."""
-        response = await client.get("/api/v1/admin/products")
+        result = await db_session.execute(
+            select(Product).where(Product.id == test_product.id)
+        )
+        assert result.scalar_one_or_none() is not None
+
+    async def test_admin_jobs_require_auth(self, client: AsyncClient):
+        """The admin JSON maintenance endpoints require an admin JWT."""
+        response = await client.post("/api/v1/admin/jobs/pending-orders")
         assert response.status_code == 401

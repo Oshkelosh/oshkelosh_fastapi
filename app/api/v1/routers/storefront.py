@@ -49,7 +49,7 @@ async def get_storefront_config(
     request: Request,
     session=Depends(get_session),
 ) -> StorefrontConfigResponse:
-    frontend = resolve_frontend_addon(request)
+    frontend = resolve_frontend_addon()
     if frontend is None:
         body = StorefrontUnavailableResponse()
         return JSONResponse(status_code=503, content=body.model_dump())

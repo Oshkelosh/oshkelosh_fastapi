@@ -33,44 +33,6 @@ async def _auth_headers(client: AsyncClient, email: str, password: str) -> dict[
 
 
 class TestAdminUserCrud:
-    async def test_admin_lists_and_updates_user(
-        self, client: AsyncClient, test_user, db_session
-    ):
-        headers = await _auth_headers(client, test_user.email, "SecurePass123!")
-
-        listed = await client.get("/api/v1/admin/users", headers=headers)
-        assert listed.status_code == 200
-        assert listed.json()["total"] >= 1
-
-        detail = await client.get(f"/api/v1/admin/users/{test_user.id}", headers=headers)
-        assert detail.status_code == 200
-        assert detail.json()["email"] == test_user.email
-
-        updated = await client.patch(
-            f"/api/v1/admin/users/{test_user.id}",
-            headers=headers,
-            json={"full_name": "Admin Updated", "phone": "+15550001111"},
-        )
-        assert updated.status_code == 200
-        assert updated.json()["full_name"] == "Admin Updated"
-
-    async def test_admin_creates_user(self, client: AsyncClient, test_user):
-        headers = await _auth_headers(client, test_user.email, "SecurePass123!")
-        response = await client.post(
-            "/api/v1/admin/users",
-            headers=headers,
-            json={
-                "email": "staff@example.com",
-                "password": "SecurePass123!",
-                "full_name": "Staff User",
-                "is_admin": False,
-                "verified": True,
-                "banned": False,
-            },
-        )
-        assert response.status_code == 201
-        assert response.json()["email"] == "staff@example.com"
-
     async def test_deleting_user_preserves_order_history(
         self, db_session, test_user, test_product
     ):

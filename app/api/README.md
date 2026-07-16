@@ -1,6 +1,6 @@
 # API Surfaces
 
-Oshkelosh exposes three admin-facing HTTP surfaces plus the storefront API:
+Oshkelosh exposes three HTTP surfaces:
 
 ## Public storefront API
 
@@ -20,7 +20,9 @@ Oshkelosh exposes three admin-facing HTTP surfaces plus the storefront API:
 - Auth: Bearer JWT with admin privileges
 - Audience: scripts, CI jobs, background maintenance triggers
 
-Use the JSON admin API for automation and cron-style maintenance. Current maintenance entrypoints include:
+All interactive administration (products, categories, users, orders, addons)
+happens in the admin HTML panel. The JSON admin API is limited to cron-style
+maintenance entrypoints:
 
 - `POST /api/v1/admin/jobs/abandoned-cart`
 - `POST /api/v1/admin/jobs/pending-orders`

@@ -21,23 +21,15 @@ __all__ = [
     "SUPPLIER_TAG_KEYS",
     "SupplierAssignment",
     "SupplierOption",
-    "build_supplier_tag",
     "build_supplier_form_meta",
-    "external_key_from_sync_tag",
-    "find_product_by_supplier_key",
     "is_supplier_tag",
     "is_sync_marker_tag",
     "list_supplier_options",
-    "merge_product_tags_with_supplier",
-    "merge_tags_with_supplier_and_sync",
     "non_supplier_tags",
     "parse_supplier_tag",
-    "product_supplier_external_key",
-    "product_supplier_label",
     "supplier_assignment_label",
     "supplier_assignment_from_product",
     "supplier_assignment_from_variant",
-    "supplier_external_key",
     "supplier_form_values",
     "supplier_form_values_from_variant",
     "variant_supplier_label",
@@ -111,70 +103,6 @@ def is_sync_marker_tag(tag: Any) -> bool:
     return isinstance(tag, dict) and bool(tag.get("supplier_sync"))
 
 
-def supplier_external_key(assignment: SupplierAssignment) -> str | None:
-    """Stable catalog sync key derived from a supplier assignment."""
-    addon = _resolve_supplier_addon(assignment.addon_id)
-    if addon is None:
-        return None
-    return addon.external_key_from_assignment(assignment)
-
-
-def external_key_from_sync_tag(tag: Any) -> str | None:
-    """Read supplier_external_key from a sync marker tag."""
-    if not is_sync_marker_tag(tag):
-        return None
-    key = tag.get("supplier_external_key")
-    return str(key) if key else None
-
-
-def product_supplier_external_key(product: Product) -> str | None:
-    """Return the catalog sync key for a product, if supplier-linked."""
-    for tag in product.tags or []:
-        key = external_key_from_sync_tag(tag)
-        if key:
-            return key
-    assignment = supplier_assignment_from_product(product)
-    if assignment is None:
-        return None
-    return supplier_external_key(assignment)
-
-
-def find_product_by_supplier_key(
-    products: list[Product],
-    addon_id: str,
-    external_key: str,
-) -> Product | None:
-    """Find a product tagged for ``addon_id`` with the given sync external key."""
-    for product in products:
-        assignment = supplier_assignment_from_product(product)
-        if assignment is None or assignment.addon_id != addon_id:
-            continue
-        key = product_supplier_external_key(product) or supplier_external_key(assignment)
-        if key == external_key:
-            return product
-    return None
-
-
-def merge_tags_with_supplier_and_sync(
-    existing_tags: list[Any],
-    supplier_value: str,
-    supplier_product_id: str,
-    supplier_variant_id: str,
-    external_key: str,
-) -> list[Any]:
-    """Replace supplier tags and attach a sync marker for catalog imports."""
-    kept = [
-        t
-        for t in (existing_tags or [])
-        if not is_supplier_tag(t) and not is_sync_marker_tag(t)
-    ]
-    new_tag = build_supplier_tag(supplier_value, supplier_product_id, supplier_variant_id)
-    if new_tag is not None:
-        kept.append(new_tag)
-    kept.append({"supplier_sync": True, "supplier_external_key": external_key})
-    return kept
-
-
 def validate_supplier_form(
     supplier_value: str,
     supplier_product_id: str = "",
@@ -187,38 +115,6 @@ def validate_supplier_form(
     if addon is None:
         return "Unknown supplier."
     return addon.validate_admin_form(supplier_value, supplier_product_id, supplier_variant_id)
-
-
-def build_supplier_tag(
-    supplier_value: str,
-    supplier_product_id: str = "",
-    supplier_variant_id: str = "",
-) -> dict[str, str] | None:
-    """Build a supplier tag from admin form values.
-
-    ``supplier_value`` is ``""`` (none), an addon id (e.g. ``printful``), or
-    ``manual:<slug>`` for manual suppliers.
-    """
-    if not supplier_value:
-        return None
-    addon = _resolve_supplier_addon(_addon_id_from_supplier_value(supplier_value))
-    if addon is None:
-        return None
-    return addon.build_tag_from_form(supplier_value, supplier_product_id, supplier_variant_id)
-
-
-def merge_product_tags_with_supplier(
-    existing_tags: list[Any],
-    supplier_value: str,
-    supplier_product_id: str = "",
-    supplier_variant_id: str = "",
-) -> list[Any]:
-    """Replace supplier tag(s) while preserving unrelated tags."""
-    kept = [t for t in (existing_tags or []) if not is_supplier_tag(t)]
-    new_tag = build_supplier_tag(supplier_value, supplier_product_id, supplier_variant_id)
-    if new_tag is not None:
-        kept.append(new_tag)
-    return kept
 
 
 def supplier_form_values_from_variant(variant: Any | None) -> tuple[str, str, str]:
@@ -282,11 +178,6 @@ def supplier_assignment_label(assignment: SupplierAssignment | None) -> str:
     if addon is not None:
         return addon.assignment_display_label(assignment)
     return assignment.addon_id
-
-
-def product_supplier_label(product: Product) -> str:
-    """Return a display label for the product's supplier assignment, or empty string."""
-    return supplier_assignment_label(supplier_assignment_from_product(product))
 
 
 async def list_supplier_options(session: Any) -> list[SupplierOption]:

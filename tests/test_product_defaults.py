@@ -135,45 +135,7 @@ def test_validate_api_product_update_rejects_sync_category_change():
         validate_api_product_update(product, {"category_id": 2})
 
 
-class TestProductImmutableApi:
-    async def test_patch_rejects_sku_change(self, client: AsyncClient, test_product, test_user):
-        login = await client.post(
-            "/api/v1/auth/login",
-            json={"email": test_user.email, "password": "SecurePass123!"},
-        )
-        token = login.json()["access_token"]
-
-        response = await client.patch(
-            f"/api/v1/admin/products/{test_product.id}",
-            json={"sku": "CHANGED-SKU"},
-            headers={"Authorization": f"Bearer {token}"},
-        )
-        assert response.status_code == 422
-        body = response.json()
-        message = body.get("detail") or body.get("message") or str(body)
-        assert "SKU cannot be changed" in message
-
-    async def test_create_applies_defaults(self, client: AsyncClient, test_user):
-        login = await client.post(
-            "/api/v1/auth/login",
-            json={"email": test_user.email, "password": "SecurePass123!"},
-        )
-        token = login.json()["access_token"]
-
-        response = await client.post(
-            "/api/v1/admin/products",
-            json={
-                "name": "Defaulted Product",
-                "description": "Has generated SEO fields",
-                "price_cents": 1500,
-                "sku": "DEF-001",
-                "inventory_quantity": 1,
-                "status": "draft",
-            },
-            headers={"Authorization": f"Bearer {token}"},
-        )
-        assert response.status_code in (200, 201)
-        data = response.json()
-        assert data["slug"] == "defaulted-product"
-        assert data["meta_title"] == "Defaulted Product | Oshkelosh"
-        assert data["meta_description"] == "Has generated SEO fields"
+def test_validate_api_product_update_rejects_sku_change(test_user):
+    product = Product(name="Widget", sku="W-1", created_by=test_user.id)
+    with pytest.raises(ValidationError, match="SKU cannot be changed"):
+        validate_api_product_update(product, {"sku": "CHANGED-SKU"})

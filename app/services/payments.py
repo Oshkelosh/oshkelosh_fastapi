@@ -119,7 +119,6 @@ async def complete_order_payment(
 
     user = await session.get(User, order.user_id) if order.user_id else None
     await dispatch_lifecycle_event(
-        session,
         EVENT_ORDER_PAID,
         build_order_paid_payload(order, user),
     )

@@ -174,33 +174,6 @@ async def test_sync_supplier_catalog_allows_matching_job_id(db_session, test_use
     assert result.created == 0
 
 
-@pytest.mark.asyncio
-async def test_api_start_sync_job_rejects_when_already_running(
-    client: AsyncClient, test_user, db_session
-):
-    syncable = [_mock_syncable("only", "Only")]
-    with patch("app.services.background_jobs.list_syncable_suppliers", return_value=syncable):
-        job = await start_supplier_catalog_sync_job(
-            db_session,
-            SupplierCatalogSyncJobOptions(),
-        )
-        job_id = job.id
-        await db_session.commit()
-
-        headers = await _auth_headers(client, test_user.email, "SecurePass123!")
-        response = await client.post(
-            "/api/v1/admin/jobs/supplier-catalog-sync",
-            headers=headers,
-            json={"import_status": "draft"},
-        )
-
-    assert response.status_code == 422
-    body = response.json()
-    assert body["error"] == "validation_error"
-    assert "already running" in body["message"]
-    assert body["details"] == {"job_id": job_id}
-
-
 async def _auth_headers(client: AsyncClient, email: str, password: str) -> dict[str, str]:
     response = await client.post(
         "/api/v1/auth/login",

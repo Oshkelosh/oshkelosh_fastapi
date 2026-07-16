@@ -14,6 +14,7 @@ from app.admin.routes._deps import (
     _common_ctx,
     _needs_setup,
     clear_session_cookie,
+    decode_session,
     get_session,
     jinja_env,
     limiter,
@@ -124,9 +125,13 @@ async def admin_login_submit(
     return resp
 
 
-@router.get("/logout")
-async def admin_logout(request: Request):
+@router.post("/logout")
+async def admin_logout(request: Request, csrf_token: str = Form("", max_length=128)):
     """Destroy the session and redirect to the login page."""
+    payload = decode_session(request.cookies.get(SESSION_COOKIE_NAME, ""))
+    expected = (payload or {}).get("csrf", "")
+    if not expected or csrf_token != expected:
+        raise HTTPException(status_code=403, detail="Invalid CSRF token")
     resp = RedirectResponse(url=f"{settings.admin_prefix}/login", status_code=302)
     clear_session_cookie(resp)
     return resp

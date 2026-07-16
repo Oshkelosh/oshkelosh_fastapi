@@ -15,20 +15,6 @@ _MIGRATIONS_DIR = Path(__file__).resolve().parents[2] / "migrations" / "d1"
 _TRACKER_TABLE = "schema_migrations"
 
 
-def apply_migrations() -> None:
-    """Run idempotent SQL migrations from migrations/d1/ (sync — CLI only)."""
-    import asyncio
-
-    try:
-        asyncio.get_running_loop()
-    except RuntimeError:
-        asyncio.run(apply_migrations_async())
-        return
-    raise RuntimeError(
-        "apply_migrations() cannot run inside an async context; use await apply_migrations_async()"
-    )
-
-
 async def apply_migrations_async() -> None:
     """Run idempotent SQL migrations from migrations/d1/."""
     if not _MIGRATIONS_DIR.exists():
@@ -38,15 +24,10 @@ async def apply_migrations_async() -> None:
     if not sql_files:
         return
 
-    if settings.database_backend in ("d1_http", "d1_binding"):
-        if settings.database_backend == "d1_binding":
-            from app.db.d1_binding_connection import D1BindingConnection
+    if settings.database_backend == "d1_http":
+        from app.db.d1_client import D1Connection
 
-            d1 = D1BindingConnection()
-        else:
-            from app.db.d1_client import D1Connection
-
-            d1 = D1Connection()
+        d1 = D1Connection()
         await _ensure_tracker_d1(d1)
         applied = await _applied_filenames_d1(d1)
         for path in sql_files:

@@ -6,7 +6,7 @@ from typing import Any, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from schemas.base import PaginatedResponse, cents_to_decimal
+from schemas.base import cents_to_decimal
 
 
 # ── Item operations ─────────────────────────────────────────────────
@@ -86,10 +86,6 @@ class CartReadWithItems(BaseModel):
     updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
-
-
-class CartList(PaginatedResponse["CartRead"]):
-    """Paginated cart list (admin use)."""
 
 
 class CartQuoteRequest(BaseModel):

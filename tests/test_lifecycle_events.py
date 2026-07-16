@@ -47,7 +47,6 @@ class TestLifecycleEvents:
             return_value=[mock_tool],
         ):
             await dispatch_lifecycle_event(
-                db_session,
                 EVENT_USER_REGISTERED,
                 {"user_id": 1, "email": "a@b.com"},
             )

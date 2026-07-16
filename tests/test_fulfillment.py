@@ -9,8 +9,6 @@ import pytest
 from app.core.exceptions import ValidationError
 from app.services.fulfillment import fulfill_order_with_suppliers
 from app.services.suppliers import (
-    build_supplier_tag,
-    merge_product_tags_with_supplier,
     parse_supplier_tag,
     supplier_fulfillment_key,
     validate_supplier_form,
@@ -41,18 +39,6 @@ class TestSupplierTagHelpers:
         assert assignment.manual_slug == "local_workshop"
         assert supplier_fulfillment_key(assignment) == "manual:local_workshop"
 
-    def test_build_and_merge_tags(self):
-        merged = merge_product_tags_with_supplier(
-            [{"label": "summer"}],
-            "manual:local_workshop",
-            "SKU-9",
-        )
-        assert len(merged) == 2
-        assert build_supplier_tag("printful", "999") == {
-            "supplier_addon_id": "printful",
-            "supplier_product_id": "999",
-        }
-
     def test_parse_printify_tag(self):
         tag = {
             "supplier_addon_id": "printify",
@@ -64,18 +50,6 @@ class TestSupplierTagHelpers:
         assert assignment.addon_id == "printify"
         assert assignment.variant_id == "17887"
         assert supplier_fulfillment_key(assignment) == "printify"
-
-    def test_build_printify_tag(self):
-        tag = build_supplier_tag(
-            "printify",
-            "5bfd0b66a342bcc9b5563216",
-            "17887",
-        )
-        assert tag == {
-            "supplier_addon_id": "printify",
-            "supplier_product_id": "5bfd0b66a342bcc9b5563216",
-            "supplier_variant_id": "17887",
-        }
 
     def test_parse_manual_tag_with_supplier_ref_alias(self):
         tag = {
@@ -155,9 +129,6 @@ class TestGenericSupplierAddonHooks:
             assert assignment is not None
             assert assignment.addon_id == "acme"
             assert supplier_fulfillment_key(assignment) == "acme"
-
-            built = build_supplier_tag("acme", "SKU-42")
-            assert built == {"supplier_addon_id": "acme", "supplier_product_id": "SKU-42"}
 
             assert validate_supplier_form("acme", "SKU-42", "") is None
             assert validate_supplier_form("acme", "", "") is not None

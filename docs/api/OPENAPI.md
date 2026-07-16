@@ -35,7 +35,6 @@ Endpoints are grouped by OpenAPI **tags**. Tags map to subsystems:
 | `addons-payments` | `/api/v1/payments/{addon_id}/*` | Payment plugin routes |
 | `addons-notifications` | `/api/v1/notifications/{addon_id}/*` | Notification plugin routes |
 | `addons-frontends` | `/api/v1/frontends/{addon_id}/*` | Rare; static SPA is at `/` |
-| `status` | `/api/v1/health` | API health |
 | `internal` | `/health` | App health (non-versioned) |
 
 Tag descriptions are defined in [`app/openapi.py`](../../app/openapi.py).

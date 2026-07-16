@@ -71,12 +71,8 @@ OPENAPI_TAGS: list[dict] = [
         ),
     },
     {
-        "name": "status",
-        "description": "Health and readiness probes.",
-    },
-    {
         "name": "internal",
-        "description": "Application-level health check (non-versioned).",
+        "description": "Health and readiness probes (non-versioned).",
     },
 ]
 

@@ -74,6 +74,21 @@ async def db_session():
     await engine.dispose()
 
 
+@pytest.fixture(autouse=True)
+def default_frontend_enabled():
+    """Serve the bundled default frontend, as a configured deployment would."""
+    from app.addons.frontends.default.addon import DefaultFrontendAddon
+    from app.addons.registry import addon_registry
+
+    if addon_registry.get("default") is None:
+        addon_registry.register(DefaultFrontendAddon())
+    addon = addon_registry.get("default")
+    was_enabled = addon.is_enabled
+    addon.is_enabled = True
+    yield
+    addon.is_enabled = was_enabled
+
+
 @pytest_asyncio.fixture(scope="function")
 async def client(db_session) -> AsyncGenerator[AsyncClient, None]:
     """Test HTTP client with overridden async DB session dependency."""

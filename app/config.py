@@ -11,14 +11,13 @@ from typing import Annotated, List, Literal, Optional
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
-DatabaseBackend = Literal["sqlite", "d1_http", "d1_binding"]
+DatabaseBackend = Literal["sqlite", "d1_http"]
 StorageBackend = Literal["local", "r2"]
-DeploymentProfile = Literal["local", "cloudflare_remote", "cloudflare_workers"]
+DeploymentProfile = Literal["local", "cloudflare_remote"]
 
 _PROFILE_BACKENDS: dict[DeploymentProfile, tuple[DatabaseBackend, StorageBackend]] = {
     "local": ("sqlite", "local"),
     "cloudflare_remote": ("d1_http", "r2"),
-    "cloudflare_workers": ("d1_binding", "r2"),
 }
 
 _DEFAULT_JWT_SECRET = "change-me-in-production-use-a-strong-secret"
@@ -58,7 +57,7 @@ class Settings(BaseSettings):
     )
     database_backend: DatabaseBackend = Field(
         default="sqlite",
-        description="Database backend: sqlite, d1_http, or d1_binding",
+        description="Database backend: sqlite or d1_http",
     )
     storage_backend: StorageBackend = Field(
         default="local",
@@ -96,16 +95,13 @@ class Settings(BaseSettings):
         return list(value)
 
     # ------------------------------------------------------------------
-    # Cloudflare D1 (d1_http / d1_binding)
+    # Cloudflare D1 (d1_http)
     # ------------------------------------------------------------------
     d1_account_id: Optional[str] = Field(
         default=None, description="Cloudflare account ID for D1"
     )
     d1_database_id: Optional[str] = Field(
         default=None, description="D1 database UUID"
-    )
-    d1_database_name: Optional[str] = Field(
-        default=None, description="D1 database name (wrangler migrations)"
     )
     d1_api_token: Optional[str] = Field(
         default=None, description="Cloudflare API token with D1 write scope"
@@ -337,22 +333,6 @@ class Settings(BaseSettings):
         return self
 
     @property
-    def is_production(self) -> bool:
-        return self.app_env == "production"
-
-    @property
-    def has_d1_http(self) -> bool:
-        return self.database_backend == "d1_http"
-
-    @property
-    def has_r2_storage(self) -> bool:
-        return self.storage_backend == "r2"
-
-    @property
-    def has_local_storage(self) -> bool:
-        return self.storage_backend == "local"
-
-    @property
     def refresh_secret(self) -> str:
         return self.jwt_refresh_secret_key or self.jwt_secret_key
 
@@ -432,17 +412,6 @@ def validate_backends(cfg: Settings) -> None:
             errors.append("D1_DATABASE_ID is required for database_backend=d1_http")
         if not cfg.d1_api_token:
             errors.append("D1_API_TOKEN is required for database_backend=d1_http")
-
-    elif cfg.database_backend == "d1_binding":
-        from app.db.backends.d1_binding import D1BindingNotConfiguredError, get_d1_binding
-
-        if cfg.app_env == "production":
-            try:
-                get_d1_binding()
-            except D1BindingNotConfiguredError:
-                errors.append(
-                    "database_backend=d1_binding requires set_d1_binding() from the Worker entrypoint"
-                )
 
     if cfg.storage_backend == "local":
         media_dir = LOCAL_MEDIA_DIR

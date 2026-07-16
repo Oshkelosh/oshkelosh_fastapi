@@ -14,7 +14,6 @@ from typing import Any
 from app.services.pricing.protocols import TaxQuote
 from app.services.commerce import build_cart_pricing_lines, cart_line_totals
 from app.services.pricing.shipping import SiteShippingQuoter
-from app.services.pricing.site import SiteTaxQuoter
 from app.services.pricing.tax_rules import compute_site_shipping_cents, compute_site_tax_cents
 from app.services.tax_discovery import get_tax_tool
 from models.product import Product
@@ -121,17 +120,14 @@ async def quote_order_charges(
         if tax_source == "site_settings":
             tax_source = "tax_tool"
     else:
-        site_quote = await SiteTaxQuoter(site).quote(
-            tax_line_items,
-            shipping_address,
+        site_tax_cents, site_source = compute_site_tax_cents(
             subtotal_cents,
+            site,
+            shipping_address,
         )
-        if site_quote is not None:
-            tax_cents = max(0, int(site_quote.tax_cents))
-            tax_source = site_quote.source
-        else:
-            tax_cents = 0
-            tax_source = "disabled"
+        if site_source != "disabled":
+            tax_cents = max(0, int(site_tax_cents))
+            tax_source = site_source
 
     shipping_quote = await SiteShippingQuoter(site).quote(
         cart_items,

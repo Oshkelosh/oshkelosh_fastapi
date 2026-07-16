@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 from typing import Any
 
 from sqlmodel import col, select
 
 from app.config import settings
+from app.db.base import utc_now
 from app.services.commerce import apply_order_status_change, load_order_items
 from models.order import Order
 
@@ -29,14 +30,10 @@ class PendingOrderCleanupResult:
         )
 
 
-def _utc_now() -> datetime:
-    return datetime.now(timezone.utc)
-
-
 async def process_stale_pending_orders(session: Any) -> PendingOrderCleanupResult:
     """Cancel pending orders older than ``pending_order_expiry_hours`` and release stock."""
     hours = max(1, settings.pending_order_expiry_hours)
-    cutoff = _utc_now() - timedelta(hours=hours)
+    cutoff = utc_now() - timedelta(hours=hours)
     result = PendingOrderCleanupResult()
 
     stmt = (

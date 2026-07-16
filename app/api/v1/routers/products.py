@@ -1,37 +1,25 @@
 """Product endpoints.
 
-Provides public listing, individual product retrieval, and admin CRUD
-operations for the product catalogue.
+Public product listing, detail, and image retrieval for the storefront.
+Product administration lives in the server-rendered admin panel.
 """
 
 import hashlib
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi import APIRouter, Depends, Query, Response
 from sqlmodel import col, func, select
 
-from app.core.dependencies import CurrentUser, get_admin_user, get_current_user
 from app.core.exceptions import NotFound, ValidationError
-from app.db.connection import get_session, mark_instance_dirty
-from app.services.product_defaults import apply_product_creation_defaults, validate_api_product_update
-from app.services.categories import resolve_category_id
-from app.services.product_slugs import ensure_product_slug, sku_exists, slug_exists
-from app.services.site_settings import get_site_settings
+from app.db.connection import get_session
 from models.category import Category
 from models.product import Product
 from models.product_image import ProductImage
-from app.services.product_images import build_product_detail_read, build_product_read, build_product_reads
-from app.services.product_variants import create_default_variant
+from app.services.product_images import build_product_detail_read, build_product_reads
 from app.services.product_popularity import popularity_order_clause
 from app.services.product_search import apply_core_search_filter, search_products as delegate_product_search
-from schemas.product import (
-    ProductCreate,
-    ProductDetailRead,
-    ProductImageCreate,
-    ProductRead,
-    ProductUpdate,
-)
+from schemas.product import ProductDetailRead
 
 router = APIRouter(prefix="/products", tags=["products"])
 
@@ -252,152 +240,3 @@ async def list_product_images(
     return result.scalars().all()
 
 
-@router.post(
-    "/{product_id}/images",
-    response_model=ProductImage,
-    status_code=status.HTTP_201_CREATED,
-    summary="Add product image",
-    description="Attach a new image to a product.",
-)
-async def add_product_image(
-    product_id: int,
-    body: ProductImageCreate,
-    current_user: CurrentUser = Depends(get_admin_user),
-    session=Depends(get_session),
-) -> ProductImage:
-    """Add an image to a product (admin only)."""
-    product = await session.get(Product, product_id)
-    if product is None:
-        raise NotFound(resource_name="Product", resource_id=product_id)
-
-    image = ProductImage(
-        product_id=product_id,
-        url=body.url,
-        alt_text=body.alt_text,
-        sort_order=body.sort_order,
-    )
-    session.add(image)
-    await session.flush()
-    await session.refresh(image)
-    return image
-
-
-# ------------------------------------------------------------------
-# Admin endpoints
-# ------------------------------------------------------------------
-
-@router.post(
-    "",
-    response_model=ProductRead,
-    status_code=status.HTTP_201_CREATED,
-    summary="Create product",
-    description="Create a new product (admin only).",
-)
-async def create_product(
-    body: ProductCreate,
-    current_user: CurrentUser = Depends(get_admin_user),
-    session=Depends(get_session),
-) -> ProductRead:
-    """Create a new product."""
-    if body.slug and await slug_exists(session, body.slug):
-        raise ValidationError(message=f"Product with slug '{body.slug}' already exists")
-    if body.sku and await sku_exists(session, body.sku):
-        raise ValidationError(message=f"Product with SKU '{body.sku}' already exists")
-
-    category_id = await resolve_category_id(session, body.category_id)
-
-    product = Product(
-        name=body.name,
-        description=body.description,
-        price_cents=body.price_cents,
-        compare_at_price_cents=body.compare_at_price_cents,
-        sku=body.sku,
-        inventory_quantity=body.inventory_quantity,
-        status=body.status,
-        category_id=category_id,
-        options=body.options or {},
-        tags=body.tags or [],
-        meta_title=body.meta_title or None,
-        meta_description=body.meta_description or None,
-        created_by=current_user.id,
-    )
-    session.add(product)
-    await session.flush()
-    site_settings = await get_site_settings(session)
-    store_name = site_settings.store_name or "Store"
-    await apply_product_creation_defaults(
-        session,
-        product,
-        store_name=store_name,
-        preferred_slug=body.slug,
-    )
-    await create_default_variant(session, product)
-    mark_instance_dirty(session, product)
-    await session.flush()
-    await session.refresh(product)
-    return await build_product_read(session, product)
-
-
-@router.patch(
-    "/{product_id}",
-    response_model=ProductRead,
-    summary="Update product",
-    description="Update an existing product (admin only). Only provided fields are updated.",
-)
-async def update_product(
-    product_id: int,
-    body: ProductUpdate,
-    current_user: CurrentUser = Depends(get_admin_user),
-    session=Depends(get_session),
-) -> ProductRead:
-    """Update an existing product."""
-    product = await session.get(Product, product_id)
-    if product is None:
-        raise NotFound(resource_name="Product", resource_id=product_id)
-
-    update_data = body.model_dump(exclude_unset=True)
-    preferred_slug = update_data.pop("slug", None)
-    validate_api_product_update(product, update_data)
-    if preferred_slug and await slug_exists(session, preferred_slug, exclude_id=product_id):
-        raise ValidationError(message=f"Product with slug '{preferred_slug}' already exists")
-
-    if "category_id" in update_data:
-        update_data["category_id"] = await resolve_category_id(session, update_data["category_id"])
-
-    for key, value in update_data.items():
-        setattr(product, key, value)
-
-    if preferred_slug:
-        await ensure_product_slug(session, product, preferred=preferred_slug)
-    mark_instance_dirty(session, product)
-
-    await session.flush()
-    await session.refresh(product)
-    return await build_product_read(session, product)
-
-
-@router.delete(
-    "/{product_id}",
-    response_model=dict,
-    summary="Delete product",
-    description="Delete a product (admin only).",
-)
-async def delete_product(
-    product_id: int,
-    current_user: CurrentUser = Depends(get_admin_user),
-    session=Depends(get_session),
-) -> dict:
-    """Delete a product."""
-    from app.services.product_slugs import product_has_order_items
-
-    del current_user
-    product = await session.get(Product, product_id)
-    if product is None:
-        raise NotFound(resource_name="Product", resource_id=product_id)
-    if await product_has_order_items(session, product_id):
-        raise ValidationError(
-            message=f"Cannot delete product '{product.name}': it appears on existing orders"
-        )
-
-    await session.delete(product)
-    return {"message": f"Product {product_id} deleted"}

@@ -272,29 +272,22 @@ class TestAdminAuditPages:
         assert "published" in response.text
 
 
-class TestRestCategoryAudit:
+class TestAdminCategoryAudit:
     async def test_create_category_writes_audit_entry(
         self, client: AsyncClient, test_user: User, db_session
     ):
-        login = await client.post(
-            "/api/v1/auth/login",
-            json={"email": test_user.email, "password": "SecurePass123!"},
-        )
-        token = login.json()["access_token"]
-        headers = {"Authorization": f"Bearer {token}"}
-
+        cookies, csrf = _admin_session(test_user.id)
         response = await client.post(
-            "/api/v1/admin/categories",
-            json={"name": "Gadgets", "slug": "gadgets", "sort_order": 1},
-            headers=headers,
+            "/admin/categories",
+            cookies=cookies,
+            data={"name": "Gadgets", "slug": "gadgets", "sort_order": "1", "csrf_token": csrf},
+            follow_redirects=False,
         )
-        assert response.status_code == 201
-        category_id = response.json()["id"]
+        assert response.status_code == 302
 
         result = await db_session.execute(
             select(AuditLog).where(
                 col(AuditLog.resource_type) == "category",
-                col(AuditLog.resource_id) == str(category_id),
                 col(AuditLog.action) == "create",
             )
         )

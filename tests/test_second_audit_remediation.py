@@ -19,13 +19,9 @@ from models.product_variant import ProductVariant
 class TestDashboardRevenue:
     @pytest.mark.asyncio
     async def test_stats_exclude_pending_and_cancelled_revenue(
-        self, client: AsyncClient, test_user, db_session
+        self, test_user, db_session
     ):
-        login = await client.post(
-            "/api/v1/auth/login",
-            json={"email": test_user.email, "password": "SecurePass123!"},
-        )
-        headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
+        from app.services.admin_dashboard import fetch_dashboard_stats
 
         db_session.add(
             Order(
@@ -49,16 +45,19 @@ class TestDashboardRevenue:
         )
         await db_session.commit()
 
-        resp = await client.get("/api/v1/admin/stats", headers=headers)
-        assert resp.status_code == 200
-        assert resp.json()["total_revenue_cents"] == 2000
+        stats = await fetch_dashboard_stats(db_session)
+        assert stats["total_revenue_cents"] == 2000
 
 
 class TestProductDeleteGuard:
     @pytest.mark.asyncio
-    async def test_rest_delete_blocked_when_order_items_exist(
-        self, client: AsyncClient, test_user, test_product, db_session
+    async def test_delete_guard_detects_order_items(
+        self, test_user, test_product, db_session
     ):
+        from app.services.product_slugs import product_has_order_items
+
+        assert await product_has_order_items(db_session, test_product.id) is False
+
         order = Order(
             user_id=test_user.id,
             status="paid",
@@ -82,18 +81,7 @@ class TestProductDeleteGuard:
         )
         await db_session.commit()
 
-        login = await client.post(
-            "/api/v1/auth/login",
-            json={"email": test_user.email, "password": "SecurePass123!"},
-        )
-        headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
-
-        resp = await client.delete(
-            f"/api/v1/admin/products/{test_product.id}",
-            headers=headers,
-        )
-        assert resp.status_code == 422
-        assert "existing orders" in resp.json()["message"].lower()
+        assert await product_has_order_items(db_session, test_product.id) is True
 
 
 class TestFrontendCacheOnDisable:

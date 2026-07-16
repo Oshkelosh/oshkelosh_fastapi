@@ -74,8 +74,7 @@ Core business logic lives in `app/services/`. Routers and admin routes stay thin
 
 | Module | Role | Type |
 |--------|------|------|
-| [`pricing/protocols.py`](pricing/protocols.py) | Tax/shipping quoter interfaces | Utility |
-| [`pricing/site.py`](pricing/site.py) | Site Settings tax quoter | Utility |
+| [`pricing/protocols.py`](pricing/protocols.py) | Tax/shipping quote result types | Utility |
 | [`pricing/shipping.py`](pricing/shipping.py) | Supplier-aware shipping quotes | Seam |
 | [`pricing/tax_rules.py`](pricing/tax_rules.py) | Built-in tax/shipping math | Utility |
 

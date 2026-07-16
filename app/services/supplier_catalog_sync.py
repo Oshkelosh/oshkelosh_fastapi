@@ -199,7 +199,6 @@ async def _upsert_variant(
     catalog_variant: SupplierCatalogVariant,
     addon_id: str,
     *,
-    import_status: str,
     storage: Any,
     result: SupplierCatalogSyncResult,
     seen_variant_keys: set[str],
@@ -245,6 +244,9 @@ async def _upsert_variant(
 
     existing.title = catalog_variant.title
     existing.price_cents = catalog_variant.price_cents
+    # inventory_quantity is intentionally NOT overwritten on update: suppliers
+    # report placeholder stock (e.g. 9999 for print-on-demand) and local
+    # merchant-managed stock must survive a catalog re-sync.
     existing.attributes = dict(catalog_variant.attributes)
     existing.supplier_product_id = catalog_variant.supplier_product_id
     existing.supplier_variant_id = catalog_variant.supplier_variant_id or None
@@ -327,7 +329,6 @@ async def _upsert_catalog_product(
             product,
             catalog_variant,
             addon_id,
-            import_status=options.import_status,
             storage=storage,
             result=result,
             seen_variant_keys=seen_variant_keys,

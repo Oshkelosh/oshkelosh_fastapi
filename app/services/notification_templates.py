@@ -135,26 +135,3 @@ async def reset_template(session: Any, event_key: str, channel: str) -> None:
     if row is not None:
         await session.delete(row)
         await session.flush()
-
-
-async def seed_default_templates(session: Any) -> None:
-    """Insert DB rows for defaults when table is empty (idempotent)."""
-    from models.notification_template import NotificationTemplate
-
-    result = await session.execute(select(NotificationTemplate).limit(1))
-    if result.scalar_one_or_none() is not None:
-        return
-
-    for event in NOTIFICATION_EVENTS.values():
-        for channel in event.channels:
-            session.add(
-                NotificationTemplate(
-                    event_key=event.key,
-                    channel=channel,
-                    subject=event.default_subject,
-                    body=event.default_body,
-                    is_enabled=True,
-                )
-            )
-    await session.flush()
-    logger.info("Seeded default notification templates")

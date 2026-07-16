@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timezone
 from typing import Any
 
 from sqlalchemy import select
 from sqlmodel import col
 
 from app.core.exceptions import NotFound, ValidationError
+from app.db.base import utc_now
 from app.db.connection import mark_instance_dirty
 from app.services.supplier_catalog_sync import (
     SupplierCatalogSyncOptions,
@@ -30,10 +30,6 @@ class SupplierCatalogSyncJobOptions:
     addon_ids: list[str] | None = None
     actor_user_id: int | None = None
     ip_address: str | None = None
-
-
-def _utc_now() -> datetime:
-    return datetime.now(tz=timezone.utc)
 
 
 def _sync_result_from_dict(data: dict[str, Any] | None) -> SupplierCatalogSyncResult:
@@ -83,7 +79,7 @@ async def start_supplier_catalog_sync_job(
         raise ValidationError(message="No syncable supplier addons are enabled")
 
     job_id = str(uuid.uuid4())
-    now = _utc_now()
+    now = utc_now()
     job = BackgroundJob(
         id=job_id,
         job_type=JOB_TYPE_SUPPLIER_CATALOG_SYNC,
@@ -156,7 +152,7 @@ async def tick_supplier_catalog_sync_job(session: Any, job_id: str) -> Backgroun
         progress["done"] = len(addon_ids)
         progress["current_addon_id"] = None
         job.progress = progress
-        job.updated_at = _utc_now()
+        job.updated_at = utc_now()
         mark_instance_dirty(session, job)
         await session.commit()
         return job
@@ -164,7 +160,7 @@ async def tick_supplier_catalog_sync_job(session: Any, job_id: str) -> Backgroun
     addon_id = pending_ids[0]
     progress["current_addon_id"] = addon_id
     job.progress = progress
-    job.updated_at = _utc_now()
+    job.updated_at = utc_now()
     mark_instance_dirty(session, job)
     await session.flush()
 
@@ -191,7 +187,7 @@ async def tick_supplier_catalog_sync_job(session: Any, job_id: str) -> Backgroun
     progress["done"] = done
     progress["current_addon_id"] = None
     job.progress = progress
-    job.updated_at = _utc_now()
+    job.updated_at = utc_now()
 
     if done >= len(addon_ids):
         job.status = "completed"

@@ -25,8 +25,8 @@ from models.product import Product
 router = APIRouter(tags=["seo"])
 
 
-async def _load_index_html(request: Request) -> str | None:
-    directory = resolve_static_directory(request)
+async def _load_index_html() -> str | None:
+    directory = resolve_static_directory()
     if directory is None:
         return None
     return read_storefront_index_html(directory)
@@ -39,7 +39,7 @@ async def serve_spa_html(
     inject_meta: bool = True,
 ) -> Response:
     """Return the SPA shell, optionally with injected SEO metadata."""
-    page_html = await _load_index_html(request)
+    page_html = await _load_index_html()
     if page_html is None:
         return HTMLResponse(
             content="<h1>Storefront unavailable</h1>",

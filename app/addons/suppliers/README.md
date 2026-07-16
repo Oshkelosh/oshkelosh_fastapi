@@ -120,15 +120,6 @@ Update policy is intentionally narrower than create policy:
 
 **Admin UI:** Each supplier config page includes a **Catalog sync** card.
 
-**Admin API:** `POST /api/v1/admin/suppliers/{addon_id}/sync` with body:
-
-```json
-{
-  "import_status": "draft",
-  "archive_missing": false
-}
-```
-
 Supplier packages are typically installed via admin ZIP/URL or kept locally. Only `manual` is tracked in-repo.
 
 ## Installed supplier addons

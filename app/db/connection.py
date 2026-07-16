@@ -13,9 +13,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.config import settings
-from app.db.backends.d1_binding import D1BindingNotConfiguredError, get_d1_binding
 from app.db.backends.d1_http_session import d1_http_session
-from app.db.d1_binding_connection import D1BindingConnection
 from app.db.d1_client import D1Connection
 from app.db.sqlite_utils import configure_sqlite_foreign_keys
 
@@ -50,9 +48,6 @@ def _create_sqlite_session_factory() -> async_sessionmaker[AsyncSession]:
 
 def get_session_factory() -> async_sessionmaker[AsyncSession]:
     """Return SQLAlchemy async session factory (sqlite backend only)."""
-    if settings.database_backend == "d1_binding":
-        get_d1_binding()
-        raise RuntimeError("Use get_session() for d1_binding backend")
     if settings.database_backend == "d1_http":
         raise RuntimeError("Use get_session() for d1_http backend")
 
@@ -76,12 +71,6 @@ def mark_instance_dirty(session: Any, instance: Any) -> None:
 @asynccontextmanager
 async def session_scope() -> AsyncIterator[Any]:
     """Yield a DB session (for ``async with session_scope() as session:``)."""
-    if settings.database_backend == "d1_binding":
-        d1 = D1BindingConnection()
-        async with d1_http_session(d1) as session:
-            yield session
-        return
-
     if settings.database_backend == "d1_http":
         d1 = get_d1()
         async with d1_http_session(d1) as session:

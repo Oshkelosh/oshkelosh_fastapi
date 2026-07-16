@@ -6,8 +6,6 @@ from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
 
 from schemas.address import Address
-from schemas.base import PaginatedResponse
-
 
 def _validate_password_strength(value: str) -> str:
     if not any(c.isupper() for c in value):
@@ -216,10 +214,6 @@ class ResetPasswordRequest(_PasswordMixin):
     token: str = Field(min_length=16, max_length=128)
 
 
-class UserList(PaginatedResponse["UserRead"]):
-    """Paginated list of users."""
-
-
 # ── Login ───────────────────────────────────────────────────────────
 
 
@@ -248,8 +242,3 @@ class RegisterResponse(Token):
     """Registration result: profile plus JWT session."""
 
     user: UserRead
-
-
-class TokenPayload(BaseModel):
-    sub: int  # user id
-    exp: datetime

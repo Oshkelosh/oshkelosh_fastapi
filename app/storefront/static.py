@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
+from starlette.exceptions import HTTPException
 from starlette.requests import Request
 from starlette.responses import HTMLResponse, Response
 from starlette.types import Receive, Scope, Send
@@ -18,6 +19,22 @@ _UNAVAILABLE_HTML = """<!DOCTYPE html>
 """
 
 
+class SpaStaticFiles(StaticFiles):
+    """StaticFiles that serves index.html for unknown SPA routes.
+
+    Missing assets (last path segment contains a dot, e.g. /app.js) still 404
+    so broken asset references stay visible.
+    """
+
+    async def get_response(self, path: str, scope: Scope) -> Response:
+        try:
+            return await super().get_response(path, scope)
+        except HTTPException as exc:
+            if exc.status_code == 404 and "." not in path.rsplit("/", 1)[-1]:
+                return await super().get_response("index.html", scope)
+            raise
+
+
 class DynamicStorefrontStatic:
     """ASGI app: resolve frontend per request, delegate to cached StaticFiles."""
 
@@ -27,7 +44,7 @@ class DynamicStorefrontStatic:
 
     def _get_handler(self, directory: str) -> StaticFiles:
         if directory not in self._handlers:
-            self._handlers[directory] = StaticFiles(
+            self._handlers[directory] = SpaStaticFiles(
                 directory=directory,
                 html=True,
                 check_dir=False,
@@ -38,8 +55,7 @@ class DynamicStorefrontStatic:
         if scope["type"] != "http":
             return
 
-        request = Request(scope, receive)
-        directory = resolve_static_directory(request)
+        directory = resolve_static_directory()
         if directory is None:
             response: Response = HTMLResponse(
                 content=_UNAVAILABLE_HTML,

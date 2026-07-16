@@ -332,14 +332,6 @@ def normalize_country_code(value: str | None) -> str | None:
     return None
 
 
-def country_options() -> list[dict[str, str]]:
-    """Sorted list of {code, name} for UI dropdowns."""
-    return [
-        {"code": code, "name": name}
-        for code, name in sorted(ISO_3166_1_ALPHA2.items(), key=lambda item: item[1])
-    ]
-
-
 def normalize_address_country(address: dict[str, Any] | None) -> dict[str, Any] | None:
     """Return a copy of address with ``country`` normalized to alpha-2 when possible."""
     if not address:

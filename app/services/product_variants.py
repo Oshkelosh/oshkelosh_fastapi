@@ -18,8 +18,6 @@ __all__ = [
     "build_variant_snapshot",
     "create_default_variant",
     "ensure_variant_purchasable",
-    "find_product_by_supplier_product_key",
-    "find_variant_by_external_key",
     "get_active_variants",
     "get_variant_for_product",
     "get_variants_for_products",
@@ -123,38 +121,6 @@ def supplier_assignment_from_variant(variant: ProductVariant) -> SupplierAssignm
         supplier_product_id=str(product_id),
         variant_id=str(variant.supplier_variant_id) if variant.supplier_variant_id else None,
     )
-
-
-async def find_product_by_supplier_product_key(
-    session: Any,
-    addon_id: str,
-    external_product_key: str,
-) -> Product | None:
-    """Find product by supplier parent sync key."""
-    result = await session.execute(
-        select(Product).where(
-            col(Product.supplier_external_product_key) == external_product_key,
-        )
-    )
-    product = result.scalar_one_or_none()
-    if product is None:
-        return None
-    return product
-
-
-async def find_variant_by_external_key(
-    session: Any,
-    addon_id: str,
-    external_key: str,
-) -> ProductVariant | None:
-    """Find variant by supplier external key."""
-    result = await session.execute(
-        select(ProductVariant).where(
-            col(ProductVariant.supplier_addon_id) == addon_id,
-            col(ProductVariant.supplier_external_key) == external_key,
-        )
-    )
-    return result.scalar_one_or_none()
 
 
 async def resolve_unique_variant_sku(

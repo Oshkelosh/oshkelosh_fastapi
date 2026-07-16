@@ -395,33 +395,3 @@ async def test_manual_supplier_sync_rejected(db_session):
             )
 
 
-@pytest.mark.asyncio
-async def test_admin_api_sync_endpoint(client: AsyncClient, test_user, db_session):
-    catalog = normalize_printful_catalog_products(
-        [
-            {
-                "id": "999",
-                "sync_product_id": "50",
-                "sync_product_name": "API Sync Tee",
-                "name": "API Sync Tee / M",
-                "retail_price": "10.00",
-                "synced": True,
-                "size": "M",
-            }
-        ]
-    )
-    mock_addon = _mock_addon(catalog)
-    headers = await _auth_headers(client, test_user.email, "SecurePass123!")
-
-    with patch("app.services.supplier_catalog_sync.get_supplier_addon", return_value=mock_addon):
-        response = await client.post(
-            "/api/v1/admin/suppliers/printful/sync",
-            headers=headers,
-            json={"import_status": "published", "archive_missing": False},
-        )
-
-    assert response.status_code == 200
-    body = response.json()
-    assert body["created"] == 1
-    assert body["updated"] == 0
-    assert "created 1 products" in body["message"]

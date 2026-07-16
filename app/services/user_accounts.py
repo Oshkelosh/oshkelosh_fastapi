@@ -13,13 +13,10 @@ from sqlmodel import col, select
 from app.config import settings
 from app.core.exceptions import AuthenticationError, ValidationError
 from app.core.security import hash_password
+from app.db.base import utc_now
 from models.user import User
 
 logger = logging.getLogger(__name__)
-
-
-def _utc_now() -> datetime:
-    return datetime.now(tz=timezone.utc)
 
 
 def _as_utc(dt: datetime) -> datetime:
@@ -31,7 +28,7 @@ def _as_utc(dt: datetime) -> datetime:
 def _is_expired(expires_at: Optional[datetime]) -> bool:
     if expires_at is None:
         return True
-    return _as_utc(expires_at) < _utc_now()
+    return _as_utc(expires_at) < utc_now()
 
 
 def _public_app_url() -> str:
@@ -49,7 +46,7 @@ def generate_account_token() -> str:
 def issue_email_verification(user: User) -> str:
     token = generate_account_token()
     user.email_verification_token = token
-    user.email_verification_expires_at = _utc_now() + timedelta(
+    user.email_verification_expires_at = utc_now() + timedelta(
         hours=settings.email_verification_expire_hours
     )
     return token
@@ -58,7 +55,7 @@ def issue_email_verification(user: User) -> str:
 def issue_password_reset(user: User) -> str:
     token = generate_account_token()
     user.password_reset_token = token
-    user.password_reset_expires_at = _utc_now() + timedelta(
+    user.password_reset_expires_at = utc_now() + timedelta(
         hours=settings.password_reset_expire_hours
     )
     return token
@@ -76,7 +73,7 @@ def clear_password_reset(user: User) -> None:
 
 def mark_user_verified(user: User) -> None:
     user.verified = True
-    user.verified_at = _utc_now()
+    user.verified_at = utc_now()
     clear_email_verification(user)
 
 

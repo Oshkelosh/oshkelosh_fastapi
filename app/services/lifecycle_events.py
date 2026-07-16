@@ -57,12 +57,10 @@ def build_cart_abandoned_payload(
 
 
 async def dispatch_lifecycle_event(
-    session: Any,
     event_key: str,
     payload: dict[str, Any],
 ) -> None:
     """Notify all enabled tool addons of a lifecycle event."""
-    del session  # reserved for future persistence / audit
     for tool in get_enabled_tools():
         handler = getattr(tool, "on_lifecycle_event", None)
         if handler is None:

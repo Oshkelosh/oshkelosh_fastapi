@@ -155,7 +155,6 @@ async def register(
     )
 
     await dispatch_lifecycle_event(
-        session,
         EVENT_USER_REGISTERED,
         build_user_registered_payload(user),
     )
