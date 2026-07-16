@@ -230,6 +230,34 @@ def test_install_multimodule_sibling_imports(install_root: Path, install_setting
     assert "app.addons.tools.test_install" not in __import__("sys").modules
 
 
+def test_upgrade_with_stale_loaded_modules(install_root: Path, install_settings: Settings):
+    """Upgrading a loaded addon must not resolve sibling imports to stale modules."""
+    import sys
+    import types
+
+    data = _build_addon_zip(
+        addon_py=MULTI_MODULE_ADDON_PY,
+        extra_files={"helper.py": MULTI_MODULE_HELPER_PY.encode()},
+    )
+    addon_install.install_addon_archive(data, cfg=install_settings)
+
+    # Simulate the running server having imported the old addon, whose helper
+    # lacks the FLAG symbol the new version needs.
+    stale_pkg = types.ModuleType("app.addons.tools.test_install")
+    stale_helper = types.ModuleType("app.addons.tools.test_install.helper")
+    sys.modules["app.addons.tools.test_install"] = stale_pkg
+    sys.modules["app.addons.tools.test_install.helper"] = stale_helper
+    try:
+        result = addon_install.install_addon_archive(data, force=True, cfg=install_settings)
+        assert result.addon_id == "test_install"
+        # The stale modules stay loaded until restart.
+        assert sys.modules["app.addons.tools.test_install"] is stale_pkg
+        assert sys.modules["app.addons.tools.test_install.helper"] is stale_helper
+    finally:
+        sys.modules.pop("app.addons.tools.test_install", None)
+        sys.modules.pop("app.addons.tools.test_install.helper", None)
+
+
 def test_reject_zip_slip(install_root: Path, install_settings: Settings):
     data = _build_addon_zip(
         extra_files={"../evil.txt": b"bad"},

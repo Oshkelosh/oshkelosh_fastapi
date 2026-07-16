@@ -316,6 +316,10 @@ def _verify_addon_class(addon_root: Path, manifest: AddonManifest) -> None:
         for name in list(sys.modules)
         if name == package_name or name.startswith(package_name + ".")
     }
+    # Remove them so the new addon's sibling imports load from the extract tree
+    # instead of resolving to stale already-installed modules.
+    for name in preexisting:
+        sys.modules.pop(name, None)
 
     try:
         try:
