@@ -154,14 +154,14 @@ class TestSiteShippingRules:
 
 
 class MockShippingSupplier(SupplierAddon):
-    addon_id = "mock_ship"
     addon_name = "Mock Ship"
     version = "1.0.0"
 
-    def __init__(self) -> None:
+    def __init__(self, addon_id: str = "mock_ship", quote_cents: int = 250) -> None:
         super().__init__()
+        self.addon_id = addon_id
         self.is_enabled = True
-        self.quote_shipping = AsyncMock(return_value=250)
+        self.quote_shipping = AsyncMock(return_value=quote_cents)
 
     @classmethod
     def config_schema(cls):
@@ -270,6 +270,153 @@ class TestQuoteOrderCharges:
         finally:
             addon_registry._registry.pop("mock_ship", None)
 
+    async def test_mixed_cart_supplier_and_merchant(self, monkeypatch):
+        from app.addons.registry import addon_registry
+
+        supplier = MockShippingSupplier()
+        addon_registry._registry["mock_ship"] = supplier
+        monkeypatch.setattr(
+            "app.services.pricing.shipping.get_supplier_addon",
+            lambda addon_id: supplier if addon_id == "mock_ship" else None,
+        )
+        try:
+            site = _site(shipping_flat_cents=400)
+            items = [_CartItem(1, 1, 1), _CartItem(2, 2, 1)]
+            products = {1: _Product(1, 1000), 2: _Product(2, 2000)}
+            variants = {
+                1: _Variant(
+                    1,
+                    1,
+                    1000,
+                    supplier_addon_id="mock_ship",
+                    supplier_product_id="p1",
+                ),
+                2: _Variant(2, 2, 2000),
+            }
+            charges = await quote_order_charges(items, products, None, site, variants)
+            assert charges.shipping_cents == 250 + 400
+            sources = {row["source"] for row in charges.shipping_breakdown}
+            assert sources == {"supplier", "site_settings"}
+        finally:
+            addon_registry._registry.pop("mock_ship", None)
+
+    async def test_two_suppliers_quote_independently(self, monkeypatch):
+        from app.addons.registry import addon_registry
+
+        supplier_a = MockShippingSupplier(addon_id="mock_ship_a", quote_cents=300)
+        supplier_b = MockShippingSupplier(addon_id="mock_ship_b", quote_cents=450)
+        addon_registry._registry["mock_ship_a"] = supplier_a
+        addon_registry._registry["mock_ship_b"] = supplier_b
+
+        def _get_addon(addon_id: str):
+            return addon_registry._registry.get(addon_id)
+
+        monkeypatch.setattr("app.services.pricing.shipping.get_supplier_addon", _get_addon)
+        try:
+            site = _site(shipping_flat_cents=999)
+            items = [_CartItem(1, 1, 1), _CartItem(2, 2, 1)]
+            products = {1: _Product(1, 1000), 2: _Product(2, 2000)}
+            variants = {
+                1: _Variant(
+                    1,
+                    1,
+                    1000,
+                    supplier_addon_id="mock_ship_a",
+                    supplier_product_id="p1",
+                ),
+                2: _Variant(
+                    2,
+                    2,
+                    2000,
+                    supplier_addon_id="mock_ship_b",
+                    supplier_product_id="p2",
+                ),
+            }
+            charges = await quote_order_charges(
+                items, products, {"country": "US"}, site, variants
+            )
+            assert charges.shipping_cents == 750
+            supplier_rows = [
+                row for row in charges.shipping_breakdown if row["source"] == "supplier"
+            ]
+            assert len(supplier_rows) == 2
+            assert {row["addon_id"] for row in supplier_rows} == {
+                "mock_ship_a",
+                "mock_ship_b",
+            }
+            assert {row["cents"] for row in supplier_rows} == {300, 450}
+            assert not any(
+                row["source"] == "site_settings" for row in charges.shipping_breakdown
+            )
+        finally:
+            addon_registry._registry.pop("mock_ship_a", None)
+            addon_registry._registry.pop("mock_ship_b", None)
+
+    async def test_supplier_quote_none_uses_site_settings(self, monkeypatch):
+        from app.addons.registry import addon_registry
+
+        supplier = MockShippingSupplier()
+        supplier.quote_shipping = AsyncMock(return_value=None)
+        addon_registry._registry["mock_ship"] = supplier
+        monkeypatch.setattr(
+            "app.services.pricing.shipping.get_supplier_addon",
+            lambda addon_id: supplier if addon_id == "mock_ship" else None,
+        )
+        try:
+            site = _site(shipping_flat_cents=600)
+            items = [_CartItem(1, 1, 1)]
+            products = {1: _Product(1, 1000)}
+            variants = {
+                1: _Variant(
+                    1,
+                    1,
+                    1000,
+                    supplier_addon_id="mock_ship",
+                    supplier_product_id="p1",
+                ),
+            }
+            charges = await quote_order_charges(items, products, None, site, variants)
+            assert charges.shipping_cents == 600
+            assert charges.shipping_breakdown == [
+                {
+                    "source": "site_settings",
+                    "fulfillment_key": "__merchant__",
+                    "subtotal_cents": 1000,
+                    "cents": 600,
+                }
+            ]
+        finally:
+            addon_registry._registry.pop("mock_ship", None)
+
+    async def test_tax_tool_overrides_site_settings(self, monkeypatch):
+        tool = MockTaxTool()
+        monkeypatch.setattr(
+            "app.services.checkout_pricing.get_tax_tool",
+            lambda: tool,
+        )
+        site = _site(tax_rate_bps=800)
+        items = [_CartItem(1, 1, 1)]
+        products = {1: _Product(1, 10000)}
+        variants = {1: _Variant(1, 1, 10000)}
+        charges = await quote_order_charges(items, products, None, site, variants)
+        assert charges.tax_cents == 321
+        assert charges.tax_source == "tax_tool"
+
+    async def test_tax_tool_fallback_when_returns_none(self, monkeypatch):
+        tool = MockTaxTool()
+        tool.quote_tax = AsyncMock(return_value=None)
+        monkeypatch.setattr(
+            "app.services.checkout_pricing.get_tax_tool",
+            lambda: tool,
+        )
+        site = _site(tax_rate_bps=1000)
+        items = [_CartItem(1, 1, 1)]
+        products = {1: _Product(1, 10000)}
+        variants = {1: _Variant(1, 1, 10000)}
+        charges = await quote_order_charges(items, products, None, site, variants)
+        assert charges.tax_cents == 1000
+        assert charges.tax_source == "site_settings"
+
 
 @pytest.mark.asyncio
 async def test_reprice_pending_order_uses_frozen_line_prices(db_session):
@@ -339,63 +486,6 @@ async def test_reprice_pending_order_uses_frozen_line_prices(db_session):
     assert order.tax_cents == 200
     assert order.shipping_cents == 0
     assert order.total_cents == 2200
-
-    async def test_mixed_cart_supplier_and_merchant(self, monkeypatch):
-        from app.addons.registry import addon_registry
-
-        supplier = MockShippingSupplier()
-        addon_registry._registry["mock_ship"] = supplier
-        monkeypatch.setattr(
-            "app.services.pricing.shipping.get_supplier_addon",
-            lambda addon_id: supplier if addon_id == "mock_ship" else None,
-        )
-        try:
-            site = _site(shipping_flat_cents=400)
-            items = [_CartItem(1, 1, 1), _CartItem(2, 2, 1)]
-            products = {1: _Product(1, 1000), 2: _Product(2, 2000)}
-            variants = {
-                1: _Variant(
-                    1,
-                    1,
-                    1000,
-                    supplier_addon_id="mock_ship",
-                    supplier_product_id="p1",
-                ),
-                2: _Variant(2, 2, 2000),
-            }
-            charges = await quote_order_charges(items, products, None, site, variants)
-            assert charges.shipping_cents == 250 + 400
-        finally:
-            addon_registry._registry.pop("mock_ship", None)
-
-    async def test_tax_tool_overrides_site_settings(self, monkeypatch):
-        tool = MockTaxTool()
-        monkeypatch.setattr(
-            "app.services.checkout_pricing.get_tax_tool",
-            lambda: tool,
-        )
-        site = _site(tax_rate_bps=800)
-        items = [_CartItem(1, 1, 1)]
-        products = {1: _Product(1, 10000)}
-        variants = {1: _Variant(1, 1, 10000)}
-        charges = await quote_order_charges(items, products, None, site, variants)
-        assert charges.tax_cents == 321
-        assert charges.tax_source == "tax_tool"
-
-    async def test_tax_tool_fallback_when_returns_none(self, monkeypatch):
-        tool = MockTaxTool()
-        tool.quote_tax = AsyncMock(return_value=None)
-        monkeypatch.setattr(
-            "app.services.checkout_pricing.get_tax_tool",
-            lambda: tool,
-        )
-        site = _site(tax_rate_bps=1000)
-        items = [_CartItem(1, 1, 1)]
-        products = {1: _Product(1, 10000)}
-        variants = {1: _Variant(1, 1, 10000)}
-        charges = await quote_order_charges(items, products, None, site, variants)
-        assert charges.tax_cents == 1000
-        assert charges.tax_source == "site_settings"
 
 
 def test_tax_truncates_fractional_cents():

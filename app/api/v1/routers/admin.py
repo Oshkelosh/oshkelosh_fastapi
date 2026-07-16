@@ -26,7 +26,7 @@ from app.services.product_slugs import (
     slug_exists,
 )
 from app.services.site_settings import get_site_settings
-from app.services.user_accounts import mark_user_verified
+from app.services.user_accounts import ensure_admin_slot_available, mark_user_verified
 from models.addon_config import AddonConfig
 from models.category import Category
 from models.order import Order
@@ -50,21 +50,14 @@ def _api_client_ip(request: Request) -> str | None:
     return request.client.host if request.client else None
 
 
-async def _ensure_admin_slot_available(
-    session,
-    *,
-    make_admin: bool,
-    exclude_user_id: int | None = None,
-) -> None:
-    """Enforce the current single-admin DB constraint with a friendly error."""
-    if not make_admin:
-        return
-    stmt = select(User).where(col(User.is_admin).is_(True))
-    if exclude_user_id is not None:
-        stmt = stmt.where(col(User.id) != exclude_user_id)
-    existing = await session.execute(stmt.limit(1))
-    if existing.scalar_one_or_none() is not None:
-        raise ValidationError(message="Only one admin user is allowed")
+def _address_storage(value):
+    if value is None:
+        return None
+    if hasattr(value, "to_storage_dict"):
+        return value.to_storage_dict()
+    if isinstance(value, dict):
+        return value
+    return None
 
 
 class DashboardStats(BaseModel):
@@ -303,14 +296,23 @@ async def admin_create_user(
     )
     if existing.first() is not None:
         raise ValidationError(message="A user with this email already exists")
-    await _ensure_admin_slot_available(session, make_admin=data.is_admin)
+    await ensure_admin_slot_available(session, make_admin=data.is_admin)
 
     user = User(
         email=data.email,
         password_hash=hash_password(data.password),
         full_name=data.full_name,
         phone=data.phone,
-        default_shipping_address=data.default_shipping_address,
+        default_shipping_address=(
+            data.default_shipping_address.to_storage_dict()
+            if data.default_shipping_address
+            else None
+        ),
+        default_billing_address=(
+            data.default_billing_address.to_storage_dict()
+            if data.default_billing_address
+            else None
+        ),
         banned=data.banned,
         verified=data.verified,
         is_admin=data.is_admin,
@@ -351,13 +353,16 @@ async def admin_update_user(
     verified_set = updates.pop("verified", None)
     requested_admin = updates.get("is_admin")
     if requested_admin is True and not user.is_admin:
-        await _ensure_admin_slot_available(
+        await ensure_admin_slot_available(
             session,
             make_admin=True,
             exclude_user_id=user.id,
         )
     for key, value in updates.items():
-        setattr(user, key, value)
+        if key in ("default_shipping_address", "default_billing_address"):
+            setattr(user, key, _address_storage(getattr(data, key)))
+        else:
+            setattr(user, key, value)
 
     if password is not None:
         user.password_hash = hash_password(password)

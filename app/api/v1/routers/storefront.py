@@ -3,6 +3,7 @@
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse, Response
 
+from app.config import settings
 from app.db.connection import get_session
 from app.services.storefront_resolver import get_public_frontend_config, resolve_frontend_addon
 from app.services.push_discovery import build_fcm_service_worker_js, get_public_push_config
@@ -69,7 +70,10 @@ async def get_storefront_config(
             version=frontend.version,
             config=get_public_frontend_config(frontend),
         ),
-        auth=AuthConfigPublic(sso_providers=sso_providers),
+        auth=AuthConfigPublic(
+            sso_providers=sso_providers,
+            email_verification_enabled=settings.require_email_verification,
+        ),
         notifications=NotificationsConfigPublic(push=push_config),
         tools=ToolsConfigPublic(scripts=list_storefront_scripts()),
     )

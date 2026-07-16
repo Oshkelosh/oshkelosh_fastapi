@@ -106,7 +106,9 @@ Most customer endpoints require:
 Authorization: Bearer <access_token>
 ```
 
-Obtain tokens via `POST /api/v1/auth/login` or `POST /api/v1/auth/register`.
+Obtain tokens via `POST /api/v1/auth/login` or `POST /api/v1/auth/register`
+(register returns a JWT session plus the user profile). Email verification is
+optional after signup and never blocks shopping.
 
 Admin JSON endpoints require a user with `is_admin=true`.
 

@@ -1,10 +1,10 @@
 {% extends "base.html" %}
 
-{% block title %}{{ 'Edit User' if user else 'New User' }}{% endblock %}
+{% block title %}{{ 'Edit User' if edit_user else 'New User' }}{% endblock %}
 
 {% block content %}
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
-  <h2 style="margin:0;">{{ 'Edit User' if user else 'New User' }}</h2>
+  <h2 style="margin:0;">{% if edit_user %}{{ edit_user.email }}{% else %}New User{% endif %}</h2>
   <a href="{{ admin_prefix }}/users" class="btn btn--secondary">← Back to Users</a>
 </div>
 
@@ -12,112 +12,276 @@
 <div class="flash flash--error" style="margin-bottom:16px;">{{ form_error }}</div>
 {% endif %}
 
-<form method="POST" action="{{ action_url }}">
-  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+<div style="display:grid;grid-template-columns:{% if edit_user %}2fr 1fr{% else %}1fr{% endif %};gap:20px;align-items:start;">
+  <div>
+    <form method="POST" action="{{ action_url }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 
-  <div class="card" style="margin-bottom:16px;">
-    <h3 style="margin-top:0;">Account</h3>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
-      {% if user %}
-      <div class="form-group" style="grid-column:1 / -1;">
-        <label class="form-label">Email</label>
-        <input type="email" class="form-input" value="{{ user.email }}" disabled>
-      </div>
-      <div class="form-group" style="grid-column:1 / -1;">
-        <label class="form-label">New password</label>
-        <input type="password" name="password" class="form-input" autocomplete="new-password"
-               placeholder="Leave blank to keep current password">
-        <small style="color:var(--clr-text-muted);">Min 8 chars, upper, lower, and digit required.</small>
-      </div>
-      {% else %}
-      <div class="form-group" style="grid-column:1 / -1;">
-        <label class="form-label">Email *</label>
-        <input type="email" name="email" class="form-input" required autocomplete="email"
-               value="{{ draft.email if draft else '' }}">
-      </div>
-      <div class="form-group" style="grid-column:1 / -1;">
-        <label class="form-label">Password *</label>
-        <input type="password" name="password" class="form-input" required autocomplete="new-password">
-        <small style="color:var(--clr-text-muted);">Min 8 chars, upper, lower, and digit required.</small>
-      </div>
-      {% endif %}
+      <div class="card" style="margin-bottom:16px;">
+        <h3 style="margin-top:0;">Account</h3>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+          {% if edit_user %}
+          <div class="form-group" style="grid-column:1 / -1;">
+            <label class="form-label">Email</label>
+            <input type="email" class="form-input" value="{{ edit_user.email }}" disabled>
+          </div>
+          <div class="form-group" style="grid-column:1 / -1;">
+            <label class="form-label">New password</label>
+            <input type="password" name="password" class="form-input" autocomplete="new-password"
+                   placeholder="Leave blank to keep current password">
+            <small style="color:var(--clr-text-muted);">Min 8 chars, upper, lower, and digit required.</small>
+          </div>
+          {% else %}
+          <div class="form-group" style="grid-column:1 / -1;">
+            <label class="form-label">Email *</label>
+            <input type="email" name="email" class="form-input" required autocomplete="email"
+                   value="{{ draft.email if draft else '' }}">
+          </div>
+          <div class="form-group" style="grid-column:1 / -1;">
+            <label class="form-label">Password *</label>
+            <input type="password" name="password" class="form-input" required autocomplete="new-password">
+            <small style="color:var(--clr-text-muted);">Min 8 chars, upper, lower, and digit required.</small>
+          </div>
+          {% endif %}
 
-      <div class="form-group">
-        <label class="form-label">Full name</label>
-        <input type="text" name="full_name" class="form-input" maxlength="255"
-               value="{{ draft.full_name if draft and draft.full_name is defined else (user.full_name if user else '') }}">
-      </div>
-      <div class="form-group">
-        <label class="form-label">Phone</label>
-        <input type="text" name="phone" class="form-input" maxlength="32"
-               value="{{ draft.phone if draft and draft.phone is defined else (user.phone if user else '') }}">
+          <div class="form-group">
+            <label class="form-label">Full name</label>
+            <input type="text" name="full_name" class="form-input" maxlength="255"
+                   value="{{ draft.full_name if draft and draft.full_name is defined else (edit_user.full_name if edit_user else '') }}">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Phone</label>
+            <input type="text" name="phone" class="form-input" maxlength="32"
+                   value="{{ draft.phone if draft and draft.phone is defined else (edit_user.phone if edit_user else '') }}">
+          </div>
+
+          <div class="form-group" style="grid-column:1 / -1;display:flex;flex-wrap:wrap;gap:16px;">
+            <label style="display:flex;align-items:center;gap:8px;">
+              <input type="checkbox" name="verified" value="on"
+                     {% if draft and draft.verified is defined %}
+                       {% if draft.verified %}checked{% endif %}
+                     {% elif edit_user %}
+                       {% if edit_user.verified %}checked{% endif %}
+                     {% else %}checked{% endif %}>
+              Verified
+            </label>
+            <label style="display:flex;align-items:center;gap:8px;">
+              <input type="checkbox" name="banned" value="on"
+                     {% if draft and draft.banned is defined %}
+                       {% if draft.banned %}checked{% endif %}
+                     {% elif edit_user and edit_user.banned %}checked{% endif %}>
+              Banned
+            </label>
+            <label style="display:flex;align-items:center;gap:8px;">
+              <input type="checkbox" name="is_admin" value="on"
+                     {% if draft and draft.is_admin is defined %}
+                       {% if draft.is_admin %}checked{% endif %}
+                     {% elif edit_user and edit_user.is_admin %}checked{% endif %}>
+              Admin
+            </label>
+          </div>
+        </div>
       </div>
 
-      <div class="form-group" style="grid-column:1 / -1;display:flex;flex-wrap:wrap;gap:16px;">
-        <label style="display:flex;align-items:center;gap:8px;">
-          <input type="checkbox" name="verified" value="on"
-                 {% if draft and draft.verified is defined %}
-                   {% if draft.verified %}checked{% endif %}
-                 {% elif user %}
-                   {% if user.verified %}checked{% endif %}
-                 {% else %}checked{% endif %}>
-          Verified
-        </label>
-        <label style="display:flex;align-items:center;gap:8px;">
-          <input type="checkbox" name="banned" value="on"
-                 {% if draft and draft.banned is defined %}
-                   {% if draft.banned %}checked{% endif %}
-                 {% elif user and user.banned %}checked{% endif %}>
-          Banned
-        </label>
-        <label style="display:flex;align-items:center;gap:8px;">
-          <input type="checkbox" name="is_admin" value="on"
-                 {% if draft and draft.is_admin is defined %}
-                   {% if draft.is_admin %}checked{% endif %}
-                 {% elif user and user.is_admin %}checked{% endif %}>
-          Admin
-        </label>
+      <div class="card" style="margin-bottom:16px;">
+        <h3 style="margin-top:0;">Default shipping address</h3>
+        <p style="color:var(--clr-text-muted);font-size:13px;margin-top:0;">Leave all fields blank to clear the saved address.</p>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+          <div class="form-group" style="grid-column:1 / -1;">
+            <label class="form-label">Address line 1</label>
+            <input type="text" name="line1" class="form-input" value="{{ address.line1 }}">
+          </div>
+          <div class="form-group" style="grid-column:1 / -1;">
+            <label class="form-label">Address line 2</label>
+            <input type="text" name="line2" class="form-input" value="{{ address.line2 }}">
+          </div>
+          <div class="form-group">
+            <label class="form-label">City</label>
+            <input type="text" name="city" class="form-input" value="{{ address.city }}">
+          </div>
+          <div class="form-group">
+            <label class="form-label">State / Province</label>
+            <input type="text" name="state" class="form-input" value="{{ address.state }}">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Postal code</label>
+            <input type="text" name="postal_code" class="form-input" value="{{ address.postal_code }}">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Country</label>
+            <input type="text" name="country" class="form-input" value="{{ address.country }}">
+          </div>
+        </div>
       </div>
-    </div>
+
+      <div class="card" style="margin-bottom:16px;">
+        <h3 style="margin-top:0;">Default billing address</h3>
+        <p style="color:var(--clr-text-muted);font-size:13px;margin-top:0;">Leave all fields blank to clear the saved address.</p>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+          <div class="form-group" style="grid-column:1 / -1;">
+            <label class="form-label">Address line 1</label>
+            <input type="text" name="billing_line1" class="form-input" value="{{ billing_address.line1 }}">
+          </div>
+          <div class="form-group" style="grid-column:1 / -1;">
+            <label class="form-label">Address line 2</label>
+            <input type="text" name="billing_line2" class="form-input" value="{{ billing_address.line2 }}">
+          </div>
+          <div class="form-group">
+            <label class="form-label">City</label>
+            <input type="text" name="billing_city" class="form-input" value="{{ billing_address.city }}">
+          </div>
+          <div class="form-group">
+            <label class="form-label">State / Province</label>
+            <input type="text" name="billing_state" class="form-input" value="{{ billing_address.state }}">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Postal code</label>
+            <input type="text" name="billing_postal_code" class="form-input" value="{{ billing_address.postal_code }}">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Country</label>
+            <input type="text" name="billing_country" class="form-input" value="{{ billing_address.country }}">
+          </div>
+        </div>
+      </div>
+
+      <button type="submit" class="btn btn--primary">{{ 'Save changes' if edit_user else 'Create user' }}</button>
+    </form>
   </div>
 
-  <div class="card" style="margin-bottom:16px;">
-    <h3 style="margin-top:0;">Default shipping address</h3>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
-      <div class="form-group" style="grid-column:1 / -1;">
-        <label class="form-label">Address line 1</label>
-        <input type="text" name="line1" class="form-input" value="{{ address.line1 }}">
-      </div>
-      <div class="form-group" style="grid-column:1 / -1;">
-        <label class="form-label">Address line 2</label>
-        <input type="text" name="line2" class="form-input" value="{{ address.line2 }}">
-      </div>
-      <div class="form-group">
-        <label class="form-label">City</label>
-        <input type="text" name="city" class="form-input" value="{{ address.city }}">
-      </div>
-      <div class="form-group">
-        <label class="form-label">State / Province</label>
-        <input type="text" name="state" class="form-input" value="{{ address.state }}">
-      </div>
-      <div class="form-group">
-        <label class="form-label">Postal code</label>
-        <input type="text" name="postal_code" class="form-input" value="{{ address.postal_code }}">
-      </div>
-      <div class="form-group">
-        <label class="form-label">Country</label>
-        <input type="text" name="country" class="form-input" value="{{ address.country }}">
-      </div>
+  {% if edit_user %}
+  <div>
+    <div class="card" style="margin-bottom:16px;">
+      <h3 style="margin-top:0;">Account details</h3>
+      <dl style="margin:0;display:grid;gap:10px;font-size:14px;">
+        <div>
+          <dt style="color:var(--clr-text-muted);font-size:12px;margin:0;">User ID</dt>
+          <dd style="margin:2px 0 0;"><code>{{ edit_user.id }}</code></dd>
+        </div>
+        <div>
+          <dt style="color:var(--clr-text-muted);font-size:12px;margin:0;">Status</dt>
+          <dd style="margin:2px 0 0;display:flex;flex-wrap:wrap;gap:6px;">
+            {% if edit_user.verified %}
+              <span class="badge badge--success">Verified</span>
+            {% else %}
+              <span class="badge badge--warning">Unverified</span>
+            {% endif %}
+            {% if edit_user.banned %}
+              <span class="badge badge--danger">Banned</span>
+            {% else %}
+              <span class="badge badge--default">Active</span>
+            {% endif %}
+            {% if edit_user.is_admin %}
+              <span class="badge badge--info">Admin</span>
+            {% else %}
+              <span class="badge badge--default">Customer</span>
+            {% endif %}
+          </dd>
+        </div>
+        <div>
+          <dt style="color:var(--clr-text-muted);font-size:12px;margin:0;">Auth methods</dt>
+          <dd style="margin:2px 0 0;">
+            {% if edit_user.auth_methods %}
+              {{ edit_user.auth_methods | join(', ') }}
+            {% else %}
+              —
+            {% endif %}
+          </dd>
+        </div>
+        <div>
+          <dt style="color:var(--clr-text-muted);font-size:12px;margin:0;">Created</dt>
+          <dd style="margin:2px 0 0;">{{ format_dt(edit_user.created_at) or '—' }}</dd>
+        </div>
+        <div>
+          <dt style="color:var(--clr-text-muted);font-size:12px;margin:0;">Updated</dt>
+          <dd style="margin:2px 0 0;">{{ format_dt(edit_user.updated_at) or '—' }}</dd>
+        </div>
+        <div>
+          <dt style="color:var(--clr-text-muted);font-size:12px;margin:0;">Verified at</dt>
+          <dd style="margin:2px 0 0;">{{ format_dt(edit_user.verified_at) or '—' }}</dd>
+        </div>
+        <div>
+          <dt style="color:var(--clr-text-muted);font-size:12px;margin:0;">Push notifications</dt>
+          <dd style="margin:2px 0 0;">
+            {% if edit_user.push_token %}
+              <span class="badge badge--success">Enabled</span>
+              {% if edit_user.push_provider %}
+                <span style="color:var(--clr-text-muted);">({{ edit_user.push_provider }})</span>
+              {% endif %}
+            {% else %}
+              <span class="badge badge--default">Off</span>
+            {% endif %}
+          </dd>
+        </div>
+        <div>
+          <dt style="color:var(--clr-text-muted);font-size:12px;margin:0;">Payment customer IDs</dt>
+          <dd style="margin:2px 0 0;">
+            {% if edit_user.payment_customer_ids %}
+              <ul style="margin:0;padding-left:18px;">
+                {% for provider, customer_id in edit_user.payment_customer_ids.items() %}
+                <li><code>{{ provider }}</code>: {{ customer_id }}</li>
+                {% endfor %}
+              </ul>
+            {% else %}
+              —
+            {% endif %}
+          </dd>
+        </div>
+        <div>
+          <dt style="color:var(--clr-text-muted);font-size:12px;margin:0;">OAuth providers</dt>
+          <dd style="margin:2px 0 0;">
+            {% if edit_user.oauth_identities %}
+              {{ edit_user.oauth_identities.keys() | list | join(', ') }}
+            {% else %}
+              —
+            {% endif %}
+          </dd>
+        </div>
+      </dl>
     </div>
   </div>
-
-  {% if user %}
-  <p style="color:var(--clr-text-muted);font-size:14px;margin-bottom:16px;">
-    Member since {{ user.created_at.strftime('%Y-%m-%d %H:%M') if user.created_at else '—' }}
-    {% if user.verified_at %} · Verified {{ user.verified_at.strftime('%Y-%m-%d') }}{% endif %}
-  </p>
   {% endif %}
+</div>
 
-  <button type="submit" class="btn btn--primary">{{ 'Save changes' if user else 'Create user' }}</button>
-</form>
+{% if edit_user %}
+<div class="card" style="margin-top:20px;">
+  <h3 style="margin-top:0;">Recent orders</h3>
+  {% if recent_orders %}
+  <table class="table">
+    <thead>
+      <tr>
+        <th>Order</th>
+        <th>Status</th>
+        <th>Total</th>
+        <th>Date</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for order in recent_orders %}
+      <tr>
+        <td><a href="{{ admin_prefix }}/orders/{{ order.id }}">#{{ order.id }}</a></td>
+        <td>
+          {% if order.status == 'pending' %}
+            <span class="badge badge--warning">Pending</span>
+          {% elif order.status == 'paid' %}
+            <span class="badge badge--info">Paid</span>
+          {% elif order.status == 'shipped' %}
+            <span class="badge badge--default">Shipped</span>
+          {% elif order.status == 'delivered' %}
+            <span class="badge badge--success">Delivered</span>
+          {% else %}
+            <span class="badge badge--danger">{{ order.status|capitalize }}</span>
+          {% endif %}
+        </td>
+        <td>${{ "{:,.2f}".format((order.total_cents or 0) / 100) }}</td>
+        <td>{{ format_dt(order.created_at) }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p style="color:var(--clr-text-muted);margin:0;">No orders for this user yet.</p>
+  {% endif %}
+</div>
+{% endif %}
 {% endblock %}

@@ -32,7 +32,7 @@ async def _load_index_html(request: Request) -> str | None:
     return read_storefront_index_html(directory)
 
 
-async def _serve_spa_html(
+async def serve_spa_html(
     request: Request,
     session,
     *,
@@ -99,13 +99,13 @@ async def robots_txt(request: Request, session=Depends(get_session)) -> PlainTex
 @router.get("/", include_in_schema=False)
 async def storefront_home(request: Request, session=Depends(get_session)) -> Response:
     """Serve the SPA home page with injected SEO metadata."""
-    return await _serve_spa_html(request, session)
+    return await serve_spa_html(request, session)
 
 
 @router.get("/products", include_in_schema=False)
 async def storefront_products(request: Request, session=Depends(get_session)) -> Response:
     """Serve the SPA products page with injected SEO metadata."""
-    return await _serve_spa_html(request, session)
+    return await serve_spa_html(request, session)
 
 
 @router.get("/products/{slug}", include_in_schema=False)
@@ -115,7 +115,7 @@ async def storefront_product_detail(
     session=Depends(get_session),
 ) -> Response:
     """Serve a product detail page; unknown slugs fall back to the plain SPA shell."""
-    return await _serve_spa_html(request, session)
+    return await serve_spa_html(request, session)
 
 
 @router.get("/categories/{slug}", include_in_schema=False)
@@ -125,7 +125,7 @@ async def storefront_category_detail(
     session=Depends(get_session),
 ) -> Response:
     """Serve a category page; unknown slugs fall back to the plain SPA shell."""
-    return await _serve_spa_html(request, session)
+    return await serve_spa_html(request, session)
 
 
 def register_seo_routes(app) -> None:

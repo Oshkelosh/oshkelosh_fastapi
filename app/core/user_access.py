@@ -7,8 +7,9 @@ from models.user import User
 
 
 def ensure_user_can_access(user: User) -> None:
-    """Raise if the user may not authenticate or use protected APIs."""
+    """Raise if the user may not authenticate or use protected APIs.
+
+    Email verification is optional and never blocks access; only bans do.
+    """
     if user.banned:
         raise AuthenticationError("User account is banned")
-    if not user.verified:
-        raise AuthenticationError("Email address is not verified")

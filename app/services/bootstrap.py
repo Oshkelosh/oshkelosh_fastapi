@@ -10,7 +10,7 @@ from sqlmodel import col
 from app.core.exceptions import ValidationError
 from app.core.security import hash_password
 from models.user import User
-from schemas.user import UserRegister
+from schemas.user import InitialAdminCreate
 from app.services.user_accounts import mark_user_verified
 
 
@@ -36,13 +36,12 @@ async def create_initial_admin(
     if await has_admin_user(session):
         raise ValidationError(message="An admin user already exists")
 
-    validated = UserRegister(email=email, password=password, full_name=full_name)
+    validated = InitialAdminCreate(email=email, password=password, full_name=full_name)
 
     user = User(
         email=validated.email,
         password_hash=hash_password(validated.password),
         full_name=validated.full_name,
-        phone=validated.phone,
         banned=False,
         verified=True,
         is_admin=True,

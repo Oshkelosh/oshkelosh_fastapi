@@ -1,6 +1,9 @@
-from fastapi import APIRouter
+import json
+import logging
 
-from app.admin import limits as L
+from fastapi import APIRouter
+from sqlalchemy.exc import IntegrityError
+
 from app.admin.routes._deps import (
     Any,
     Depends,
@@ -22,8 +25,13 @@ from app.admin.routes._deps import (
     set_flash_cookie,
     settings,
 )
+from app.core.exceptions import ValidationError as AppValidationError
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
+
+_RECENT_ORDERS_LIMIT = 10
+
 
 def _address_from_form(
     line1: str = "",
@@ -46,43 +54,125 @@ def _address_from_form(
     return address or None
 
 
-def _address_form_values(address: Optional[Dict[str, Any]]) -> Dict[str, str]:
-    addr = address or {}
-    return {
-        "line1": addr.get("line1", "") or "",
-        "line2": addr.get("line2", "") or "",
-        "city": addr.get("city", "") or "",
-        "state": addr.get("state", "") or "",
-        "postal_code": addr.get("postal_code", "") or "",
-        "country": addr.get("country", "") or "",
+def _address_form_values(address: Any) -> Dict[str, str]:
+    """Flatten an address column value into form field strings.
+
+    Accepts dicts, JSON strings, or other legacy shapes without raising.
+    """
+    empty = {
+        "line1": "",
+        "line2": "",
+        "city": "",
+        "state": "",
+        "postal_code": "",
+        "country": "",
     }
+    if address is None:
+        return empty
+    if isinstance(address, str):
+        try:
+            address = json.loads(address)
+        except (json.JSONDecodeError, TypeError):
+            return empty
+    if not isinstance(address, dict):
+        return empty
+    return {
+        "line1": address.get("line1", "") or "",
+        "line2": address.get("line2", "") or "",
+        "city": address.get("city", "") or "",
+        "state": address.get("state", "") or "",
+        "postal_code": address.get("postal_code", "") or "",
+        "country": address.get("country", "") or "",
+    }
+
+
+def _address_storage(value: Any) -> Optional[Dict[str, Any]]:
+    """Convert a validated Address (or None) to a DB storage dict."""
+    if value is None:
+        return None
+    if hasattr(value, "to_storage_dict"):
+        return value.to_storage_dict()
+    if isinstance(value, dict):
+        return value
+    return None
+
+
+def _format_dt(value: Any) -> str:
+    if value is None:
+        return ""
+    if hasattr(value, "strftime"):
+        return value.strftime("%Y-%m-%d %H:%M")
+    return str(value)[:16]
 
 
 async def _render_user_form(
     request: Request,
     *,
     title: str,
-    user: Any = None,
+    edit_user: Any = None,
     action_url: str,
     form_error: str | None = None,
     draft: Optional[Dict[str, Any]] = None,
+    recent_orders: list | None = None,
 ):
-    """Render the create/edit user form."""
+    """Render the create/edit user maintenance form."""
     draft = draft or {}
-    address = _address_form_values(
+    shipping = _address_form_values(
         draft.get("default_shipping_address")
         if draft.get("default_shipping_address") is not None
-        else (user.default_shipping_address if user else None)
+        else (edit_user.default_shipping_address if edit_user else None)
+    )
+    billing = _address_form_values(
+        draft.get("default_billing_address")
+        if draft.get("default_billing_address") is not None
+        else (edit_user.default_billing_address if edit_user else None)
     )
     return _template(
         "user_form.html",
         **_common_ctx(request, title),
-        user=user,
+        edit_user=edit_user,
         action_url=action_url,
         form_error=form_error,
         draft=draft,
-        address=address,
+        address=shipping,
+        billing_address=billing,
+        recent_orders=recent_orders or [],
+        format_dt=_format_dt,
     )
+
+
+async def _load_recent_orders(db, user_id: int) -> list:
+    from models.order import Order
+
+    try:
+        result = await db.execute(
+            select(Order)
+            .where(col(Order.user_id) == user_id)
+            .order_by(col(Order.created_at).desc())
+            .limit(_RECENT_ORDERS_LIMIT)
+        )
+        return list(result.scalars().all())
+    except Exception:
+        logger.exception("Failed to load recent orders for user %s", user_id)
+        return []
+
+
+def _self_lockout_error(
+    request: Request,
+    *,
+    target_user_id: int,
+    is_admin: bool,
+    banned: bool,
+) -> str | None:
+    """Reject demoting or banning the currently signed-in admin."""
+    admin = getattr(request.state, "admin_user", None)
+    if admin is None or admin.id != target_user_id:
+        return None
+    if not is_admin:
+        return "You cannot remove your own admin privileges"
+    if banned:
+        return "You cannot ban your own account"
+    return None
 
 
 @router.get("/users")
@@ -182,6 +272,12 @@ async def admin_user_create(
     state: str = Form("", max_length=128),
     postal_code: str = Form("", max_length=32),
     country: str = Form("", max_length=64),
+    billing_line1: str = Form("", max_length=255),
+    billing_line2: str = Form("", max_length=255),
+    billing_city: str = Form("", max_length=128),
+    billing_state: str = Form("", max_length=128),
+    billing_postal_code: str = Form("", max_length=32),
+    billing_country: str = Form("", max_length=64),
     verified: Optional[str] = Form(None),
     banned: Optional[str] = Form(None),
     is_admin: Optional[str] = Form(None),
@@ -192,7 +288,7 @@ async def admin_user_create(
     from pydantic import ValidationError as PydanticValidationError
 
     from app.core.security import hash_password
-    from app.services.user_accounts import mark_user_verified
+    from app.services.user_accounts import ensure_admin_slot_available, mark_user_verified
     from models.user import User
     from schemas.user import UserCreate
 
@@ -202,15 +298,33 @@ async def admin_user_create(
         return _render_error(request, "Database unavailable")
 
     default_shipping_address = _address_from_form(line1, line2, city, state, postal_code, country)
+    default_billing_address = _address_from_form(
+        billing_line1,
+        billing_line2,
+        billing_city,
+        billing_state,
+        billing_postal_code,
+        billing_country,
+    )
     draft = {
         "email": email,
         "full_name": full_name,
         "phone": phone,
         "default_shipping_address": default_shipping_address,
+        "default_billing_address": default_billing_address,
         "verified": verified == "on",
         "banned": banned == "on",
         "is_admin": is_admin == "on",
     }
+
+    async def _form_error(message: str):
+        return await _render_user_form(
+            request,
+            title="New User",
+            action_url=f"{settings.admin_prefix}/users",
+            form_error=message,
+            draft=draft,
+        )
 
     try:
         data = UserCreate(
@@ -219,6 +333,7 @@ async def admin_user_create(
             full_name=full_name or None,
             phone=phone or None,
             default_shipping_address=default_shipping_address,
+            default_billing_address=default_billing_address,
             verified=verified == "on",
             banned=banned == "on",
             is_admin=is_admin == "on",
@@ -228,30 +343,24 @@ async def admin_user_create(
             f"{'.'.join(str(loc) for loc in err['loc'])}: {err['msg']}"
             for err in exc.errors()
         )
-        return await _render_user_form(
-            request,
-            title="New User",
-            action_url=f"{settings.admin_prefix}/users",
-            form_error=errors,
-            draft=draft,
-        )
+        return await _form_error(errors)
 
     existing = await db.execute(select(User).where(col(User.email) == data.email))
     if existing.first() is not None:
-        return await _render_user_form(
-            request,
-            title="New User",
-            action_url=f"{settings.admin_prefix}/users",
-            form_error="A user with this email already exists",
-            draft=draft,
-        )
+        return await _form_error("A user with this email already exists")
+
+    try:
+        await ensure_admin_slot_available(db, make_admin=data.is_admin)
+    except AppValidationError as exc:
+        return await _form_error(exc.message)
 
     user = User(
         email=data.email,
         password_hash=hash_password(data.password),
         full_name=data.full_name,
         phone=data.phone,
-        default_shipping_address=data.default_shipping_address,
+        default_shipping_address=_address_storage(data.default_shipping_address),
+        default_billing_address=_address_storage(data.default_billing_address),
         banned=data.banned,
         verified=data.verified,
         is_admin=data.is_admin,
@@ -260,8 +369,12 @@ async def admin_user_create(
         mark_user_verified(user)
 
     db.add(user)
-    await db.commit()
-    await db.refresh(user)
+    try:
+        await db.commit()
+        await db.refresh(user)
+    except IntegrityError:
+        await db.rollback()
+        return await _form_error("Could not create user (database constraint)")
 
     from app.services.audit import admin_request_meta, log_change
 
@@ -294,22 +407,28 @@ async def admin_user_detail(
     user_id: int,
     db=Depends(require_admin_session),
 ):
-    """Show the edit-user form."""
+    """Show the edit-user maintenance page."""
     from models.user import User
 
     if not db:
         return _render_error(request, "Database unavailable")
 
-    user = await db.get(User, user_id)
-    if not user:
-        return _render_error(request, "User not found", status_code=404)
+    try:
+        user = await db.get(User, user_id)
+        if not user:
+            return _render_error(request, "User not found", status_code=404)
 
-    return await _render_user_form(
-        request,
-        title=f"User: {user.email}",
-        user=user,
-        action_url=f"{settings.admin_prefix}/users/{user_id}",
-    )
+        recent_orders = await _load_recent_orders(db, user_id)
+        return await _render_user_form(
+            request,
+            title=f"User: {user.email}",
+            edit_user=user,
+            action_url=f"{settings.admin_prefix}/users/{user_id}",
+            recent_orders=recent_orders,
+        )
+    except Exception:
+        logger.exception("Failed to render user maintenance page for user %s", user_id)
+        return _render_error(request, "Could not load user", status_code=500)
 
 
 @router.post("/users/{user_id}")
@@ -325,6 +444,12 @@ async def admin_user_update(
     state: str = Form("", max_length=128),
     postal_code: str = Form("", max_length=32),
     country: str = Form("", max_length=64),
+    billing_line1: str = Form("", max_length=255),
+    billing_line2: str = Form("", max_length=255),
+    billing_city: str = Form("", max_length=128),
+    billing_state: str = Form("", max_length=128),
+    billing_postal_code: str = Form("", max_length=32),
+    billing_country: str = Form("", max_length=64),
     verified: Optional[str] = Form(None),
     banned: Optional[str] = Form(None),
     is_admin: Optional[str] = Form(None),
@@ -335,7 +460,7 @@ async def admin_user_update(
     from pydantic import ValidationError as PydanticValidationError
 
     from app.core.security import hash_password
-    from app.services.user_accounts import mark_user_verified
+    from app.services.user_accounts import ensure_admin_slot_available, mark_user_verified
     from models.user import User
     from schemas.user import UserUpdate
 
@@ -357,26 +482,61 @@ async def admin_user_update(
         "verified",
         "is_admin",
         "default_shipping_address",
+        "default_billing_address",
     }
     user_before = {key: getattr(user, key) for key in _USER_AUDIT_KEYS}
 
     default_shipping_address = _address_from_form(line1, line2, city, state, postal_code, country)
+    default_billing_address = _address_from_form(
+        billing_line1,
+        billing_line2,
+        billing_city,
+        billing_state,
+        billing_postal_code,
+        billing_country,
+    )
+    want_verified = verified == "on"
+    want_banned = banned == "on"
+    want_admin = is_admin == "on"
     draft = {
         "full_name": full_name,
         "phone": phone,
         "default_shipping_address": default_shipping_address,
-        "verified": verified == "on",
-        "banned": banned == "on",
-        "is_admin": is_admin == "on",
+        "default_billing_address": default_billing_address,
+        "verified": want_verified,
+        "banned": want_banned,
+        "is_admin": want_admin,
     }
+
+    async def _form_error(message: str):
+        recent_orders = await _load_recent_orders(db, user_id)
+        return await _render_user_form(
+            request,
+            title=f"User: {user.email}",
+            edit_user=user,
+            action_url=f"{settings.admin_prefix}/users/{user_id}",
+            form_error=message,
+            draft=draft,
+            recent_orders=recent_orders,
+        )
+
+    lockout = _self_lockout_error(
+        request,
+        target_user_id=user.id,
+        is_admin=want_admin,
+        banned=want_banned,
+    )
+    if lockout:
+        return await _form_error(lockout)
 
     update_data: Dict[str, Any] = {
         "full_name": full_name or None,
         "phone": phone or None,
         "default_shipping_address": default_shipping_address,
-        "banned": banned == "on",
-        "verified": verified == "on",
-        "is_admin": is_admin == "on",
+        "default_billing_address": default_billing_address,
+        "banned": want_banned,
+        "verified": want_verified,
+        "is_admin": want_admin,
     }
 
     if password.strip():
@@ -389,21 +549,27 @@ async def admin_user_update(
             f"{'.'.join(str(loc) for loc in err['loc'])}: {err['msg']}"
             for err in exc.errors()
         )
-        return await _render_user_form(
-            request,
-            title=f"User: {user.email}",
-            user=user,
-            action_url=f"{settings.admin_prefix}/users/{user_id}",
-            form_error=errors,
-            draft=draft,
-        )
+        return await _form_error(errors)
 
     updates = data.model_dump(exclude_unset=True)
     pwd = updates.pop("password", None)
     verified_set = updates.pop("verified", None)
 
+    if updates.get("is_admin") is True and not user.is_admin:
+        try:
+            await ensure_admin_slot_available(
+                db,
+                make_admin=True,
+                exclude_user_id=user.id,
+            )
+        except AppValidationError as exc:
+            return await _form_error(exc.message)
+
     for key, value in updates.items():
-        setattr(user, key, value)
+        if key in ("default_shipping_address", "default_billing_address"):
+            setattr(user, key, _address_storage(getattr(data, key)))
+        else:
+            setattr(user, key, value)
 
     if pwd is not None:
         user.password_hash = hash_password(pwd)
@@ -415,8 +581,12 @@ async def admin_user_update(
         user.verified_at = None
 
     mark_instance_dirty(db, user)
-    await db.commit()
-    await db.refresh(user)
+    try:
+        await db.commit()
+        await db.refresh(user)
+    except IntegrityError:
+        await db.rollback()
+        return await _form_error("Could not update user (database constraint)")
 
     user_after = {key: getattr(user, key) for key in _USER_AUDIT_KEYS}
     changes = diff_fields(user_before, user_after, keys=_USER_AUDIT_KEYS)
@@ -439,5 +609,3 @@ async def admin_user_update(
     resp = RedirectResponse(url=f"{settings.admin_prefix}/users/{user.id}", status_code=302)
     set_flash_cookie(resp, f"User '{user.email}' updated")
     return resp
-
-

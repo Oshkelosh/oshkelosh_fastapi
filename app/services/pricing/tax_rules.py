@@ -4,16 +4,16 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.services.countries import normalize_country_code
 from models.site_settings import SiteSettings
 
 
 def normalize_country(address: dict[str, Any] | None) -> str | None:
     if not address:
         return None
-    country = address.get("country")
-    if not country:
-        return None
-    return str(country).strip().upper()
+    return normalize_country_code(
+        address.get("country") or address.get("country_code")
+    )
 
 
 def match_tax_rate_bps(

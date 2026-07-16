@@ -244,10 +244,12 @@ def create_app() -> FastAPI:
             return Response(status_code=404, content="Not found", media_type="text/plain")
         return Response(content=js, media_type="application/javascript")
 
+    from app.storefront.auth_links import register_auth_link_routes
     from app.storefront.seo_routes import register_seo_routes
     from app.storefront.static import register_storefront_handler
 
     register_seo_routes(app)
+    register_auth_link_routes(app)
     register_storefront_handler(app)
 
     return app

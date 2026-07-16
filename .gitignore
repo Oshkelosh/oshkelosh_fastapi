@@ -69,6 +69,8 @@ Thumbs.db
 
 # Addon packages: local git clones or admin ZIP installs under category dirs
 # (see app/addons/*/.gitignore). Category README, base.py, __init__.py stay tracked.
+# Runtime backups from forced addon upgrades (app/services/addon_install.py).
+app/addons/.backups/
 # Ignore submodule metadata so accidental `git submodule` use is never committed.
 .gitmodules
 .git/modules/

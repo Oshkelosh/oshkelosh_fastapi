@@ -68,7 +68,9 @@ def _set_detail_cache_headers(response: Response, product: Product) -> None:
 
 def _apply_product_sort(stmt, sort: str, order: str):
     if sort == "popularity":
-        return stmt.order_by(popularity_order_clause(order))
+        # Random tiebreaker so tied scores (e.g. an unsold catalog) don't
+        # always surface the same products in insertion order.
+        return stmt.order_by(popularity_order_clause(order), func.random())
     sort_col = getattr(Product, sort, Product.created_at)
     if order == "desc":
         return stmt.order_by(sort_col.desc())

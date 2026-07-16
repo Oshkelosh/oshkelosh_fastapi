@@ -121,6 +121,22 @@ def build_payment_routers(
                 content={"error": f"{addon_id} addon is not registered"},
             )
 
+        verify = getattr(addon, "verify_webhook", None)
+        if callable(verify):
+            try:
+                ok = await verify(headers=request.headers, body=body)
+            except Exception:
+                exception(page_title, "webhook verification failed")
+                return JSONResponse(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    content={"error": "Webhook verification failed"},
+                )
+            if not ok:
+                return JSONResponse(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    content={"error": "Invalid webhook signature"},
+                )
+
         try:
             payload = json.loads(body.decode("utf-8"))
             event_id = addon.webhook_event_id(payload)

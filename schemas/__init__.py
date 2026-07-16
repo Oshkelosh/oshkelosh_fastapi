@@ -16,7 +16,9 @@ from schemas.user import (
     EmailVerifyRequest,
     ForgotPasswordRequest,
     ResetPasswordRequest,
+    RegisterResponse,
 )
+from schemas.address import Address
 from schemas.product import ProductCreate, ProductImageCreate, ProductRead, ProductUpdate
 from schemas.category import CategoryCreate, CategoryRead, CategoryUpdate
 from schemas.cart import (
@@ -49,6 +51,8 @@ __all__ = [
     "UserRead",
     "UserLogin",
     "Token",
+    "RegisterResponse",
+    "Address",
     # product
     "ProductCreate",
     "ProductUpdate",

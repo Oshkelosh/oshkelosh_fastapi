@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Oshkelosh",
-    "description": "# Oshkelosh API\n\nModular e-commerce backend: core REST API plus **pluggable addons** for suppliers,\npayments, notifications, and storefront frontends.\n\n## Documentation (repository paths)\n\n| Topic | Path |\n|-------|------|\n| Documentation index | `docs/README.md` |\n| All plugins (overview) | `app/addons/README.md` |\n| Storefront / SPA development | `app/addons/frontends/README.md` |\n| Payment processors | `app/addons/payments/README.md` |\n| Suppliers / fulfillment | `app/addons/suppliers/README.md` |\n| Email / notifications | `app/addons/notifications/README.md` |\n| OpenAPI reference | `docs/api/OPENAPI.md` |\n\n## Authentication\n\nMost customer endpoints require:\n\n```\nAuthorization: Bearer <access_token>\n```\n\nObtain tokens via `POST /api/v1/auth/login` or `POST /api/v1/auth/register`.\n\nAdmin JSON endpoints require a user with `is_admin=true`.\n\n## Storefront SPA contract\n\n1. Load branding: `GET /api/v1/storefront/config`\n2. Optional early CSS: `GET /api/v1/storefront/theme.css`\n3. Use core APIs for catalog, cart, orders, checkout\n\n## Addon routes\n\nAddon paths follow:\n\n- **API:** `/api/v1/{category}s/{addon_id}/...` (example: `/api/v1/payments/stripe/checkout`)\n- **Admin HTML:** `/admin/{category}s/{addon_id}/...` (configure credentials and options)\n\nEnable and configure addons in the admin panel under Suppliers, Payments, Frontends, or Tools.",
+    "description": "# Oshkelosh API\n\nModular e-commerce backend: core REST API plus **pluggable addons** for suppliers,\npayments, notifications, and storefront frontends.\n\n## Documentation (repository paths)\n\n| Topic | Path |\n|-------|------|\n| Documentation index | `docs/README.md` |\n| All plugins (overview) | `app/addons/README.md` |\n| Storefront / SPA development | `app/addons/frontends/README.md` |\n| Payment processors | `app/addons/payments/README.md` |\n| Suppliers / fulfillment | `app/addons/suppliers/README.md` |\n| Email / notifications | `app/addons/notifications/README.md` |\n| OpenAPI reference | `docs/api/OPENAPI.md` |\n\n## Authentication\n\nMost customer endpoints require:\n\n```\nAuthorization: Bearer <access_token>\n```\n\nObtain tokens via `POST /api/v1/auth/login` or `POST /api/v1/auth/register`\n(register returns a JWT session plus the user profile). Email verification is\noptional after signup and never blocks shopping.\n\nAdmin JSON endpoints require a user with `is_admin=true`.\n\n## Storefront SPA contract\n\n1. Load branding: `GET /api/v1/storefront/config`\n2. Optional early CSS: `GET /api/v1/storefront/theme.css`\n3. Use core APIs for catalog, cart, orders, checkout\n\n## Addon routes\n\nAddon paths follow:\n\n- **API:** `/api/v1/{category}s/{addon_id}/...` (example: `/api/v1/payments/stripe/checkout`)\n- **Admin HTML:** `/admin/{category}s/{addon_id}/...` (configure credentials and options)\n\nEnable and configure addons in the admin panel under Suppliers, Payments, Frontends, or Tools.",
     "version": "0.1.0"
   },
   "paths": {
@@ -13,7 +13,7 @@
           "auth"
         ],
         "summary": "Register a new user",
-        "description": "Create a new user account with the provided credentials.",
+        "description": "Create a customer account with shipping and billing addresses. Returns a JWT session immediately. Email verification is optional and does not block login or shopping.",
         "operationId": "register_api_v1_auth_register_post",
         "requestBody": {
           "content": {
@@ -31,7 +31,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/UserRead"
+                  "$ref": "#/components/schemas/RegisterResponse"
                 }
               }
             }
@@ -261,6 +261,29 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/resend-verification": {
+      "post": {
+        "tags": [
+          "auth",
+          "auth"
+        ],
+        "summary": "Resend verification email",
+        "description": "Send a new email verification link to the authenticated user. No-op success if the account is already verified.",
+        "operationId": "resend_verification_api_v1_auth_resend_verification_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
                 }
               }
             }
@@ -3001,14 +3024,14 @@
         }
       }
     },
-    "/api/v1/suppliers/spreadconnect/products": {
+    "/api/v1/suppliers/cjdropshipping/products": {
       "get": {
         "tags": [
           "addons-suppliers",
           "addons-suppliers"
         ],
         "summary": "List Products Route",
-        "operationId": "list_products_route_api_v1_suppliers_spreadconnect_products_get",
+        "operationId": "list_products_route_api_v1_suppliers_cjdropshipping_products_get",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -3021,14 +3044,74 @@
         }
       }
     },
-    "/api/v1/suppliers/prodigi/products": {
+    "/api/v1/suppliers/customcat/products": {
       "get": {
         "tags": [
           "addons-suppliers",
           "addons-suppliers"
         ],
         "summary": "List Products Route",
-        "operationId": "list_products_route_api_v1_suppliers_prodigi_products_get",
+        "operationId": "list_products_route_api_v1_suppliers_customcat_products_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/suppliers/gelato/products": {
+      "get": {
+        "tags": [
+          "addons-suppliers",
+          "addons-suppliers"
+        ],
+        "summary": "List Products Route",
+        "operationId": "list_products_route_api_v1_suppliers_gelato_products_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/suppliers/gooten/products": {
+      "get": {
+        "tags": [
+          "addons-suppliers",
+          "addons-suppliers"
+        ],
+        "summary": "List Products Route",
+        "operationId": "list_products_route_api_v1_suppliers_gooten_products_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/suppliers/podbase/products": {
+      "get": {
+        "tags": [
+          "addons-suppliers",
+          "addons-suppliers"
+        ],
+        "summary": "List Products Route",
+        "operationId": "list_products_route_api_v1_suppliers_podbase_products_get",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -3163,14 +3246,14 @@
         }
       }
     },
-    "/api/v1/suppliers/podbase/products": {
+    "/api/v1/suppliers/prodigi/products": {
       "get": {
         "tags": [
           "addons-suppliers",
           "addons-suppliers"
         ],
         "summary": "List Products Route",
-        "operationId": "list_products_route_api_v1_suppliers_podbase_products_get",
+        "operationId": "list_products_route_api_v1_suppliers_prodigi_products_get",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -3183,14 +3266,14 @@
         }
       }
     },
-    "/api/v1/suppliers/gooten/products": {
+    "/api/v1/suppliers/spreadconnect/products": {
       "get": {
         "tags": [
           "addons-suppliers",
           "addons-suppliers"
         ],
         "summary": "List Products Route",
-        "operationId": "list_products_route_api_v1_suppliers_gooten_products_get",
+        "operationId": "list_products_route_api_v1_suppliers_spreadconnect_products_get",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -3203,194 +3286,14 @@
         }
       }
     },
-    "/api/v1/suppliers/gelato/products": {
-      "get": {
-        "tags": [
-          "addons-suppliers",
-          "addons-suppliers"
-        ],
-        "summary": "List Products Route",
-        "operationId": "list_products_route_api_v1_suppliers_gelato_products_get",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/suppliers/customcat/products": {
-      "get": {
-        "tags": [
-          "addons-suppliers",
-          "addons-suppliers"
-        ],
-        "summary": "List Products Route",
-        "operationId": "list_products_route_api_v1_suppliers_customcat_products_get",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/suppliers/cjdropshipping/products": {
-      "get": {
-        "tags": [
-          "addons-suppliers",
-          "addons-suppliers"
-        ],
-        "summary": "List Products Route",
-        "operationId": "list_products_route_api_v1_suppliers_cjdropshipping_products_get",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/payments/worldpay/webhook": {
+    "/api/v1/payments/adyen/webhook": {
       "post": {
         "tags": [
           "addons-payments",
           "addons-payments"
         ],
         "summary": "Addon Webhook",
-        "operationId": "addon_webhook_api_v1_payments_worldpay_webhook_post",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/payments/stripe/webhook": {
-      "post": {
-        "tags": [
-          "addons-payments",
-          "addons-payments"
-        ],
-        "summary": "Addon Webhook",
-        "operationId": "addon_webhook_api_v1_payments_stripe_webhook_post",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/payments/rapyd/webhook": {
-      "post": {
-        "tags": [
-          "addons-payments",
-          "addons-payments"
-        ],
-        "summary": "Addon Webhook",
-        "operationId": "addon_webhook_api_v1_payments_rapyd_webhook_post",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/payments/paypal/webhook": {
-      "post": {
-        "tags": [
-          "addons-payments",
-          "addons-payments"
-        ],
-        "summary": "Addon Webhook",
-        "operationId": "addon_webhook_api_v1_payments_paypal_webhook_post",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/payments/mollie/webhook": {
-      "post": {
-        "tags": [
-          "addons-payments",
-          "addons-payments"
-        ],
-        "summary": "Addon Webhook",
-        "operationId": "addon_webhook_api_v1_payments_mollie_webhook_post",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/payments/mangopay/webhook": {
-      "post": {
-        "tags": [
-          "addons-payments",
-          "addons-payments"
-        ],
-        "summary": "Addon Webhook",
-        "operationId": "addon_webhook_api_v1_payments_mangopay_webhook_post",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/payments/checkout/webhook": {
-      "post": {
-        "tags": [
-          "addons-payments",
-          "addons-payments"
-        ],
-        "summary": "Addon Webhook",
-        "operationId": "addon_webhook_api_v1_payments_checkout_webhook_post",
+        "operationId": "addon_webhook_api_v1_payments_adyen_webhook_post",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -3423,14 +3326,134 @@
         }
       }
     },
-    "/api/v1/payments/adyen/webhook": {
+    "/api/v1/payments/checkout/webhook": {
       "post": {
         "tags": [
           "addons-payments",
           "addons-payments"
         ],
         "summary": "Addon Webhook",
-        "operationId": "addon_webhook_api_v1_payments_adyen_webhook_post",
+        "operationId": "addon_webhook_api_v1_payments_checkout_webhook_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/payments/mangopay/webhook": {
+      "post": {
+        "tags": [
+          "addons-payments",
+          "addons-payments"
+        ],
+        "summary": "Addon Webhook",
+        "operationId": "addon_webhook_api_v1_payments_mangopay_webhook_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/payments/mollie/webhook": {
+      "post": {
+        "tags": [
+          "addons-payments",
+          "addons-payments"
+        ],
+        "summary": "Addon Webhook",
+        "operationId": "addon_webhook_api_v1_payments_mollie_webhook_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/payments/paypal/webhook": {
+      "post": {
+        "tags": [
+          "addons-payments",
+          "addons-payments"
+        ],
+        "summary": "Addon Webhook",
+        "operationId": "addon_webhook_api_v1_payments_paypal_webhook_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/payments/rapyd/webhook": {
+      "post": {
+        "tags": [
+          "addons-payments",
+          "addons-payments"
+        ],
+        "summary": "Addon Webhook",
+        "operationId": "addon_webhook_api_v1_payments_rapyd_webhook_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/payments/stripe/webhook": {
+      "post": {
+        "tags": [
+          "addons-payments",
+          "addons-payments"
+        ],
+        "summary": "Addon Webhook",
+        "operationId": "addon_webhook_api_v1_payments_stripe_webhook_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/payments/worldpay/webhook": {
+      "post": {
+        "tags": [
+          "addons-payments",
+          "addons-payments"
+        ],
+        "summary": "Addon Webhook",
+        "operationId": "addon_webhook_api_v1_payments_worldpay_webhook_post",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -3753,6 +3776,61 @@
             }
           }
         ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/system/update": {
+      "post": {
+        "summary": "Admin Host Update",
+        "description": "Fast-forward pull the host git repo and request a process restart.",
+        "operationId": "admin_host_update_admin_system_update_post",
+        "parameters": [
+          {
+            "name": "oshkelosh_admin",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Oshkelosh Admin"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_admin_host_update_admin_system_update_post"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -6064,6 +6142,70 @@
         }
       }
     },
+    "/admin/addons/{addon_id}/update": {
+      "post": {
+        "summary": "Admin Addon Update",
+        "description": "Re-install an addon from its recorded source_url (force replace).",
+        "operationId": "admin_addon_update_admin_addons__addon_id__update_post",
+        "parameters": [
+          {
+            "name": "addon_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Addon Id"
+            }
+          },
+          {
+            "name": "oshkelosh_admin",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Oshkelosh Admin"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_admin_addon_update_admin_addons__addon_id__update_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/admin/addons/{addon_id}/configure": {
       "get": {
         "summary": "Admin Addon Configure",
@@ -6808,10 +6950,10 @@
         }
       }
     },
-    "/admin/suppliers/spreadconnect": {
+    "/admin/suppliers/cjdropshipping": {
       "get": {
         "summary": "Config Page",
-        "operationId": "config_page_admin_suppliers_spreadconnect_get",
+        "operationId": "config_page_admin_suppliers_cjdropshipping_get",
         "parameters": [
           {
             "name": "oshkelosh_admin",
@@ -6852,10 +6994,10 @@
         }
       }
     },
-    "/admin/suppliers/spreadconnect/save": {
+    "/admin/suppliers/cjdropshipping/save": {
       "post": {
         "summary": "Save Config",
-        "operationId": "save_config_admin_suppliers_spreadconnect_save_post",
+        "operationId": "save_config_admin_suppliers_cjdropshipping_save_post",
         "parameters": [
           {
             "name": "oshkelosh_admin",
@@ -6896,10 +7038,10 @@
         }
       }
     },
-    "/admin/suppliers/spreadconnect/sync": {
+    "/admin/suppliers/cjdropshipping/sync": {
       "post": {
         "summary": "Sync Catalog",
-        "operationId": "sync_catalog_admin_suppliers_spreadconnect_sync_post",
+        "operationId": "sync_catalog_admin_suppliers_cjdropshipping_sync_post",
         "parameters": [
           {
             "name": "oshkelosh_admin",
@@ -6923,7 +7065,7 @@
           "content": {
             "application/x-www-form-urlencoded": {
               "schema": {
-                "$ref": "#/components/schemas/Body_sync_catalog_admin_suppliers_spreadconnect_sync_post"
+                "$ref": "#/components/schemas/Body_sync_catalog_admin_suppliers_cjdropshipping_sync_post"
               }
             }
           }
@@ -6950,10 +7092,10 @@
         }
       }
     },
-    "/admin/suppliers/prodigi": {
+    "/admin/suppliers/customcat": {
       "get": {
         "summary": "Config Page",
-        "operationId": "config_page_admin_suppliers_prodigi_get",
+        "operationId": "config_page_admin_suppliers_customcat_get",
         "parameters": [
           {
             "name": "oshkelosh_admin",
@@ -6994,10 +7136,10 @@
         }
       }
     },
-    "/admin/suppliers/prodigi/save": {
+    "/admin/suppliers/customcat/save": {
       "post": {
         "summary": "Save Config",
-        "operationId": "save_config_admin_suppliers_prodigi_save_post",
+        "operationId": "save_config_admin_suppliers_customcat_save_post",
         "parameters": [
           {
             "name": "oshkelosh_admin",
@@ -7038,10 +7180,10 @@
         }
       }
     },
-    "/admin/suppliers/prodigi/sync": {
+    "/admin/suppliers/customcat/sync": {
       "post": {
         "summary": "Sync Catalog",
-        "operationId": "sync_catalog_admin_suppliers_prodigi_sync_post",
+        "operationId": "sync_catalog_admin_suppliers_customcat_sync_post",
         "parameters": [
           {
             "name": "oshkelosh_admin",
@@ -7065,7 +7207,433 @@
           "content": {
             "application/x-www-form-urlencoded": {
               "schema": {
-                "$ref": "#/components/schemas/Body_sync_catalog_admin_suppliers_prodigi_sync_post"
+                "$ref": "#/components/schemas/Body_sync_catalog_admin_suppliers_customcat_sync_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/suppliers/gelato": {
+      "get": {
+        "summary": "Config Page",
+        "operationId": "config_page_admin_suppliers_gelato_get",
+        "parameters": [
+          {
+            "name": "oshkelosh_admin",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Oshkelosh Admin"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/suppliers/gelato/save": {
+      "post": {
+        "summary": "Save Config",
+        "operationId": "save_config_admin_suppliers_gelato_save_post",
+        "parameters": [
+          {
+            "name": "oshkelosh_admin",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Oshkelosh Admin"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/suppliers/gelato/sync": {
+      "post": {
+        "summary": "Sync Catalog",
+        "operationId": "sync_catalog_admin_suppliers_gelato_sync_post",
+        "parameters": [
+          {
+            "name": "oshkelosh_admin",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Oshkelosh Admin"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_sync_catalog_admin_suppliers_gelato_sync_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/suppliers/gooten": {
+      "get": {
+        "summary": "Config Page",
+        "operationId": "config_page_admin_suppliers_gooten_get",
+        "parameters": [
+          {
+            "name": "oshkelosh_admin",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Oshkelosh Admin"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/suppliers/gooten/save": {
+      "post": {
+        "summary": "Save Config",
+        "operationId": "save_config_admin_suppliers_gooten_save_post",
+        "parameters": [
+          {
+            "name": "oshkelosh_admin",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Oshkelosh Admin"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/suppliers/gooten/sync": {
+      "post": {
+        "summary": "Sync Catalog",
+        "operationId": "sync_catalog_admin_suppliers_gooten_sync_post",
+        "parameters": [
+          {
+            "name": "oshkelosh_admin",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Oshkelosh Admin"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_sync_catalog_admin_suppliers_gooten_sync_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/suppliers/podbase": {
+      "get": {
+        "summary": "Config Page",
+        "operationId": "config_page_admin_suppliers_podbase_get",
+        "parameters": [
+          {
+            "name": "oshkelosh_admin",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Oshkelosh Admin"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/suppliers/podbase/save": {
+      "post": {
+        "summary": "Save Config",
+        "operationId": "save_config_admin_suppliers_podbase_save_post",
+        "parameters": [
+          {
+            "name": "oshkelosh_admin",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Oshkelosh Admin"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/suppliers/podbase/sync": {
+      "post": {
+        "summary": "Sync Catalog",
+        "operationId": "sync_catalog_admin_suppliers_podbase_sync_post",
+        "parameters": [
+          {
+            "name": "oshkelosh_admin",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Oshkelosh Admin"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_sync_catalog_admin_suppliers_podbase_sync_post"
               }
             }
           }
@@ -7376,10 +7944,10 @@
         }
       }
     },
-    "/admin/suppliers/podbase": {
+    "/admin/suppliers/prodigi": {
       "get": {
         "summary": "Config Page",
-        "operationId": "config_page_admin_suppliers_podbase_get",
+        "operationId": "config_page_admin_suppliers_prodigi_get",
         "parameters": [
           {
             "name": "oshkelosh_admin",
@@ -7420,10 +7988,10 @@
         }
       }
     },
-    "/admin/suppliers/podbase/save": {
+    "/admin/suppliers/prodigi/save": {
       "post": {
         "summary": "Save Config",
-        "operationId": "save_config_admin_suppliers_podbase_save_post",
+        "operationId": "save_config_admin_suppliers_prodigi_save_post",
         "parameters": [
           {
             "name": "oshkelosh_admin",
@@ -7464,10 +8032,10 @@
         }
       }
     },
-    "/admin/suppliers/podbase/sync": {
+    "/admin/suppliers/prodigi/sync": {
       "post": {
         "summary": "Sync Catalog",
-        "operationId": "sync_catalog_admin_suppliers_podbase_sync_post",
+        "operationId": "sync_catalog_admin_suppliers_prodigi_sync_post",
         "parameters": [
           {
             "name": "oshkelosh_admin",
@@ -7491,7 +8059,7 @@
           "content": {
             "application/x-www-form-urlencoded": {
               "schema": {
-                "$ref": "#/components/schemas/Body_sync_catalog_admin_suppliers_podbase_sync_post"
+                "$ref": "#/components/schemas/Body_sync_catalog_admin_suppliers_prodigi_sync_post"
               }
             }
           }
@@ -7518,10 +8086,10 @@
         }
       }
     },
-    "/admin/suppliers/gooten": {
+    "/admin/suppliers/spreadconnect": {
       "get": {
         "summary": "Config Page",
-        "operationId": "config_page_admin_suppliers_gooten_get",
+        "operationId": "config_page_admin_suppliers_spreadconnect_get",
         "parameters": [
           {
             "name": "oshkelosh_admin",
@@ -7562,10 +8130,10 @@
         }
       }
     },
-    "/admin/suppliers/gooten/save": {
+    "/admin/suppliers/spreadconnect/save": {
       "post": {
         "summary": "Save Config",
-        "operationId": "save_config_admin_suppliers_gooten_save_post",
+        "operationId": "save_config_admin_suppliers_spreadconnect_save_post",
         "parameters": [
           {
             "name": "oshkelosh_admin",
@@ -7606,10 +8174,10 @@
         }
       }
     },
-    "/admin/suppliers/gooten/sync": {
+    "/admin/suppliers/spreadconnect/sync": {
       "post": {
         "summary": "Sync Catalog",
-        "operationId": "sync_catalog_admin_suppliers_gooten_sync_post",
+        "operationId": "sync_catalog_admin_suppliers_spreadconnect_sync_post",
         "parameters": [
           {
             "name": "oshkelosh_admin",
@@ -7633,7 +8201,7 @@
           "content": {
             "application/x-www-form-urlencoded": {
               "schema": {
-                "$ref": "#/components/schemas/Body_sync_catalog_admin_suppliers_gooten_sync_post"
+                "$ref": "#/components/schemas/Body_sync_catalog_admin_suppliers_spreadconnect_sync_post"
               }
             }
           }
@@ -7660,10 +8228,10 @@
         }
       }
     },
-    "/admin/suppliers/gelato": {
+    "/admin/payments/adyen": {
       "get": {
         "summary": "Config Page",
-        "operationId": "config_page_admin_suppliers_gelato_get",
+        "operationId": "config_page_admin_payments_adyen_get",
         "parameters": [
           {
             "name": "oshkelosh_admin",
@@ -7704,964 +8272,10 @@
         }
       }
     },
-    "/admin/suppliers/gelato/save": {
+    "/admin/payments/adyen/save": {
       "post": {
         "summary": "Save Config",
-        "operationId": "save_config_admin_suppliers_gelato_save_post",
-        "parameters": [
-          {
-            "name": "oshkelosh_admin",
-            "in": "cookie",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Oshkelosh Admin"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/admin/suppliers/gelato/sync": {
-      "post": {
-        "summary": "Sync Catalog",
-        "operationId": "sync_catalog_admin_suppliers_gelato_sync_post",
-        "parameters": [
-          {
-            "name": "oshkelosh_admin",
-            "in": "cookie",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Oshkelosh Admin"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/x-www-form-urlencoded": {
-              "schema": {
-                "$ref": "#/components/schemas/Body_sync_catalog_admin_suppliers_gelato_sync_post"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/admin/suppliers/customcat": {
-      "get": {
-        "summary": "Config Page",
-        "operationId": "config_page_admin_suppliers_customcat_get",
-        "parameters": [
-          {
-            "name": "oshkelosh_admin",
-            "in": "cookie",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Oshkelosh Admin"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/admin/suppliers/customcat/save": {
-      "post": {
-        "summary": "Save Config",
-        "operationId": "save_config_admin_suppliers_customcat_save_post",
-        "parameters": [
-          {
-            "name": "oshkelosh_admin",
-            "in": "cookie",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Oshkelosh Admin"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/admin/suppliers/customcat/sync": {
-      "post": {
-        "summary": "Sync Catalog",
-        "operationId": "sync_catalog_admin_suppliers_customcat_sync_post",
-        "parameters": [
-          {
-            "name": "oshkelosh_admin",
-            "in": "cookie",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Oshkelosh Admin"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/x-www-form-urlencoded": {
-              "schema": {
-                "$ref": "#/components/schemas/Body_sync_catalog_admin_suppliers_customcat_sync_post"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/admin/suppliers/cjdropshipping": {
-      "get": {
-        "summary": "Config Page",
-        "operationId": "config_page_admin_suppliers_cjdropshipping_get",
-        "parameters": [
-          {
-            "name": "oshkelosh_admin",
-            "in": "cookie",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Oshkelosh Admin"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/admin/suppliers/cjdropshipping/save": {
-      "post": {
-        "summary": "Save Config",
-        "operationId": "save_config_admin_suppliers_cjdropshipping_save_post",
-        "parameters": [
-          {
-            "name": "oshkelosh_admin",
-            "in": "cookie",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Oshkelosh Admin"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/admin/suppliers/cjdropshipping/sync": {
-      "post": {
-        "summary": "Sync Catalog",
-        "operationId": "sync_catalog_admin_suppliers_cjdropshipping_sync_post",
-        "parameters": [
-          {
-            "name": "oshkelosh_admin",
-            "in": "cookie",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Oshkelosh Admin"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/x-www-form-urlencoded": {
-              "schema": {
-                "$ref": "#/components/schemas/Body_sync_catalog_admin_suppliers_cjdropshipping_sync_post"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/admin/payments/worldpay": {
-      "get": {
-        "summary": "Config Page",
-        "operationId": "config_page_admin_payments_worldpay_get",
-        "parameters": [
-          {
-            "name": "oshkelosh_admin",
-            "in": "cookie",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Oshkelosh Admin"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/admin/payments/worldpay/save": {
-      "post": {
-        "summary": "Save Config",
-        "operationId": "save_config_admin_payments_worldpay_save_post",
-        "parameters": [
-          {
-            "name": "oshkelosh_admin",
-            "in": "cookie",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Oshkelosh Admin"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/admin/payments/stripe": {
-      "get": {
-        "summary": "Config Page",
-        "operationId": "config_page_admin_payments_stripe_get",
-        "parameters": [
-          {
-            "name": "oshkelosh_admin",
-            "in": "cookie",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Oshkelosh Admin"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/admin/payments/stripe/save": {
-      "post": {
-        "summary": "Save Config",
-        "operationId": "save_config_admin_payments_stripe_save_post",
-        "parameters": [
-          {
-            "name": "oshkelosh_admin",
-            "in": "cookie",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Oshkelosh Admin"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/admin/payments/rapyd": {
-      "get": {
-        "summary": "Config Page",
-        "operationId": "config_page_admin_payments_rapyd_get",
-        "parameters": [
-          {
-            "name": "oshkelosh_admin",
-            "in": "cookie",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Oshkelosh Admin"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/admin/payments/rapyd/save": {
-      "post": {
-        "summary": "Save Config",
-        "operationId": "save_config_admin_payments_rapyd_save_post",
-        "parameters": [
-          {
-            "name": "oshkelosh_admin",
-            "in": "cookie",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Oshkelosh Admin"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/admin/payments/paypal": {
-      "get": {
-        "summary": "Config Page",
-        "operationId": "config_page_admin_payments_paypal_get",
-        "parameters": [
-          {
-            "name": "oshkelosh_admin",
-            "in": "cookie",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Oshkelosh Admin"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/admin/payments/paypal/save": {
-      "post": {
-        "summary": "Save Config",
-        "operationId": "save_config_admin_payments_paypal_save_post",
-        "parameters": [
-          {
-            "name": "oshkelosh_admin",
-            "in": "cookie",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Oshkelosh Admin"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/admin/payments/mollie": {
-      "get": {
-        "summary": "Config Page",
-        "operationId": "config_page_admin_payments_mollie_get",
-        "parameters": [
-          {
-            "name": "oshkelosh_admin",
-            "in": "cookie",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Oshkelosh Admin"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/admin/payments/mollie/save": {
-      "post": {
-        "summary": "Save Config",
-        "operationId": "save_config_admin_payments_mollie_save_post",
-        "parameters": [
-          {
-            "name": "oshkelosh_admin",
-            "in": "cookie",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Oshkelosh Admin"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/admin/payments/mangopay": {
-      "get": {
-        "summary": "Config Page",
-        "operationId": "config_page_admin_payments_mangopay_get",
-        "parameters": [
-          {
-            "name": "oshkelosh_admin",
-            "in": "cookie",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Oshkelosh Admin"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/admin/payments/mangopay/save": {
-      "post": {
-        "summary": "Save Config",
-        "operationId": "save_config_admin_payments_mangopay_save_post",
-        "parameters": [
-          {
-            "name": "oshkelosh_admin",
-            "in": "cookie",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Oshkelosh Admin"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/admin/payments/checkout": {
-      "get": {
-        "summary": "Config Page",
-        "operationId": "config_page_admin_payments_checkout_get",
-        "parameters": [
-          {
-            "name": "oshkelosh_admin",
-            "in": "cookie",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Oshkelosh Admin"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/admin/payments/checkout/save": {
-      "post": {
-        "summary": "Save Config",
-        "operationId": "save_config_admin_payments_checkout_save_post",
+        "operationId": "save_config_admin_payments_adyen_save_post",
         "parameters": [
           {
             "name": "oshkelosh_admin",
@@ -8790,10 +8404,10 @@
         }
       }
     },
-    "/admin/payments/adyen": {
+    "/admin/payments/checkout": {
       "get": {
         "summary": "Config Page",
-        "operationId": "config_page_admin_payments_adyen_get",
+        "operationId": "config_page_admin_payments_checkout_get",
         "parameters": [
           {
             "name": "oshkelosh_admin",
@@ -8834,10 +8448,10 @@
         }
       }
     },
-    "/admin/payments/adyen/save": {
+    "/admin/payments/checkout/save": {
       "post": {
         "summary": "Save Config",
-        "operationId": "save_config_admin_payments_adyen_save_post",
+        "operationId": "save_config_admin_payments_checkout_save_post",
         "parameters": [
           {
             "name": "oshkelosh_admin",
@@ -8878,10 +8492,10 @@
         }
       }
     },
-    "/admin/notifications/twilio": {
+    "/admin/payments/mangopay": {
       "get": {
         "summary": "Config Page",
-        "operationId": "config_page_admin_notifications_twilio_get",
+        "operationId": "config_page_admin_payments_mangopay_get",
         "parameters": [
           {
             "name": "oshkelosh_admin",
@@ -8922,10 +8536,10 @@
         }
       }
     },
-    "/admin/notifications/twilio/save": {
+    "/admin/payments/mangopay/save": {
       "post": {
         "summary": "Save Config",
-        "operationId": "save_config_admin_notifications_twilio_save_post",
+        "operationId": "save_config_admin_payments_mangopay_save_post",
         "parameters": [
           {
             "name": "oshkelosh_admin",
@@ -8966,10 +8580,10 @@
         }
       }
     },
-    "/admin/notifications/smtp": {
+    "/admin/payments/mollie": {
       "get": {
         "summary": "Config Page",
-        "operationId": "config_page_admin_notifications_smtp_get",
+        "operationId": "config_page_admin_payments_mollie_get",
         "parameters": [
           {
             "name": "oshkelosh_admin",
@@ -9010,10 +8624,10 @@
         }
       }
     },
-    "/admin/notifications/smtp/save": {
+    "/admin/payments/mollie/save": {
       "post": {
         "summary": "Save Config",
-        "operationId": "save_config_admin_notifications_smtp_save_post",
+        "operationId": "save_config_admin_payments_mollie_save_post",
         "parameters": [
           {
             "name": "oshkelosh_admin",
@@ -9054,10 +8668,10 @@
         }
       }
     },
-    "/admin/notifications/ses": {
+    "/admin/payments/paypal": {
       "get": {
         "summary": "Config Page",
-        "operationId": "config_page_admin_notifications_ses_get",
+        "operationId": "config_page_admin_payments_paypal_get",
         "parameters": [
           {
             "name": "oshkelosh_admin",
@@ -9098,10 +8712,10 @@
         }
       }
     },
-    "/admin/notifications/ses/save": {
+    "/admin/payments/paypal/save": {
       "post": {
         "summary": "Save Config",
-        "operationId": "save_config_admin_notifications_ses_save_post",
+        "operationId": "save_config_admin_payments_paypal_save_post",
         "parameters": [
           {
             "name": "oshkelosh_admin",
@@ -9142,10 +8756,10 @@
         }
       }
     },
-    "/admin/notifications/sendgrid": {
+    "/admin/payments/rapyd": {
       "get": {
         "summary": "Config Page",
-        "operationId": "config_page_admin_notifications_sendgrid_get",
+        "operationId": "config_page_admin_payments_rapyd_get",
         "parameters": [
           {
             "name": "oshkelosh_admin",
@@ -9186,10 +8800,10 @@
         }
       }
     },
-    "/admin/notifications/sendgrid/save": {
+    "/admin/payments/rapyd/save": {
       "post": {
         "summary": "Save Config",
-        "operationId": "save_config_admin_notifications_sendgrid_save_post",
+        "operationId": "save_config_admin_payments_rapyd_save_post",
         "parameters": [
           {
             "name": "oshkelosh_admin",
@@ -9230,10 +8844,10 @@
         }
       }
     },
-    "/admin/notifications/resend": {
+    "/admin/payments/stripe": {
       "get": {
         "summary": "Config Page",
-        "operationId": "config_page_admin_notifications_resend_get",
+        "operationId": "config_page_admin_payments_stripe_get",
         "parameters": [
           {
             "name": "oshkelosh_admin",
@@ -9274,10 +8888,10 @@
         }
       }
     },
-    "/admin/notifications/resend/save": {
+    "/admin/payments/stripe/save": {
       "post": {
         "summary": "Save Config",
-        "operationId": "save_config_admin_notifications_resend_save_post",
+        "operationId": "save_config_admin_payments_stripe_save_post",
         "parameters": [
           {
             "name": "oshkelosh_admin",
@@ -9318,10 +8932,10 @@
         }
       }
     },
-    "/admin/notifications/pusher_beams": {
+    "/admin/payments/worldpay": {
       "get": {
         "summary": "Config Page",
-        "operationId": "config_page_admin_notifications_pusher_beams_get",
+        "operationId": "config_page_admin_payments_worldpay_get",
         "parameters": [
           {
             "name": "oshkelosh_admin",
@@ -9362,10 +8976,10 @@
         }
       }
     },
-    "/admin/notifications/pusher_beams/save": {
+    "/admin/payments/worldpay/save": {
       "post": {
         "summary": "Save Config",
-        "operationId": "save_config_admin_notifications_pusher_beams_save_post",
+        "operationId": "save_config_admin_payments_worldpay_save_post",
         "parameters": [
           {
             "name": "oshkelosh_admin",
@@ -9406,10 +9020,10 @@
         }
       }
     },
-    "/admin/notifications/postmark": {
+    "/admin/notifications/fcm": {
       "get": {
         "summary": "Config Page",
-        "operationId": "config_page_admin_notifications_postmark_get",
+        "operationId": "config_page_admin_notifications_fcm_get",
         "parameters": [
           {
             "name": "oshkelosh_admin",
@@ -9450,186 +9064,10 @@
         }
       }
     },
-    "/admin/notifications/postmark/save": {
+    "/admin/notifications/fcm/save": {
       "post": {
         "summary": "Save Config",
-        "operationId": "save_config_admin_notifications_postmark_save_post",
-        "parameters": [
-          {
-            "name": "oshkelosh_admin",
-            "in": "cookie",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Oshkelosh Admin"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/admin/notifications/onesignal": {
-      "get": {
-        "summary": "Config Page",
-        "operationId": "config_page_admin_notifications_onesignal_get",
-        "parameters": [
-          {
-            "name": "oshkelosh_admin",
-            "in": "cookie",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Oshkelosh Admin"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/admin/notifications/onesignal/save": {
-      "post": {
-        "summary": "Save Config",
-        "operationId": "save_config_admin_notifications_onesignal_save_post",
-        "parameters": [
-          {
-            "name": "oshkelosh_admin",
-            "in": "cookie",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Oshkelosh Admin"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/admin/notifications/messagebird": {
-      "get": {
-        "summary": "Config Page",
-        "operationId": "config_page_admin_notifications_messagebird_get",
-        "parameters": [
-          {
-            "name": "oshkelosh_admin",
-            "in": "cookie",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Oshkelosh Admin"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/admin/notifications/messagebird/save": {
-      "post": {
-        "summary": "Save Config",
-        "operationId": "save_config_admin_notifications_messagebird_save_post",
+        "operationId": "save_config_admin_notifications_fcm_save_post",
         "parameters": [
           {
             "name": "oshkelosh_admin",
@@ -9758,10 +9196,10 @@
         }
       }
     },
-    "/admin/notifications/fcm": {
+    "/admin/notifications/messagebird": {
       "get": {
         "summary": "Config Page",
-        "operationId": "config_page_admin_notifications_fcm_get",
+        "operationId": "config_page_admin_notifications_messagebird_get",
         "parameters": [
           {
             "name": "oshkelosh_admin",
@@ -9802,10 +9240,714 @@
         }
       }
     },
-    "/admin/notifications/fcm/save": {
+    "/admin/notifications/messagebird/save": {
       "post": {
         "summary": "Save Config",
-        "operationId": "save_config_admin_notifications_fcm_save_post",
+        "operationId": "save_config_admin_notifications_messagebird_save_post",
+        "parameters": [
+          {
+            "name": "oshkelosh_admin",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Oshkelosh Admin"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/notifications/onesignal": {
+      "get": {
+        "summary": "Config Page",
+        "operationId": "config_page_admin_notifications_onesignal_get",
+        "parameters": [
+          {
+            "name": "oshkelosh_admin",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Oshkelosh Admin"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/notifications/onesignal/save": {
+      "post": {
+        "summary": "Save Config",
+        "operationId": "save_config_admin_notifications_onesignal_save_post",
+        "parameters": [
+          {
+            "name": "oshkelosh_admin",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Oshkelosh Admin"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/notifications/postmark": {
+      "get": {
+        "summary": "Config Page",
+        "operationId": "config_page_admin_notifications_postmark_get",
+        "parameters": [
+          {
+            "name": "oshkelosh_admin",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Oshkelosh Admin"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/notifications/postmark/save": {
+      "post": {
+        "summary": "Save Config",
+        "operationId": "save_config_admin_notifications_postmark_save_post",
+        "parameters": [
+          {
+            "name": "oshkelosh_admin",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Oshkelosh Admin"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/notifications/pusher_beams": {
+      "get": {
+        "summary": "Config Page",
+        "operationId": "config_page_admin_notifications_pusher_beams_get",
+        "parameters": [
+          {
+            "name": "oshkelosh_admin",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Oshkelosh Admin"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/notifications/pusher_beams/save": {
+      "post": {
+        "summary": "Save Config",
+        "operationId": "save_config_admin_notifications_pusher_beams_save_post",
+        "parameters": [
+          {
+            "name": "oshkelosh_admin",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Oshkelosh Admin"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/notifications/resend": {
+      "get": {
+        "summary": "Config Page",
+        "operationId": "config_page_admin_notifications_resend_get",
+        "parameters": [
+          {
+            "name": "oshkelosh_admin",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Oshkelosh Admin"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/notifications/resend/save": {
+      "post": {
+        "summary": "Save Config",
+        "operationId": "save_config_admin_notifications_resend_save_post",
+        "parameters": [
+          {
+            "name": "oshkelosh_admin",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Oshkelosh Admin"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/notifications/sendgrid": {
+      "get": {
+        "summary": "Config Page",
+        "operationId": "config_page_admin_notifications_sendgrid_get",
+        "parameters": [
+          {
+            "name": "oshkelosh_admin",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Oshkelosh Admin"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/notifications/sendgrid/save": {
+      "post": {
+        "summary": "Save Config",
+        "operationId": "save_config_admin_notifications_sendgrid_save_post",
+        "parameters": [
+          {
+            "name": "oshkelosh_admin",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Oshkelosh Admin"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/notifications/ses": {
+      "get": {
+        "summary": "Config Page",
+        "operationId": "config_page_admin_notifications_ses_get",
+        "parameters": [
+          {
+            "name": "oshkelosh_admin",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Oshkelosh Admin"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/notifications/ses/save": {
+      "post": {
+        "summary": "Save Config",
+        "operationId": "save_config_admin_notifications_ses_save_post",
+        "parameters": [
+          {
+            "name": "oshkelosh_admin",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Oshkelosh Admin"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/notifications/smtp": {
+      "get": {
+        "summary": "Config Page",
+        "operationId": "config_page_admin_notifications_smtp_get",
+        "parameters": [
+          {
+            "name": "oshkelosh_admin",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Oshkelosh Admin"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/notifications/smtp/save": {
+      "post": {
+        "summary": "Save Config",
+        "operationId": "save_config_admin_notifications_smtp_save_post",
+        "parameters": [
+          {
+            "name": "oshkelosh_admin",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Oshkelosh Admin"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/notifications/twilio": {
+      "get": {
+        "summary": "Config Page",
+        "operationId": "config_page_admin_notifications_twilio_get",
+        "parameters": [
+          {
+            "name": "oshkelosh_admin",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Oshkelosh Admin"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/notifications/twilio/save": {
+      "post": {
+        "summary": "Save Config",
+        "operationId": "save_config_admin_notifications_twilio_save_post",
         "parameters": [
           {
             "name": "oshkelosh_admin",
@@ -10279,6 +10421,103 @@
         "title": "ActiveFrontendInfo",
         "description": "Metadata and config for the currently enabled frontend addon."
       },
+      "Address": {
+        "properties": {
+          "line1": {
+            "type": "string",
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Line1"
+          },
+          "line2": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Line2"
+          },
+          "city": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "City"
+          },
+          "state": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 128
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "State"
+          },
+          "postal_code": {
+            "type": "string",
+            "maxLength": 32,
+            "minLength": 1,
+            "title": "Postal Code"
+          },
+          "country": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Country"
+          },
+          "full_name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Full Name"
+          },
+          "phone": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 32
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          }
+        },
+        "type": "object",
+        "required": [
+          "line1",
+          "city",
+          "postal_code",
+          "country"
+        ],
+        "title": "Address",
+        "description": "Postal address used for shipping and billing."
+      },
       "AuthConfigPublic": {
         "properties": {
           "sso_providers": {
@@ -10288,6 +10527,12 @@
             "type": "array",
             "title": "Sso Providers",
             "description": "Enabled social sign-in providers (empty when SSO addon is off)."
+          },
+          "email_verification_enabled": {
+            "type": "boolean",
+            "title": "Email Verification Enabled",
+            "description": "When true, the shop sends verification emails after registration. Verification is optional and never blocks shopping.",
+            "default": true
           }
         },
         "type": "object",
@@ -10447,6 +10692,20 @@
         ],
         "title": "Body_admin_addon_save_config_admin_addons__addon_id__configure_post"
       },
+      "Body_admin_addon_update_admin_addons__addon_id__update_post": {
+        "properties": {
+          "csrf_token": {
+            "type": "string",
+            "maxLength": 128,
+            "title": "Csrf Token"
+          }
+        },
+        "type": "object",
+        "required": [
+          "csrf_token"
+        ],
+        "title": "Body_admin_addon_update_admin_addons__addon_id__update_post"
+      },
       "Body_admin_category_create_admin_categories_post": {
         "properties": {
           "name": {
@@ -10580,6 +10839,26 @@
           "csrf_token"
         ],
         "title": "Body_admin_category_update_admin_categories__slug__edit_post"
+      },
+      "Body_admin_host_update_admin_system_update_post": {
+        "properties": {
+          "csrf_token": {
+            "type": "string",
+            "maxLength": 128,
+            "title": "Csrf Token"
+          },
+          "confirm": {
+            "type": "string",
+            "maxLength": 8,
+            "title": "Confirm",
+            "default": "off"
+          }
+        },
+        "type": "object",
+        "required": [
+          "csrf_token"
+        ],
+        "title": "Body_admin_host_update_admin_system_update_post"
       },
       "Body_admin_login_submit_admin_login_post": {
         "properties": {
@@ -11244,6 +11523,42 @@
             "title": "Country",
             "default": ""
           },
+          "billing_line1": {
+            "type": "string",
+            "maxLength": 255,
+            "title": "Billing Line1",
+            "default": ""
+          },
+          "billing_line2": {
+            "type": "string",
+            "maxLength": 255,
+            "title": "Billing Line2",
+            "default": ""
+          },
+          "billing_city": {
+            "type": "string",
+            "maxLength": 128,
+            "title": "Billing City",
+            "default": ""
+          },
+          "billing_state": {
+            "type": "string",
+            "maxLength": 128,
+            "title": "Billing State",
+            "default": ""
+          },
+          "billing_postal_code": {
+            "type": "string",
+            "maxLength": 32,
+            "title": "Billing Postal Code",
+            "default": ""
+          },
+          "billing_country": {
+            "type": "string",
+            "maxLength": 64,
+            "title": "Billing Country",
+            "default": ""
+          },
           "verified": {
             "anyOf": [
               {
@@ -11345,6 +11660,42 @@
             "type": "string",
             "maxLength": 64,
             "title": "Country",
+            "default": ""
+          },
+          "billing_line1": {
+            "type": "string",
+            "maxLength": 255,
+            "title": "Billing Line1",
+            "default": ""
+          },
+          "billing_line2": {
+            "type": "string",
+            "maxLength": 255,
+            "title": "Billing Line2",
+            "default": ""
+          },
+          "billing_city": {
+            "type": "string",
+            "maxLength": 128,
+            "title": "Billing City",
+            "default": ""
+          },
+          "billing_state": {
+            "type": "string",
+            "maxLength": 128,
+            "title": "Billing State",
+            "default": ""
+          },
+          "billing_postal_code": {
+            "type": "string",
+            "maxLength": 32,
+            "title": "Billing Postal Code",
+            "default": ""
+          },
+          "billing_country": {
+            "type": "string",
+            "maxLength": 64,
+            "title": "Billing Country",
             "default": ""
           },
           "verified": {
@@ -13973,6 +14324,34 @@
         "title": "PushConfigPublic",
         "description": "Public web push client configuration (no secrets)."
       },
+      "RegisterResponse": {
+        "properties": {
+          "access_token": {
+            "type": "string",
+            "title": "Access Token"
+          },
+          "refresh_token": {
+            "type": "string",
+            "title": "Refresh Token"
+          },
+          "token_type": {
+            "type": "string",
+            "title": "Token Type",
+            "default": "bearer"
+          },
+          "user": {
+            "$ref": "#/components/schemas/UserRead"
+          }
+        },
+        "type": "object",
+        "required": [
+          "access_token",
+          "refresh_token",
+          "user"
+        ],
+        "title": "RegisterResponse",
+        "description": "Registration result: profile plus JWT session."
+      },
       "ResetPasswordRequest": {
         "properties": {
           "password": {
@@ -14468,14 +14847,22 @@
           "default_shipping_address": {
             "anyOf": [
               {
-                "additionalProperties": true,
-                "type": "object"
+                "$ref": "#/components/schemas/Address"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Default Shipping Address"
+            ]
+          },
+          "default_billing_address": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Address"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "banned": {
             "type": "boolean",
@@ -14549,14 +14936,22 @@
           "default_shipping_address": {
             "anyOf": [
               {
-                "additionalProperties": true,
-                "type": "object"
+                "$ref": "#/components/schemas/Address"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Default Shipping Address"
+            ]
+          },
+          "default_billing_address": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Address"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "password": {
             "anyOf": [
@@ -14642,6 +15037,18 @@
               }
             ],
             "title": "Default Shipping Address"
+          },
+          "default_billing_address": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Billing Address"
           },
           "banned": {
             "type": "boolean",
@@ -14744,15 +15151,34 @@
               }
             ],
             "title": "Phone"
+          },
+          "default_shipping_address": {
+            "$ref": "#/components/schemas/Address"
+          },
+          "default_billing_address": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Address"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "billing_same_as_shipping": {
+            "type": "boolean",
+            "title": "Billing Same As Shipping",
+            "default": false
           }
         },
         "type": "object",
         "required": [
           "password",
-          "email"
+          "email",
+          "default_shipping_address"
         ],
         "title": "UserRegister",
-        "description": "Public registration payload — no privilege fields."
+        "description": "Public registration payload — identity plus shipping/billing addresses."
       },
       "UserUpdate": {
         "properties": {
@@ -14783,14 +15209,22 @@
           "default_shipping_address": {
             "anyOf": [
               {
-                "additionalProperties": true,
-                "type": "object"
+                "$ref": "#/components/schemas/Address"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Default Shipping Address"
+            ]
+          },
+          "default_billing_address": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Address"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "banned": {
             "anyOf": [

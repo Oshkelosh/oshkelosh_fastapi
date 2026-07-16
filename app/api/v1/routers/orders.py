@@ -38,7 +38,7 @@ from models.product import Product
 from models.product_variant import ProductVariant
 from models.user import User
 from schemas.order import OrderCheckoutUpdate, OrderCreateFromCart, OrderRead
-from app.services.user_accounts import resolve_order_shipping_address
+from app.services.user_accounts import resolve_order_shipping_address, resolve_order_billing_address
 
 router = APIRouter(prefix="/orders", tags=["orders"])
 
@@ -116,7 +116,7 @@ async def create_order(
         raise NotFound(resource_name="User", resource_id=user_id)
 
     shipping_address = resolve_order_shipping_address(user, payload.shipping_address)
-    billing_address = payload.billing_address
+    billing_address = resolve_order_billing_address(user, payload.billing_address)
 
     site = await get_site_settings(session)
     charges = await quote_order_charges(

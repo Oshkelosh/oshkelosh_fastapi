@@ -67,7 +67,10 @@ class TestOrderAddresses:
         assert response.status_code == 201
         data = response.json()
         assert data["shipping_address"] == shipping
-        assert data["billing_address"] == billing
+        assert data["billing_address"]["line1"] == billing["line1"]
+        assert data["billing_address"]["city"] == billing["city"]
+        assert data["billing_address"]["country"] == billing["country"]
+        assert data["billing_address"]["email"] == test_user.email
         assert data["notes"] == "Leave at door"
 
     async def test_checkout_can_update_addresses(
@@ -184,7 +187,18 @@ class TestUserProfile:
         )
         headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
 
-        address = {"first_name": "Test", "line1": "42 Test Lane", "country": "US"}
+        address = {
+            "line1": "42 Test Lane",
+            "city": "Austin",
+            "postal_code": "78701",
+            "country": "US",
+        }
+        billing = {
+            "line1": "99 Bill Ave",
+            "city": "Austin",
+            "postal_code": "78702",
+            "country": "US",
+        }
         response = await client.patch(
             "/api/v1/auth/me",
             headers=headers,
@@ -192,6 +206,7 @@ class TestUserProfile:
                 "full_name": "Updated Name",
                 "phone": "+15551234567",
                 "default_shipping_address": address,
+                "default_billing_address": billing,
             },
         )
         assert response.status_code == 200
@@ -199,6 +214,7 @@ class TestUserProfile:
         assert data["full_name"] == "Updated Name"
         assert data["phone"] == "+15551234567"
         assert data["default_shipping_address"] == address
+        assert data["default_billing_address"] == billing
 
     async def test_patch_me_updates_push_subscription(self, client: AsyncClient, test_user):
         from app.addons.registry import addon_registry
@@ -258,7 +274,7 @@ class TestAuthFlags:
         )
         assert response.status_code == 401
 
-    async def test_unverified_user_cannot_login(self, client: AsyncClient, db_session):
+    async def test_unverified_user_can_login(self, client: AsyncClient, db_session):
         user = User(
             email="unverified@example.com",
             password_hash=hash_password("SecurePass123!"),
@@ -272,19 +288,28 @@ class TestAuthFlags:
             "/api/v1/auth/login",
             json={"email": "unverified@example.com", "password": "SecurePass123!"},
         )
-        assert response.status_code == 401
+        assert response.status_code == 200
+        assert "access_token" in response.json()
 
-    async def test_register_sets_verified_and_not_banned(self, client: AsyncClient):
+    async def test_register_sets_unverified_and_not_banned(self, client: AsyncClient):
         response = await client.post(
             "/api/v1/auth/register",
             json={
                 "email": "flags@example.com",
                 "password": "SecurePass123!",
                 "full_name": "Flags User",
+                "default_shipping_address": {
+                    "line1": "1 Flag St",
+                    "city": "Austin",
+                    "postal_code": "78701",
+                    "country": "US",
+                },
+                "billing_same_as_shipping": True,
             },
         )
-        assert response.status_code in (200, 201)
-        data = response.json()
-        assert data["verified"] is True
+        assert response.status_code == 201
+        data = response.json()["user"]
+        assert data["verified"] is False
         assert data["banned"] is False
         assert data["is_admin"] is False
+        assert "access_token" in response.json()

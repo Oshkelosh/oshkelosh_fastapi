@@ -129,13 +129,19 @@ async def verify_email_with_token(session: Any, token: str) -> User:
     return user
 
 
-async def reset_password_with_token(session: Any, token: str, new_password: str) -> User:
+async def validate_password_reset_token(session: Any, token: str) -> User:
+    """Return the user for a still-valid reset token without consuming it."""
     result = await session.execute(
         select(User).where(col(User.password_reset_token) == token)
     )
     user = result.scalar_one_or_none()
     if user is None or _is_expired(user.password_reset_expires_at):
         raise AuthenticationError(message="Invalid or expired reset token")
+    return user
+
+
+async def reset_password_with_token(session: Any, token: str, new_password: str) -> User:
+    user = await validate_password_reset_token(session, token)
     user.password_hash = hash_password(new_password)
     clear_password_reset(user)
     return user
@@ -146,12 +152,36 @@ def resolve_order_shipping_address(
     shipping_address: Optional[Dict[str, Any]],
 ) -> Optional[Dict[str, Any]]:
     """Use explicit address or fall back to the user's saved default."""
+    from app.services.countries import normalize_address_country
+
     address = deepcopy(shipping_address) if shipping_address else None
     if address is None and user.default_shipping_address:
         address = deepcopy(user.default_shipping_address)
     if address is None:
         return None
 
+    address = normalize_address_country(address) or address
+    if user.email and not address.get("email"):
+        address["email"] = user.email
+    if user.phone and not address.get("phone"):
+        address["phone"] = user.phone
+    return address
+
+
+def resolve_order_billing_address(
+    user: User,
+    billing_address: Optional[Dict[str, Any]],
+) -> Optional[Dict[str, Any]]:
+    """Prefer explicit order billing, else saved billing, else shipping fallback."""
+    from app.services.countries import normalize_address_country
+
+    address = deepcopy(billing_address) if billing_address else None
+    if address is None and user.default_billing_address:
+        address = deepcopy(user.default_billing_address)
+    if address is None:
+        return resolve_order_shipping_address(user, None)
+
+    address = normalize_address_country(address) or address
     if user.email and not address.get("email"):
         address["email"] = user.email
     if user.phone and not address.get("phone"):
@@ -176,3 +206,20 @@ async def link_payment_customer(
     if hasattr(session, "mark_dirty"):
         session.mark_dirty(user)
     await session.flush()
+
+
+async def ensure_admin_slot_available(
+    session: Any,
+    *,
+    make_admin: bool,
+    exclude_user_id: int | None = None,
+) -> None:
+    """Enforce the current single-admin DB constraint with a friendly error."""
+    if not make_admin:
+        return
+    stmt = select(User).where(col(User.is_admin).is_(True))
+    if exclude_user_id is not None:
+        stmt = stmt.where(col(User.id) != exclude_user_id)
+    existing = await session.execute(stmt.limit(1))
+    if existing.scalar_one_or_none() is not None:
+        raise ValidationError(message="Only one admin user is allowed")

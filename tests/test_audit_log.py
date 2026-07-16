@@ -174,6 +174,7 @@ class TestAdminAuditInstrumentation:
                 "postal_code": "",
                 "country": "",
                 "verified": "on",
+                "is_admin": "on",
                 "csrf_token": csrf,
             },
         )

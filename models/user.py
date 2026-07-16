@@ -44,6 +44,10 @@ class User(ModelBase, table=True):
         default=None,
         sa_column=Column(JSON, nullable=True),
     )
+    default_billing_address: Optional[Dict[str, Any]] = Field(
+        default=None,
+        sa_column=Column(JSON, nullable=True),
+    )
     payment_customer_ids: Optional[Dict[str, str]] = Field(
         default=None,
         sa_column=Column(JSON, nullable=True),

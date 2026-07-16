@@ -22,6 +22,7 @@ from schemas.base import MessageResponse
 from schemas.user import (
     EmailVerifyRequest,
     ForgotPasswordRequest,
+    RegisterResponse,
     ResetPasswordRequest,
     Token,
     UserLogin,
@@ -30,7 +31,6 @@ from schemas.user import (
     UserRegister,
 )
 from app.services.user_accounts import (
-    mark_user_verified,
     reset_password_with_token,
     send_password_reset_email,
     send_verification_email,
@@ -96,42 +96,53 @@ def _build_token_response(user: User) -> dict:
 
 @router.post(
     "/register",
-    response_model=UserRead,
+    response_model=RegisterResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Register a new user",
-    description="Create a new user account with the provided credentials.",
+    description=(
+        "Create a customer account with shipping and billing addresses. "
+        "Returns a JWT session immediately. Email verification is optional and "
+        "does not block login or shopping."
+    ),
 )
 @limiter.limit(settings.rate_limit_register)
 async def register(
     request: Request,
     body: UserRegister,
     session=Depends(get_session),
-) -> UserRead:
-    """Register a new user account."""
+) -> RegisterResponse:
+    """Register a new user account and return tokens."""
+    email = str(body.email).strip().lower()
     existing = await session.execute(
-        select(User).where(col(User.email) == body.email)
+        select(User).where(col(User.email) == email)
     )
     if existing.first() is not None:
         raise ValidationError(message="A user with this email already exists")
 
-    auto_verify = not settings.require_email_verification
+    shipping = body.default_shipping_address.to_storage_dict()
+    billing = (
+        body.default_billing_address.to_storage_dict()
+        if body.default_billing_address is not None
+        else shipping
+    )
+
     user = User(
-        email=body.email,
+        email=email,
         password_hash=hash_password(body.password),
         full_name=body.full_name,
         phone=body.phone,
+        default_shipping_address=shipping,
+        default_billing_address=billing,
         banned=False,
-        verified=auto_verify,
+        verified=False,
         is_admin=False,
     )
-    if auto_verify:
-        mark_user_verified(user)
 
     session.add(user)
     await session.flush()
     await session.refresh(user)
 
-    if not auto_verify:
+    if settings.require_email_verification:
         await send_verification_email(session, user)
         mark_instance_dirty(session, user)
         await session.flush()
@@ -149,7 +160,8 @@ async def register(
         build_user_registered_payload(user),
     )
 
-    return _as_user_read(user)
+    tokens = _build_token_response(user)
+    return RegisterResponse(user=_as_user_read(user), **tokens)
 
 
 @router.post(
@@ -232,7 +244,9 @@ async def update_me(
     if body.phone is not None:
         user.phone = body.phone
     if body.default_shipping_address is not None:
-        user.default_shipping_address = body.default_shipping_address
+        user.default_shipping_address = body.default_shipping_address.to_storage_dict()
+    if body.default_billing_address is not None:
+        user.default_billing_address = body.default_billing_address.to_storage_dict()
     if body.password is not None:
         user.password_hash = hash_password(body.password)
     _apply_push_subscription(user, body)
@@ -273,6 +287,32 @@ async def verify_email(
     mark_instance_dirty(session, user)
     await session.flush()
     return MessageResponse(message="Email verified successfully")
+
+
+@router.post(
+    "/resend-verification",
+    response_model=MessageResponse,
+    summary="Resend verification email",
+    description=(
+        "Send a new email verification link to the authenticated user. "
+        "No-op success if the account is already verified."
+    ),
+)
+@limiter.limit(settings.rate_limit_register)
+async def resend_verification(
+    request: Request,
+    current_user: CurrentUser = Depends(get_current_user),
+    session=Depends(get_session),
+) -> MessageResponse:
+    user = await session.get(User, current_user.id)
+    if user is None:
+        raise NotFound(resource_name="User", resource_id=str(current_user.id))
+    if user.verified:
+        return MessageResponse(message="Email is already verified")
+    await send_verification_email(session, user)
+    mark_instance_dirty(session, user)
+    await session.flush()
+    return MessageResponse(message="Verification email sent")
 
 
 @router.post(

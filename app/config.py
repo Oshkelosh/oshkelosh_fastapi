@@ -177,7 +177,10 @@ class Settings(BaseSettings):
     )
     require_email_verification: bool = Field(
         default=True,
-        description="When true, new registrations must verify email before login",
+        description=(
+            "When true, send a verification email after registration. "
+            "Verification is optional and never blocks login or API access."
+        ),
     )
     email_verification_expire_hours: int = Field(
         default=24,

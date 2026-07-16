@@ -18,9 +18,18 @@ class TestUserRegister:
             email="user@example.com",
             password="SecurePass123!",
             full_name="Test User",
+            default_shipping_address={
+                "line1": "1 Main",
+                "city": "Austin",
+                "postal_code": "78701",
+                "country": "US",
+            },
+            billing_same_as_shipping=True,
         )
         assert user.email == "user@example.com"
         assert user.full_name == "Test User"
+        assert user.default_billing_address is not None
+        assert user.default_billing_address.line1 == "1 Main"
 
     def test_extra_privilege_fields_ignored(self):
         user = UserRegister.model_validate(
@@ -29,9 +38,24 @@ class TestUserRegister:
                 "password": "SecurePass123!",
                 "full_name": "Test",
                 "is_admin": True,
+                "default_shipping_address": {
+                    "line1": "1 Main",
+                    "city": "Austin",
+                    "postal_code": "78701",
+                    "country": "US",
+                },
+                "billing_same_as_shipping": True,
             }
         )
         assert not hasattr(user, "is_admin") or getattr(user, "is_admin", None) is not True
+
+    def test_incomplete_address_rejected(self):
+        with pytest.raises(ValidationError):
+            UserRegister(
+                email="user@example.com",
+                password="SecurePass123!",
+                default_shipping_address={"line1": "Only line"},
+            )
 
 
 class TestUserCreate:

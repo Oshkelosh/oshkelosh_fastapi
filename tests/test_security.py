@@ -20,11 +20,18 @@ class TestRegistrationSecurity:
                 "password": "SecurePass123!",
                 "full_name": "Hacker",
                 "is_admin": True,
+                "default_shipping_address": {
+                    "line1": "1 Hack St",
+                    "city": "Austin",
+                    "postal_code": "78701",
+                    "country": "US",
+                },
+                "billing_same_as_shipping": True,
             },
         )
         assert response.status_code in (200, 201)
         data = response.json()
-        assert data["is_admin"] is False
+        assert data["user"]["is_admin"] is False
 
         result = await db_session.execute(
             select(User).where(User.email == "hacker@example.com")

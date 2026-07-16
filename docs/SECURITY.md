@@ -50,7 +50,7 @@ If the app sits behind a reverse proxy, configure `TRUSTED_PROXY_IPS` and option
 
 ## PII at rest
 
-User records store JSON fields such as `default_shipping_address`, `payment_customer_ids`, and `oauth_identities` as plaintext in the database. The application does not encrypt these fields; use database or infrastructure-level encryption if your deployment requires it.
+User records store JSON fields such as `default_shipping_address`, `default_billing_address`, `payment_customer_ids`, and `oauth_identities` as plaintext in the database. The application does not encrypt these fields; use database or infrastructure-level encryption if your deployment requires it.
 
 ## Health endpoints
 

@@ -94,6 +94,13 @@ class AuthConfigPublic(BaseModel):
         default_factory=list,
         description="Enabled social sign-in providers (empty when SSO addon is off).",
     )
+    email_verification_enabled: bool = Field(
+        default=True,
+        description=(
+            "When true, the shop sends verification emails after registration. "
+            "Verification is optional and never blocks shopping."
+        ),
+    )
 
 
 class PushConfigPublic(BaseModel):

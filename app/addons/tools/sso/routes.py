@@ -125,8 +125,6 @@ async def sso_exchange(
     user = await session.get(User, user_id)
     if user is None or user.banned:
         raise AuthenticationError(message="User account is not available")
-    if not user.verified:
-        raise AuthenticationError(message="Email address is not verified")
 
     return build_token_response(user)
 

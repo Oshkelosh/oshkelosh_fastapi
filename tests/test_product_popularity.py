@@ -121,6 +121,27 @@ class TestPopularitySort:
         assert names.index("Fast Seller") < names.index("Slow Seller")
 
     @pytest.mark.asyncio
+    async def test_zero_sales_products_are_randomized(
+        self, client: AsyncClient, db_session, test_user
+    ):
+        for i in range(8):
+            _published_product(
+                db_session,
+                test_user,
+                name=f"Unsold Product {i}",
+                slug=f"unsold-product-{i}",
+                sku=f"UNSOLD-{i:03d}",
+            )
+        await db_session.flush()
+
+        orderings = set()
+        for _ in range(10):
+            response = await client.get("/api/v1/products?sort=popularity&order=desc")
+            assert response.status_code == 200
+            orderings.add(tuple(item["name"] for item in response.json()["items"]))
+        assert len(orderings) > 1
+
+    @pytest.mark.asyncio
     async def test_response_includes_units_sold_and_popularity_score(
         self, client: AsyncClient, test_product
     ):

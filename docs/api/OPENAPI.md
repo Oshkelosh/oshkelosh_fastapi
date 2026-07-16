@@ -69,6 +69,10 @@ Documented under tag **`storefront`**:
       "products_per_page": 12,
       "show_category_nav": true
     }
+  },
+  "auth": {
+    "sso_providers": [],
+    "email_verification_enabled": true
   }
 }
 ```
@@ -87,12 +91,16 @@ Documented under tag **`storefront`**:
 
 Typical authenticated checkout path:
 
-1. `POST /api/v1/auth/login` → `access_token`
-2. `GET /api/v1/products/{id}` or `GET /api/v1/products/by-slug/{slug}` → `ProductDetailRead` with `variants[]`
-3. `POST /api/v1/cart/items` → add a line with `{ product_id, variant_id, quantity }`
-4. `POST /api/v1/orders` → create pending order (line items carry `variant_id`)
-5. `POST /api/v1/orders/{order_id}/checkout` → payment session (requires enabled **payment** addon)
-6. Payment provider webhook → order status `paid` (addon-specific path, e.g. Stripe)
+1. `POST /api/v1/auth/register` → create account with shipping/billing addresses; response includes `user` plus `access_token` / `refresh_token`  
+   (or `POST /api/v1/auth/login` for returning customers)
+2. Optional: verify email later via link / `POST /api/v1/auth/verify-email` or `POST /api/v1/auth/resend-verification` (never required to shop)
+3. `GET /api/v1/products/{id}` or `GET /api/v1/products/by-slug/{slug}` → `ProductDetailRead` with `variants[]`
+4. `POST /api/v1/cart/items` → add a line with `{ product_id, variant_id, quantity }`
+5. `POST /api/v1/orders` → create pending order (uses saved addresses when omitted; line items carry `variant_id`)
+6. `POST /api/v1/orders/{order_id}/checkout` → payment session (requires enabled **payment** addon)
+7. Payment provider webhook → order status `paid` (addon-specific path, e.g. Stripe)
+
+`GET /api/v1/storefront/config` exposes `auth.email_verification_enabled` and `auth.sso_providers` for the SPA.
 
 ### Product and cart schemas
 

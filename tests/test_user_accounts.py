@@ -124,9 +124,15 @@ class TestEmailVerification:
     def _enable_verification(self, monkeypatch):
         monkeypatch.setattr("app.config.settings.require_email_verification", True)
 
-    async def test_register_requires_verification_before_login(
+    async def test_register_sends_verification_but_allows_login(
         self, client: AsyncClient, db_session
     ):
+        address = {
+            "line1": "1 Verify Ln",
+            "city": "Austin",
+            "postal_code": "78701",
+            "country": "US",
+        }
         mock_addon = AsyncMock()
         mock_addon.send_email = AsyncMock(return_value={"success": True})
         mock_addon.supported_channels = ["email"]
@@ -140,17 +146,21 @@ class TestEmailVerification:
                     "email": "verifyme@example.com",
                     "password": "SecurePass123!",
                     "full_name": "Verify Me",
+                    "default_shipping_address": address,
+                    "billing_same_as_shipping": True,
                 },
             )
         assert register.status_code == 201
-        assert register.json()["verified"] is False
+        body = register.json()
+        assert body["user"]["verified"] is False
+        assert "access_token" in body
         mock_addon.send_email.assert_awaited_once()
 
         login = await client.post(
             "/api/v1/auth/login",
             json={"email": "verifyme@example.com", "password": "SecurePass123!"},
         )
-        assert login.status_code == 401
+        assert login.status_code == 200
 
         from sqlmodel import select
 
@@ -167,11 +177,45 @@ class TestEmailVerification:
         )
         assert verify.status_code == 200
 
-        login = await client.post(
-            "/api/v1/auth/login",
-            json={"email": "verifyme@example.com", "password": "SecurePass123!"},
+        me = await client.get(
+            "/api/v1/auth/me",
+            headers={"Authorization": f"Bearer {body['access_token']}"},
         )
-        assert login.status_code == 200
+        assert me.status_code == 200
+        assert me.json()["verified"] is True
+
+    async def test_resend_verification(self, client: AsyncClient, db_session):
+        address = {
+            "line1": "2 Resend Ln",
+            "city": "Austin",
+            "postal_code": "78701",
+            "country": "US",
+        }
+        mock_addon = AsyncMock()
+        mock_addon.send_email = AsyncMock(return_value={"success": True})
+        mock_addon.supported_channels = ["email"]
+        with patch(
+            "app.services.notification_dispatch.get_notification_addon_for_channel",
+            return_value=mock_addon,
+        ):
+            register = await client.post(
+                "/api/v1/auth/register",
+                json={
+                    "email": "resend@example.com",
+                    "password": "SecurePass123!",
+                    "default_shipping_address": address,
+                    "billing_same_as_shipping": True,
+                },
+            )
+            assert register.status_code == 201
+            token = register.json()["access_token"]
+            mock_addon.send_email.reset_mock()
+            resend = await client.post(
+                "/api/v1/auth/resend-verification",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+        assert resend.status_code == 200
+        mock_addon.send_email.assert_awaited_once()
 
 
 class TestPasswordReset:
@@ -221,6 +265,12 @@ class TestOrderAddressFallback:
             "line1": "99 Default Rd",
             "country": "US",
         }
+        test_user.default_billing_address = {
+            "line1": "88 Billing Rd",
+            "city": "Austin",
+            "postal_code": "78701",
+            "country": "US",
+        }
         test_user.phone = "+15551230000"
         db_session.add(test_user)
         await db_session.flush()
@@ -234,10 +284,12 @@ class TestOrderAddressFallback:
 
         order = await client.post("/api/v1/orders", headers=headers)
         assert order.status_code == 201
-        address = order.json()["shipping_address"]
+        data = order.json()
+        address = data["shipping_address"]
         assert address["line1"] == "99 Default Rd"
         assert address["email"] == test_user.email
         assert address["phone"] == "+15551230000"
+        assert data["billing_address"]["line1"] == "88 Billing Rd"
 
 
 class TestPaymentCustomerLinkage:
@@ -283,6 +335,25 @@ class TestUserAccountHelpers:
         assert resolved["line1"] == "42 Saved Ln"
         assert resolved["email"] == "buyer@example.com"
         assert resolved["phone"] == "+15550100"
+
+    def test_resolve_order_billing_address_falls_back(self):
+        from app.services.user_accounts import resolve_order_billing_address
+
+        user = User(
+            email="buyer@example.com",
+            password_hash="hash",
+            default_shipping_address={"line1": "Ship Ln", "country": "US"},
+            default_billing_address={"line1": "Bill Ln", "country": "US"},
+        )
+        resolved = resolve_order_billing_address(user, None)
+        assert resolved is not None
+        assert resolved["line1"] == "Bill Ln"
+        assert resolved["email"] == "buyer@example.com"
+
+        user.default_billing_address = None
+        resolved = resolve_order_billing_address(user, None)
+        assert resolved is not None
+        assert resolved["line1"] == "Ship Ln"
 
     def test_issue_tokens_set_expiry(self):
         user = User(email="a@b.com", password_hash="hash")
