@@ -287,7 +287,7 @@ async def admin_user_create(
     """Create a new user."""
     from pydantic import ValidationError as PydanticValidationError
 
-    from app.core.security import hash_password
+    from app.core.security import hash_password_async
     from app.services.user_accounts import ensure_admin_slot_available, mark_user_verified
     from models.user import User
     from schemas.user import UserCreate
@@ -356,7 +356,7 @@ async def admin_user_create(
 
     user = User(
         email=data.email,
-        password_hash=hash_password(data.password),
+        password_hash=await hash_password_async(data.password),
         full_name=data.full_name,
         phone=data.phone,
         default_shipping_address=_address_storage(data.default_shipping_address),
@@ -459,7 +459,7 @@ async def admin_user_update(
     """Update an existing user."""
     from pydantic import ValidationError as PydanticValidationError
 
-    from app.core.security import hash_password
+    from app.core.security import hash_password_async
     from app.services.user_accounts import ensure_admin_slot_available, mark_user_verified
     from models.user import User
     from schemas.user import UserUpdate
@@ -572,7 +572,7 @@ async def admin_user_update(
             setattr(user, key, value)
 
     if pwd is not None:
-        user.password_hash = hash_password(pwd)
+        user.password_hash = await hash_password_async(pwd)
 
     if verified_set is True:
         mark_user_verified(user)

@@ -84,6 +84,28 @@ class TestSsoAccounts:
         assert user.oauth_identities == {"google": "google-sub-2"}
 
     @pytest.mark.asyncio
+    async def test_unverified_email_cannot_link_existing_account(self, db_session):
+        existing = User(
+            email="victim@example.com",
+            password_hash=hash_password("SecurePass123!"),
+            verified=True,
+        )
+        db_session.add(existing)
+        await db_session.flush()
+
+        profile = SsoProfile(
+            provider="google",
+            subject="attacker-sub",
+            email="victim@example.com",
+            email_verified=False,
+        )
+        with pytest.raises(AuthenticationError, match="already registered"):
+            await find_or_create_sso_user(db_session, profile)
+
+        await db_session.refresh(existing)
+        assert not (existing.oauth_identities or {})
+
+    @pytest.mark.asyncio
     async def test_banned_user_rejected(self, db_session):
         banned = User(
             email="banned@example.com",
@@ -150,6 +172,20 @@ class TestSsoApi:
         body = resp.json()
         assert body["access_token"]
         assert body["refresh_token"]
+
+    @pytest.mark.asyncio
+    async def test_authorize_rejects_protocol_relative_redirect(
+        self, client: AsyncClient, enabled_sso
+    ):
+        for evil in ("//evil.example", "/\\evil.example", "https://evil.example"):
+            resp = await client.get(
+                "/api/v1/tools/sso/google/authorize",
+                params={"redirect": evil},
+                follow_redirects=False,
+            )
+            assert resp.status_code == 302
+            # The malicious redirect must not be embedded in the state.
+            assert "evil.example" not in resp.headers["location"]
 
     @pytest.mark.asyncio
     async def test_oauth_callback_creates_user(self, client: AsyncClient, db_session, enabled_sso):

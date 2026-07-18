@@ -17,7 +17,8 @@ Payment addons implement checkout, capture, refunds, and webhooks for a payment 
 |---|---|
 | `create_payment(...)` | Start checkout; call PSP API |
 | `parse_webhook(payload, signature)` | Return `PaymentWebhookOutcome` — **no DB writes** |
-| `confirm_payment` / `refund_payment` / `get_payment_status` | Payment lifecycle |
+| `get_payment_status(payment_id)` | Authoritative status lookup (also used to verify unsigned webhooks) |
+| `verify_webhook(headers, body)` | Prove the webhook came from the provider; fails closed by default |
 
 Most addons use [`shared_routes.py`](shared_routes.py) for admin config UI and a webhook route that delegates to [`payment_webhooks.process_payment_webhook`](../../../services/payment_webhooks.py). `build_payment_routers()` registers `POST /api/v1/payments/{addon_id}/webhook` automatically — addons do not implement webhook handlers inline.
 
@@ -40,7 +41,8 @@ Supplier fulfillment is separate from customer checkout — see [`app/services/f
 |--------|---------|
 | `create_payment(...)` | Start checkout |
 | `parse_webhook(payload, signature)` | Parse event → `PaymentWebhookOutcome` |
-| `confirm_payment` / `refund_payment` / `get_payment_status` | Payment lifecycle |
+| `get_payment_status(payment_id)` | Authoritative payment status lookup |
+| `verify_webhook(headers, body)` | Signature/authenticity check; base default rejects everything |
 | `webhook_signature_header()` | Override default signature header name when needed |
 
 Amounts are in **smallest currency unit** (cents).

@@ -92,7 +92,7 @@ class TestStartCheckout:
         mock_addon = AsyncMock()
         mock_addon.addon_id = "mock"
         mock_addon.create_payment = AsyncMock(
-            return_value={"session_id": "sess_1", "url": "https://pay.test"}
+            return_value={"success": True, "session_id": "sess_1", "url": "https://pay.test"}
         )
 
         with patch("app.services.site_settings.settings") as mock_settings:

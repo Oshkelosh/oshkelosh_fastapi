@@ -73,6 +73,19 @@ async def test_health_not_redirected_when_no_admin(db_session, monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_public_api_locked_down_when_no_admin(db_session, monkeypatch):
+    _override_session_scope(monkeypatch, db_session)
+    app.dependency_overrides[get_session] = _session_override(db_session)
+    app.state.needs_setup = True
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get("/api/v1/products", follow_redirects=False)
+    _teardown_app_state()
+    assert response.status_code == 503
+    assert response.json()["error"] == "setup_required"
+
+
+@pytest.mark.asyncio
 async def test_setup_get_renders_form(db_session, monkeypatch):
     _override_session_scope(monkeypatch, db_session)
     app.dependency_overrides[get_session] = _session_override(db_session)
@@ -175,6 +188,8 @@ def test_create_admin_cli_idempotent(tmp_path):
         **os.environ,
         "DEPLOYMENT_PROFILE": "local",
         "PYTHONPATH": str(PROJECT_ROOT),
+        # --password was removed (argv leaks); the CLI reads this env var.
+        "OSHKELOSH_ADMIN_PASSWORD": "SecurePass123!",
     }
     result1 = subprocess.run(
         [
@@ -182,8 +197,6 @@ def test_create_admin_cli_idempotent(tmp_path):
             str(PROJECT_ROOT / "scripts" / "create_admin.py"),
             "--email",
             "cli@example.com",
-            "--password",
-            "SecurePass123!",
         ],
         cwd=str(tmp_path),
         env=env,
@@ -198,8 +211,6 @@ def test_create_admin_cli_idempotent(tmp_path):
             str(PROJECT_ROOT / "scripts" / "create_admin.py"),
             "--email",
             "cli2@example.com",
-            "--password",
-            "SecurePass123!",
         ],
         cwd=str(tmp_path),
         env=env,

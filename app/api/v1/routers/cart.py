@@ -7,7 +7,7 @@ import logging
 from decimal import Decimal
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
 from sqlmodel import col, select
 
@@ -27,8 +27,23 @@ from models.product import Product
 from models.product_variant import ProductVariant
 from app.services.product_variants import ensure_variant_purchasable, get_variant_for_product
 from app.services.checkout_pricing import quote_order_charges
+from app.services.currency import (
+    client_country_from_request,
+    cookie_currency_preference,
+    preferred_currency_hint,
+    shop_currency_from_settings,
+)
+from app.services.pricing.shipping import SiteShippingQuoter
 from app.services.site_settings import get_site_settings
-from schemas.cart import CartItemAdd, CartItemUpdate, CartQuoteRequest, CartQuoteResponse, CartReadWithItems, CartItemWithPrice
+from schemas.cart import (
+    CartItemAdd,
+    CartItemShippingEstimateResponse,
+    CartItemUpdate,
+    CartQuoteRequest,
+    CartQuoteResponse,
+    CartReadWithItems,
+    CartItemWithPrice,
+)
 
 router = APIRouter(prefix="/cart", tags=["cart"])
 
@@ -138,6 +153,7 @@ async def get_cart(
     ),
 )
 async def quote_cart(
+    request: Request,
     body: CartQuoteRequest | None = None,
     current_user: CurrentUser = Depends(get_current_user),
     session=Depends(get_session),
@@ -152,19 +168,88 @@ async def quote_cart(
     variants = await load_variants_for_cart_items(session, cart_items)
     totals = _compute_cart_totals(cart_items, products, variants)
     site = await get_site_settings(session)
+    shop_currency = shop_currency_from_settings(site)
     charges = await quote_order_charges(
         cart_items,
         products,
         payload.shipping_address,
         site,
         variants,
+        shipping_selections=payload.shipping_selections,
+        currency=shop_currency,
     )
+    address_country = None
+    if isinstance(payload.shipping_address, dict):
+        address_country = payload.shipping_address.get("country")
+    preferred = preferred_currency_hint(
+        shop_currency=shop_currency,
+        address_country=address_country,
+        ip_country=client_country_from_request(request),
+        cookie_preference=cookie_currency_preference(request),
+    )
+    from app.services.checkout_pricing import compute_order_total_cents
+
     return CartQuoteResponse(
         subtotal_cents=totals["subtotal_cents"],
         tax_cents=charges.tax_cents,
         shipping_cents=charges.shipping_cents,
+        total_cents=compute_order_total_cents(totals["subtotal_cents"], charges, site),
+        tax_inclusive=bool(site.tax_inclusive),
         tax_source=charges.tax_source,
+        currency=shop_currency,
+        preferred_currency=preferred,
         shipping_breakdown=charges.shipping_breakdown,
+    )
+
+
+@router.post(
+    "/items/{item_id}/shipping-estimate",
+    response_model=CartItemShippingEstimateResponse,
+    summary="Estimate shipping for one cart item",
+    description=(
+        "Return a standalone shipping estimate for a single cart line using the "
+        "user's saved shipping address. Not used for checkout totals."
+    ),
+)
+async def estimate_item_shipping(
+    item_id: int,
+    current_user: CurrentUser = Depends(get_current_user),
+    session=Depends(get_session),
+) -> CartItemShippingEstimateResponse:
+    """Quote shipping for one cart line in isolation."""
+    address = current_user.default_shipping_address
+    if not address:
+        raise ValidationError(message="A saved shipping address is required for estimates")
+
+    cart, cart_items = await load_user_cart(session, current_user.id)
+    if cart is None:
+        raise NotFound(resource_name="CartItem", resource_id=item_id)
+
+    item = next((row for row in cart_items if row.id == item_id), None)
+    if item is None:
+        raise NotFound(resource_name="CartItem", resource_id=item_id)
+
+    products = await load_products_for_cart_items(session, [item])
+    variants = await load_variants_for_cart_items(session, [item])
+    if item.product_id not in products or item.variant_id not in variants:
+        raise NotFound(resource_name="CartItem", resource_id=item_id)
+
+    site = await get_site_settings(session)
+    shop_currency = shop_currency_from_settings(site)
+    quote = await SiteShippingQuoter(site).quote(
+        [item],
+        products,
+        address,
+        variants,
+        currency=shop_currency,
+    )
+    row = quote.breakdown[0] if quote.breakdown else {}
+    return CartItemShippingEstimateResponse(
+        cart_item_id=item.id,
+        shipping_cents=quote.shipping_cents,
+        currency=shop_currency,
+        label=str(row.get("label") or ""),
+        source=str(row.get("source") or ""),
     )
 
 

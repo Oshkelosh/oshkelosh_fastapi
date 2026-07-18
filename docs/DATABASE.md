@@ -13,7 +13,7 @@ There is **no Alembic-style model diff runner**. Fresh environments still get ap
 
 The `schema_migrations` table records which migration files ran. Re-running startup is safe: already-applied SQL files are skipped.
 
-Do not plan `ALTER TABLE` backfills against production data in this project phase; treat schema changes as bootstrap-only until a production database exists.
+Schema changes on existing databases ship as additive, idempotent SQL files in `migrations/d1/` (`ALTER TABLE ... ADD COLUMN`, `CREATE INDEX IF NOT EXISTS`). The runner tolerates duplicate-column re-adds so repair migrations can be re-applied safely. Destructive changes (drops, renames, type changes) are not supported by this runner and need a manual plan.
 
 ## Operations and recurring maintenance
 
@@ -52,7 +52,11 @@ Sellable catalog data is split across two tables:
 
 Listing endpoints expose denormalized `products.price_cents`, `inventory_quantity`, and `has_variants` (refreshed from active variants). Product detail (`ProductDetailRead`) includes a `variants[]` array.
 
-**SEO:** Public product URLs are canonical per design (`/products/{slug}`). Server-rendered meta tags and JSON-LD use `AggregateOffer` (`lowPrice` / `highPrice`) when `has_variants` is true; otherwise a single `Offer`. See [app/storefront/seo.py](../app/storefront/seo.py).
+**SEO:** Public product URLs are canonical per design (`/products/{slug}`). Server-rendered meta tags and JSON-LD use `AggregateOffer` (`lowPrice` / `highPrice`) when `has_variants` is true; otherwise a single `Offer`. Offer `priceCurrency` uses `site_settings.shop_currency`. Dual-layer details (server inject vs client SeoHead, private noindex paths): [SEO.md](SEO.md). Implementation: [app/storefront/seo.py](../app/storefront/seo.py).
+
+## Site settings
+
+Singleton row `site_settings` (`id=1`). Includes branding, tax/shipping rules, abandoned-cart toggles, and `shop_currency` (ISO 4217, default `USD`) for catalog display, checkout, payments, and supplier quote currency where supported.
 
 ## SQLite specifics
 

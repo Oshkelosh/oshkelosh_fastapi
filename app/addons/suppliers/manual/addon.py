@@ -12,10 +12,8 @@ from typing import Any, Dict, List
 
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
-from sqlmodel import col, select
 
 from app.addons.suppliers.base import SupplierAddon
-from models.manual_supplier import ManualSupplier
 from schemas.supplier import SupplierAssignment, SupplierOption
 from app.addons.log import info
 from app.addons.config_serialization import dump_addon_config
@@ -83,6 +81,35 @@ class ManualSupplierAddon(SupplierAddon):
 
     def admin_form_meta_key(self) -> str:
         return "manual:"
+
+    def assignment_from_variant(self, variant: Any) -> SupplierAssignment | None:
+        manual_slug = (
+            variant.supplier_variant_id
+            or (variant.attributes or {}).get("manual_supplier_slug")
+        )
+        return SupplierAssignment(
+            addon_id=self.addon_id,
+            supplier_product_id=variant.supplier_product_id or "",
+            manual_slug=str(manual_slug) if manual_slug else None,
+            variant_id=None,
+        )
+
+    def variant_fields_from_form(
+        self,
+        supplier_value: str,
+        supplier_product_id: str = "",
+        supplier_variant_id: str = "",
+    ) -> tuple[str | None, str | None]:
+        # The manual slug rides in the dropdown value ("manual:<slug>") and is
+        # stored in the variant's supplier_variant_id column.
+        slug = supplier_value.partition(":")[2].strip()
+        return (
+            supplier_product_id.strip() or None,
+            slug or (supplier_variant_id.strip() or None),
+        )
+
+    def has_dedicated_admin_page(self) -> bool:
+        return True
 
     def parse_assignment(self, tag: dict[str, Any]) -> SupplierAssignment | None:
         if not isinstance(tag, dict):
@@ -157,11 +184,9 @@ class ManualSupplierAddon(SupplierAddon):
     async def list_admin_options(self, session: Any) -> list[SupplierOption]:
         if session is None:
             return []
-        result = await session.execute(
-            select(ManualSupplier)
-            .where(col(ManualSupplier.is_active) == True)  # noqa: E712
-            .order_by(col(ManualSupplier.name).asc())
-        )
+        from app.services.manual_suppliers import list_manual_suppliers
+
+        rows = await list_manual_suppliers(session, active_only=True)
         return [
             SupplierOption(
                 value=f"manual:{row.slug}",
@@ -169,20 +194,16 @@ class ManualSupplierAddon(SupplierAddon):
                 addon_id=self.addon_id,
                 manual_slug=row.slug,
             )
-            for row in result.scalars().all()
+            for row in rows
         ]
 
     async def list_products(self, **kwargs: Any) -> List[Dict[str, Any]]:
         """List active manual supplier definitions."""
         from app.db.connection import session_scope
+        from app.services.manual_suppliers import list_manual_suppliers
 
         async with session_scope() as session:
-            result = await session.execute(
-                select(ManualSupplier)
-                .where(col(ManualSupplier.is_active) == True)  # noqa: E712
-                .order_by(col(ManualSupplier.name).asc())
-            )
-            rows = result.scalars().all()
+            rows = await list_manual_suppliers(session, active_only=True)
         return [
             {
                 "id": row.slug,
@@ -196,12 +217,10 @@ class ManualSupplierAddon(SupplierAddon):
 
     async def get_product(self, product_id: str) -> Dict[str, Any]:
         from app.db.connection import session_scope
+        from app.services.manual_suppliers import get_manual_supplier
 
         async with session_scope() as session:
-            result = await session.execute(
-                select(ManualSupplier).where(col(ManualSupplier.slug) == product_id)
-            )
-            row = result.scalar_one_or_none()
+            row = await get_manual_supplier(session, product_id)
         if row is None:
             return {"error": f"Manual supplier '{product_id}' not found"}
         return {
@@ -220,17 +239,18 @@ class ManualSupplierAddon(SupplierAddon):
         *,
         external_id: str | None = None,
         supplier_ref: str | None = None,
+        shipping_method: str | None = None,
+        currency: str | None = None,
     ) -> Dict[str, Any]:
+        del shipping_method, currency
         if not supplier_ref:
             return {"success": False, "error": "manual_supplier_slug is required"}
 
         from app.db.connection import session_scope
+        from app.services.manual_suppliers import get_manual_supplier
 
         async with session_scope() as session:
-            result = await session.execute(
-                select(ManualSupplier).where(col(ManualSupplier.slug) == supplier_ref)
-            )
-            supplier = result.scalar_one_or_none()
+            supplier = await get_manual_supplier(session, supplier_ref)
 
         if supplier is None:
             return {

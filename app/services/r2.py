@@ -1,5 +1,6 @@
 """Cloudflare R2 service for media upload and retrieval."""
 
+import asyncio
 import logging
 from typing import Optional
 
@@ -48,8 +49,9 @@ class R2Service:
         content: bytes,
         content_type: str = "application/octet-stream",
     ) -> str:
-        """Upload bytes to R2 and return the public URL."""
-        self.client.put_object(
+        """Upload bytes to R2 and return the public URL (boto3 call off-loop)."""
+        await asyncio.to_thread(
+            self.client.put_object,
             Bucket=self.bucket,
             Key=key,
             Body=content,
@@ -59,16 +61,19 @@ class R2Service:
 
     async def generate_presigned_url(self, key: str, expires_in: int = 3600) -> str:
         """Generate a presigned URL for a file."""
-        return self.client.generate_presigned_url(
+        return await asyncio.to_thread(
+            self.client.generate_presigned_url,
             "get_object",
             Params={"Bucket": self.bucket, "Key": key},
             ExpiresIn=expires_in,
         )
 
     async def delete_file(self, key: str) -> bool:
-        """Delete a file from R2."""
+        """Delete a file from R2 (boto3 call off-loop)."""
         try:
-            self.client.delete_object(Bucket=self.bucket, Key=key)
+            await asyncio.to_thread(
+                self.client.delete_object, Bucket=self.bucket, Key=key
+            )
             return True
         except Exception as e:
             logger.error("Failed to delete %s: %s", key, e)

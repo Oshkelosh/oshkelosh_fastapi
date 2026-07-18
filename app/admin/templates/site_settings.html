@@ -31,6 +31,17 @@
       <input type="email" id="support_email" name="support_email" class="form-input"
              value="{{ site.support_email or '' }}" />
     </div>
+
+    <div class="form-group">
+      <label class="form-label" for="shop_currency">Shop currency</label>
+      <input type="text" id="shop_currency" name="shop_currency" class="form-input"
+             value="{{ site.shop_currency or 'USD' }}" maxlength="3" pattern="[A-Za-z]{3}"
+             required style="text-transform:uppercase;max-width:6rem;" />
+      <small style="color:var(--clr-text-muted);">
+        ISO 4217 code (e.g. USD, EUR). Catalog prices are stored in this currency as cents —
+changing it does not convert existing prices.
+      </small>
+    </div>
   </div>
 
   <div class="card" style="margin-bottom:16px;">

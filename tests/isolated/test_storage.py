@@ -61,6 +61,18 @@ async def test_local_storage_upload_and_url(local_storage):
 
 
 @pytest.mark.asyncio
+async def test_local_storage_rejects_traversal_and_absolute_keys(local_storage):
+    backend, tmp_path = local_storage
+
+    for bad_key in ("../escape.txt", "a/../../escape.txt", "/etc/passwd", "..", ""):
+        with pytest.raises(ValueError):
+            await backend.upload(bad_key, b"x", "text/plain")
+
+    # Nothing escaped the media root.
+    assert not (tmp_path / "escape.txt").exists()
+
+
+@pytest.mark.asyncio
 async def test_local_storage_delete(local_storage):
     backend, tmp_path = local_storage
     key = "products/remove-me.png"

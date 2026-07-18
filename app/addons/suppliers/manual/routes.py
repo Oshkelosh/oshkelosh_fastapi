@@ -19,12 +19,12 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
-from sqlmodel import col, select
 
 from app.addons.admin_helpers import make_addon_jinja_env, render_addon_admin_page, save_addon_from_form
 from app.addons.suppliers.manual.addon import ManualSupplierAddon, normalize_manual_slug
 from app.admin.routes import require_admin_session
 from app.core.dependencies import get_admin_user
+from app.services.manual_suppliers import get_manual_supplier, list_manual_suppliers
 from models.manual_supplier import ManualSupplier
 
 _ADDON_TEMPLATES_DIR = Path(__file__).resolve().parent / "templates"
@@ -49,10 +49,7 @@ async def manual_suppliers_list(request: Request, db=Depends(require_admin_sessi
     addon = addon_registry.get("manual")
     suppliers: list[ManualSupplier] = []
     if db is not None:
-        result = await db.execute(
-            select(ManualSupplier).order_by(col(ManualSupplier.name).asc())
-        )
-        suppliers = list(result.scalars().all())
+        suppliers = await list_manual_suppliers(db)
 
     return HTMLResponse(
         content=render_addon_admin_page(
@@ -125,10 +122,7 @@ async def manual_supplier_create(
             status_code=400,
         )
 
-    existing = await db.execute(
-        select(ManualSupplier).where(col(ManualSupplier.slug) == normalized_slug)
-    )
-    if existing.scalar_one_or_none() is not None:
+    if await get_manual_supplier(db, normalized_slug) is not None:
         return HTMLResponse(
             content=render_addon_admin_page(
                 jinja_env,
@@ -168,10 +162,7 @@ async def manual_supplier_edit(
     slug: str,
     db=Depends(require_admin_session),
 ):
-    result = await db.execute(
-        select(ManualSupplier).where(col(ManualSupplier.slug) == slug)
-    )
-    supplier = result.scalar_one_or_none()
+    supplier = await get_manual_supplier(db, slug)
     if supplier is None:
         return RedirectResponse(url=_CONFIGURE_URL, status_code=302)
 
@@ -203,10 +194,7 @@ async def manual_supplier_save(
 
     _require_csrf(request, csrf_token)
 
-    result = await db.execute(
-        select(ManualSupplier).where(col(ManualSupplier.slug) == slug)
-    )
-    supplier = result.scalar_one_or_none()
+    supplier = await get_manual_supplier(db, slug)
     if supplier is None:
         return RedirectResponse(url=_CONFIGURE_URL, status_code=302)
 
@@ -233,10 +221,7 @@ async def manual_supplier_delete(
 
     _require_csrf(request, csrf_token)
 
-    result = await db.execute(
-        select(ManualSupplier).where(col(ManualSupplier.slug) == slug)
-    )
-    supplier = result.scalar_one_or_none()
+    supplier = await get_manual_supplier(db, slug)
     if supplier is not None:
         name = supplier.name
         await db.delete(supplier)

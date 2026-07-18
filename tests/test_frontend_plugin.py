@@ -38,6 +38,7 @@ class TestSiteSettings:
         site = await get_site_settings(db_session)
         assert site.store_name == "Oshkelosh"
         assert site.primary_color == "#2563eb"
+        assert site.shop_currency == "USD"
         assert site.tax_rate_bps == 800
         assert site.shipping_flat_cents == 500
         assert site.shipping_mode == "flat"
@@ -45,11 +46,12 @@ class TestSiteSettings:
     async def test_update_site_settings(self, db_session):
         await update_site_settings(
             db_session,
-            {"store_name": "My Shop", "primary_color": "#ff0000"},
+            {"store_name": "My Shop", "primary_color": "#ff0000", "shop_currency": "eur"},
         )
         site = await get_site_settings(db_session)
         assert site.store_name == "My Shop"
         assert site.primary_color == "#ff0000"
+        assert site.shop_currency == "EUR"
 
 
 class TestFrontendAddon:

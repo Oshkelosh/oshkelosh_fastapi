@@ -8,7 +8,6 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import Any
 
-from app.core.exceptions import ValidationError
 from app.services.addons import get_supplier_addon
 from app.services.suppliers import SupplierAssignment
 from models.product import Product
@@ -37,8 +36,30 @@ def _supplier_line_items(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
     ]
 
 
-async def fulfill_order_with_suppliers(session: Any, order: Any, items: list) -> None:
-    """Create supplier fulfillment orders for tagged line items."""
+def _append_note(session: Any, order: Any, note: str) -> None:
+    existing = order.notes or ""
+    order.notes = f"{existing}\n{note}".strip() if existing else note
+    if hasattr(session, "mark_dirty"):
+        session.mark_dirty(order)
+
+
+def _supplier_order_id(result: dict[str, Any]) -> str | None:
+    for key in ("order_id", "supplier_order_id", "id"):
+        value = result.get(key)
+        if value:
+            return str(value)
+    return None
+
+
+async def fulfill_order_with_suppliers(session: Any, order: Any, items: list) -> list[str]:
+    """Create supplier fulfillment orders for tagged line items.
+
+    Results are persisted on ``order.supplier_orders`` keyed by shipping group,
+    so a re-run (retry after partial failure) skips groups that already have a
+    successful supplier order instead of ordering twice. Failures are recorded
+    on the order and returned; they must not abort the caller's transaction —
+    payment has already happened.
+    """
     from app.services.pricing.shipping import group_cart_for_shipping
 
     products: dict[int, Product] = {}
@@ -64,14 +85,25 @@ async def fulfill_order_with_suppliers(session: Any, order: Any, items: list) ->
         )
 
     if not grouped:
-        return
+        return []
 
     shipping_address = order.shipping_address or {}
-    notes_parts: list[str] = []
+    selections = getattr(order, "shipping_selections", None) or {}
     external_id = str(getattr(order, "id", "")) or None
     failures: list[str] = []
+    supplier_orders: dict[str, Any] = dict(getattr(order, "supplier_orders", None) or {})
 
     for key, group in grouped.items():
+        previous = supplier_orders.get(key)
+        if isinstance(previous, dict) and previous.get("success"):
+            logger.info(
+                "Skipping already fulfilled group %s for order %s (supplier order %s)",
+                key,
+                order.id,
+                previous.get("supplier_order_id"),
+            )
+            continue
+
         assignment = group.assignment
         addon = get_supplier_addon(assignment.addon_id)
         if addon is None:
@@ -81,28 +113,37 @@ async def fulfill_order_with_suppliers(session: Any, order: Any, items: list) ->
                 order.id,
             )
             failure_note = f"Supplier addon '{assignment.addon_id}' is not enabled"
-            existing = order.notes or ""
-            order.notes = f"{existing}\n{failure_note}".strip() if existing else failure_note
-            if hasattr(session, "mark_dirty"):
-                session.mark_dirty(order)
+            _append_note(session, order, failure_note)
             failures.append(failure_note)
+            supplier_orders[key] = {
+                "addon_id": assignment.addon_id,
+                "success": False,
+                "error": failure_note,
+            }
             continue
         try:
+            method = selections.get(key) or selections.get(assignment.addon_id)
             result = await addon.create_order(
                 _supplier_line_items(group.items),
                 shipping_address,
                 external_id=external_id,
                 supplier_ref=assignment.manual_slug,
+                shipping_method=str(method) if method else None,
+                currency=str(order.currency).upper() if order.currency else None,
             )
-            notes_parts.append(
+            supplier_orders[key] = {
+                "addon_id": assignment.addon_id,
+                "success": bool(result.get("success", False)),
+                "supplier_order_id": _supplier_order_id(result),
+                "error": result.get("error"),
+            }
+            _append_note(
+                session,
+                order,
                 json.dumps(
-                    {
-                        "supplier": key,
-                        "addon_id": assignment.addon_id,
-                        "result": result,
-                    },
+                    {"supplier": key, "addon_id": assignment.addon_id, "result": result},
                     default=str,
-                )
+                ),
             )
             if not result.get("success", False):
                 logger.warning(
@@ -112,10 +153,7 @@ async def fulfill_order_with_suppliers(session: Any, order: Any, items: list) ->
                     result.get("error", result),
                 )
                 failure_note = f"Fulfillment failed for {key}: {result.get('error', result)}"
-                existing = order.notes or ""
-                order.notes = f"{existing}\n{failure_note}".strip() if existing else failure_note
-                if hasattr(session, "mark_dirty"):
-                    session.mark_dirty(order)
+                _append_note(session, order, failure_note)
                 failures.append(failure_note)
             config_updates = result.get("config_updates")
             if isinstance(config_updates, dict) and config_updates:
@@ -130,18 +168,16 @@ async def fulfill_order_with_suppliers(session: Any, order: Any, items: list) ->
                 order.id,
             )
             failure_note = f"Fulfillment error for {key}: {exc}"
-            existing = order.notes or ""
-            order.notes = f"{existing}\n{failure_note}".strip() if existing else failure_note
-            if hasattr(session, "mark_dirty"):
-                session.mark_dirty(order)
+            _append_note(session, order, failure_note)
             failures.append(failure_note)
+            supplier_orders[key] = {
+                "addon_id": assignment.addon_id,
+                "success": False,
+                "error": str(exc),
+            }
 
-    if notes_parts:
-        existing = order.notes or ""
-        fulfillment_note = "\n".join(notes_parts)
-        order.notes = f"{existing}\n{fulfillment_note}".strip() if existing else fulfillment_note
-        if hasattr(session, "mark_dirty"):
-            session.mark_dirty(order)
+    order.supplier_orders = supplier_orders
+    if hasattr(session, "mark_dirty"):
+        session.mark_dirty(order)
 
-    if failures:
-        raise ValidationError(message="; ".join(failures))
+    return failures

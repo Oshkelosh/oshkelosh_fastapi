@@ -7,6 +7,7 @@ from sqlalchemy import (
     Column,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     JSON,
     String,
@@ -25,6 +26,10 @@ class Order(ModelBase, table=True):
     """A customer purchase order."""
 
     __tablename__ = "orders"
+    __table_args__ = (
+        Index("idx_orders_user_id", "user_id"),
+        Index("idx_orders_status_created_at", "status", "created_at"),
+    )
 
     session_id: Optional[str] = Field(
         default=None,
@@ -77,6 +82,15 @@ class Order(ModelBase, table=True):
     )
     billing_address: Optional[Dict[str, Any]] = Field(
         default=None,
+        sa_column=Column(JSON, nullable=True),
+    )
+    shipping_selections: Optional[Dict[str, Any]] = Field(
+        default=None,
+        sa_column=Column(JSON, nullable=True),
+    )
+    supplier_orders: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="Per-supplier fulfillment results keyed by shipping group, for idempotent retry.",
         sa_column=Column(JSON, nullable=True),
     )
     notes: Optional[str] = Field(

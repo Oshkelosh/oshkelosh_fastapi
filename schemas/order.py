@@ -24,19 +24,24 @@ VALID_ORDER_STATUSES = {
 
 
 class OrderCreateFromCart(BaseModel):
-    """Storefront order creation from the authenticated user's cart."""
+    """Storefront order creation from the authenticated user's cart.
+
+    Note: there is intentionally no ``currency`` field — orders always charge
+    in the Site Settings shop currency.
+    """
 
     shipping_address: Optional[Dict[str, Any]] = None
     billing_address: Optional[Dict[str, Any]] = None
     notes: Optional[str] = Field(default=None, max_length=10000)
-    currency: str = Field(default="usd", max_length=10)
+    shipping_selections: Optional[Dict[str, str]] = None
 
 
 class OrderCheckoutUpdate(BaseModel):
-    """Optional address updates before payment."""
+    """Optional address / shipping-method updates before payment."""
 
     shipping_address: Optional[Dict[str, Any]] = None
     billing_address: Optional[Dict[str, Any]] = None
+    shipping_selections: Optional[Dict[str, str]] = None
 
 
 # ── Update ──────────────────────────────────────────────────────────
@@ -130,6 +135,7 @@ class OrderRead(BaseModel):
     currency: str
     shipping_address: Optional[Dict[str, Any]]
     billing_address: Optional[Dict[str, Any]]
+    shipping_selections: Optional[Dict[str, Any]] = None
     notes: Optional[str]
     tracking_number: Optional[str] = None
     tracking_url: Optional[str] = None

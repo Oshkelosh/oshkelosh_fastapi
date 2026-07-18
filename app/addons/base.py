@@ -97,10 +97,6 @@ class BaseAddon(ABC):
         """Return sidebar links for the admin panel (shown when enabled)."""
         return []
 
-    def get_admin_templates(self) -> str:
-        """Return the file-system path to this addon's Jinja2 template directory."""
-        return ""
-
     def get_admin_static(self) -> str:
         """Return the file-system path to this addon's static assets."""
         return ""

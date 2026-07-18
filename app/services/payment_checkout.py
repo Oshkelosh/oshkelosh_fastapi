@@ -31,6 +31,16 @@ async def start_checkout(
         cancel_url=cancel_url,
     )
 
+    if not result.get("success", False):
+        from app.core.exceptions import ValidationError
+
+        raise ValidationError(
+            message=(
+                f"Payment provider '{payment_addon.addon_id}' could not create a "
+                "checkout session. Please try again."
+            )
+        )
+
     order.payment_processor_id = payment_addon.addon_id
     if result.get("payment_id"):
         order.payment_id = str(result["payment_id"])

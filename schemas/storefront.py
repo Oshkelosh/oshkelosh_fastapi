@@ -33,6 +33,18 @@ class SiteSettingsPublic(BaseModel):
         default=None,
         description="Resolved public storefront URL (from PUBLIC_APP_URL env and fallbacks).",
     )
+    shop_currency: str = Field(
+        default="USD",
+        description="ISO 4217 shop currency used for catalog prices and checkout.",
+        examples=["USD", "EUR"],
+    )
+    preferred_currency: str | None = Field(
+        default=None,
+        description=(
+            "Soft currency hint from client IP country. Charge/display stay on "
+            "shop_currency until FX or dual price lists exist."
+        ),
+    )
     tax_enabled: bool = Field(
         default=True,
         description="Whether built-in tax is applied at checkout.",

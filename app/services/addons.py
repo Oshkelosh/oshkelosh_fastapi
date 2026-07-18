@@ -138,16 +138,38 @@ def get_supplier_addon(supplier_id: Optional[str] = None) -> SupplierAddon | Non
     return enabled[0]  # type: ignore[return-value]
 
 
-def merge_config_updates(addon_id: str, updates: dict) -> dict:
-    """Merge form updates onto existing config, preserving secrets when redacted."""
-    merged = dict(addon_registry.get_config(addon_id))
+def _is_redacted_value(value: str) -> bool:
+    """A submitted string that means 'keep the stored secret'.
+
+    Matches every placeholder the admin UI can echo back: empty, the
+    ``value[:8]…`` partial mask, and the ``***`` full mask.
+    """
+    stripped = value.strip()
+    return not stripped or stripped.endswith("…") or set(stripped) == {"*"}
+
+
+def _merge_preserving_secrets(stored: dict, updates: dict) -> dict:
+    merged = dict(stored)
     for key, value in updates.items():
         if value is None:
             continue
-        if isinstance(value, str) and (not value.strip() or value.endswith("…")):
+        if isinstance(value, str) and _is_redacted_value(value):
+            continue
+        if isinstance(value, dict) and isinstance(merged.get(key), dict):
+            merged[key] = _merge_preserving_secrets(merged[key], value)
             continue
         merged[key] = value
     return merged
+
+
+def merge_config_updates(addon_id: str, updates: dict) -> dict:
+    """Merge form updates onto existing config, preserving secrets when redacted.
+
+    Deep-merges nested dicts (e.g. SSO provider blocks) so a redacted nested
+    ``client_secret`` keeps its stored value instead of being overwritten with
+    the placeholder.
+    """
+    return _merge_preserving_secrets(dict(addon_registry.get_config(addon_id)), updates)
 
 
 async def _disable_other_addons_in_category(

@@ -4,6 +4,7 @@ Security utilities: JWT handling and password hashing.
 Uses python-jose for JWT operations and bcrypt for password hashing.
 """
 
+import asyncio
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
@@ -30,6 +31,16 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
         )
     except ValueError:
         return False
+
+
+async def hash_password_async(password: str) -> str:
+    """bcrypt hashing off the event loop (~100ms+ at production rounds)."""
+    return await asyncio.to_thread(hash_password, password)
+
+
+async def verify_password_async(plain_password: str, hashed_password: str) -> bool:
+    """bcrypt verification off the event loop."""
+    return await asyncio.to_thread(verify_password, plain_password, hashed_password)
 
 
 # ------------------------------------------------------------------

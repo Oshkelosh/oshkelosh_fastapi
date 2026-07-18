@@ -18,16 +18,13 @@ def get_public_push_config() -> dict[str, Any] | None:
     return config
 
 
-def build_fcm_service_worker_js() -> str | None:
-    """Return generated FCM service worker JavaScript, or None if FCM is not active."""
-    import json
+def build_push_service_worker_js() -> str | None:
+    """Return the active push addon's service worker JS, or None if unavailable.
 
-    push = get_public_push_config()
-    if not push or push.get("provider") != "fcm":
+    Provider specifics (e.g. Firebase importScripts) live in the addon via
+    ``NotificationAddon.push_service_worker_js``; core only serves the result.
+    """
+    addon = get_notification_addon_for_channel("push")
+    if addon is None:
         return None
-    firebase_config = json.dumps(push.get("config") or {})
-    return f"""importScripts('https://www.gstatic.com/firebasejs/10.14.0/firebase-app-compat.js');
-importScripts('https://www.gstatic.com/firebasejs/10.14.0/firebase-messaging-compat.js');
-firebase.initializeApp({firebase_config});
-firebase.messaging();
-"""
+    return addon.push_service_worker_js()

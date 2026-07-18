@@ -17,6 +17,7 @@ Developer documentation for the Oshkelosh modular e-commerce backend.
 | Understand API/admin surfaces | [app/api/README.md](../app/api/README.md) |
 | Review security assumptions | [SECURITY.md](SECURITY.md) |
 | Understand database backends | [DATABASE.md](DATABASE.md) |
+| Understand storefront SEO / structured data | [SEO.md](SEO.md) |
 | Run the project locally | [README.md](../README.md) (repository root) |
 
 ## Two configuration layers (storefront)

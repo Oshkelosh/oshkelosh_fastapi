@@ -69,6 +69,8 @@ class FacebookOAuthProvider(OAuthProvider):
             provider="facebook",
             subject=str(data.get("id", "")),
             email=email,
-            email_verified=bool(email),
+            # Graph API has no email_verified claim; treat as unverified so
+            # email-based account linking is never granted on Facebook's word alone.
+            email_verified=False,
             full_name=data.get("name"),
         )

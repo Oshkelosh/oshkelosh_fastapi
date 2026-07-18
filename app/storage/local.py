@@ -11,19 +11,33 @@ class LocalStorageBackend:
     """Store uploaded files on disk and serve via StaticFiles mount."""
 
     def __init__(self, settings: Settings) -> None:
-        self._dir = settings.local_media_path
+        self._dir = settings.local_media_path.resolve()
         self._base_url = settings.local_media_base_url.rstrip("/")
         self._dir.mkdir(parents=True, exist_ok=True)
 
+    def _normalize_key(self, key: str) -> str:
+        """Return a media-root-relative key or raise on traversal/absolute keys.
+
+        ``"../x"`` used to become the absolute ``/x`` because ``Path(base) / "/x"``
+        discards ``base``; guard by rejecting any component that escapes the root.
+        """
+        cleaned = key.strip()
+        if not cleaned or cleaned.startswith(("/", "\\")) or Path(cleaned).is_absolute():
+            raise ValueError(f"Media key must be relative: {key!r}")
+        if ".." in Path(cleaned).parts:
+            raise ValueError(f"Media key must not contain '..': {key!r}")
+        candidate = (self._dir / cleaned).resolve()
+        if candidate == self._dir or not candidate.is_relative_to(self._dir):
+            raise ValueError(f"Media key escapes storage root: {key!r}")
+        return candidate.relative_to(self._dir).as_posix()
+
     def _path_for_key(self, key: str) -> Path:
-        safe_key = key.lstrip("/").replace("..", "")
-        path = self._dir / safe_key
+        path = self._dir / self._normalize_key(key)
         path.parent.mkdir(parents=True, exist_ok=True)
         return path
 
     def _url_for_key(self, key: str) -> str:
-        safe_key = key.lstrip("/")
-        return f"{self._base_url}/{safe_key}"
+        return f"{self._base_url}/{self._normalize_key(key)}"
 
     async def upload(
         self,

@@ -100,6 +100,29 @@ class TestSecretFieldHelpers:
 
         addon_registry._registry.pop("validating_addon", None)
 
+    def test_merge_config_updates_preserves_nested_and_masked_secrets(self):
+        from app.addons.registry import addon_registry
+
+        addon = _ValidatingAddon()
+        addon._config = {
+            "api_key": "stored-secret",
+            "google": {"client_secret": "g-secret", "client_id": "g-id"},
+        }
+        addon_registry._registry["validating_addon"] = addon
+
+        merged = merge_config_updates(
+            "validating_addon",
+            {
+                "api_key": "***",
+                "google": {"client_secret": "", "client_id": "new-id"},
+            },
+        )
+        assert merged["api_key"] == "stored-secret"
+        assert merged["google"]["client_secret"] == "g-secret"
+        assert merged["google"]["client_id"] == "new-id"
+
+        addon_registry._registry.pop("validating_addon", None)
+
 
 class TestPersistAddonConfigValidation:
     async def test_validate_config_called_when_secret_changes(self, db_session):

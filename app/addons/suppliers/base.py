@@ -47,6 +47,32 @@ class SupplierAddon(BaseAddon):
         """Key used in admin product-form metadata (dropdown value or prefix)."""
         return self.addon_id
 
+    def assignment_from_variant(self, variant: Any) -> SupplierAssignment | None:
+        """Build a supplier assignment from a product variant row's supplier fields."""
+        product_id = variant.supplier_product_id or ""
+        variant_id = variant.supplier_variant_id
+        if not product_id and not variant_id:
+            return None
+        return SupplierAssignment(
+            addon_id=self.addon_id,
+            supplier_product_id=str(product_id),
+            variant_id=str(variant_id) if variant_id else None,
+        )
+
+    def variant_fields_from_form(
+        self,
+        supplier_value: str,
+        supplier_product_id: str = "",
+        supplier_variant_id: str = "",
+    ) -> tuple[str | None, str | None]:
+        """Map admin product-form values to (supplier_product_id, supplier_variant_id) refs."""
+        del supplier_value
+        return supplier_product_id.strip() or None, supplier_variant_id.strip() or None
+
+    def has_dedicated_admin_page(self) -> bool:
+        """Whether the addon manages itself on its own admin page (hidden from the generic list)."""
+        return False
+
     def parse_assignment(self, tag: dict[str, Any]) -> SupplierAssignment | None:
         """Parse a product tag dict into a supplier assignment for this addon."""
         if not isinstance(tag, dict):
@@ -172,9 +198,32 @@ class SupplierAddon(BaseAddon):
         self,
         items: list[dict[str, Any]],
         shipping_address: dict[str, Any],
+        *,
+        currency: str | None = None,
     ) -> int | None:
         """Return shipping cents for this fulfillment group, or None for Site Settings."""
+        del currency
         return None
+
+    async def quote_shipping_details(
+        self,
+        items: list[dict[str, Any]],
+        shipping_address: dict[str, Any],
+        *,
+        selected_id: str | None = None,
+        currency: str | None = None,
+    ) -> dict[str, Any] | None:
+        """Return ``{cents, selected_id, options}`` or None to fall back to quote_shipping.
+
+        ``options`` entries: ``{id, name, cents}`` plus optional delivery fields.
+        """
+        del selected_id
+        amount = await self.quote_shipping(
+            items, shipping_address, currency=currency
+        )
+        if amount is None:
+            return None
+        return {"cents": int(amount), "selected_id": None, "options": []}
 
     async def list_admin_options(self, session: Any) -> list[SupplierOption]:
         """Return dropdown options for the admin product form."""
@@ -210,6 +259,8 @@ class SupplierAddon(BaseAddon):
         *,
         external_id: str | None = None,
         supplier_ref: str | None = None,
+        shipping_method: str | None = None,
+        currency: str | None = None,
     ) -> Dict[str, Any]:
         """Create a fulfillment order for the given products.
 
@@ -222,15 +273,17 @@ class SupplierAddon(BaseAddon):
             external_id:        Oshkelosh order id for provider reference.
             supplier_ref:       Manual supplier slug when ``addon_id`` is
                                 ``manual``.
+            shipping_method:    Customer-selected shipping method key, when the
+                                supplier supports method selection.
+            currency:           ISO currency of the order; ignore if the
+                                supplier bills in a fixed currency.
+
+        Implementations must accept all keyword arguments (ignore what they
+        don't use) so core can call every supplier uniformly.
         """
         ...
 
     @abstractmethod
     async def get_order_status(self, order_id: str) -> Dict[str, Any]:
         """Return the current status of a fulfillment order."""
-        ...
-
-    @abstractmethod
-    async def sync_inventory(self) -> None:
-        """Sync local inventory levels with the supplier's current stock."""
         ...

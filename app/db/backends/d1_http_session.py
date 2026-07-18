@@ -1,11 +1,19 @@
-"""Async session adapter that executes SQL via the Cloudflare D1 HTTP API."""
+"""Async session adapter that executes SQL via the Cloudflare D1 HTTP API.
+
+Transaction semantics: each ``flush()`` sends one atomic D1 batch, but separate
+flushes (and ``execute``/``execute_raw`` calls) within a request are independent
+statements — there is NO cross-flush transaction. ``rollback()`` only discards
+in-memory pending changes; anything already flushed stays committed in D1.
+"""
 
 from __future__ import annotations
 
+import json
 from contextlib import asynccontextmanager
+from datetime import datetime
 from typing import Any, AsyncIterator, Sequence, Type, TypeVar
 
-from sqlalchemy import Dialect, inspect as sa_inspect
+from sqlalchemy import JSON, Dialect, inspect as sa_inspect
 from sqlalchemy.dialects import sqlite as sqlite_dialect
 from sqlalchemy.sql import Select
 from sqlalchemy.sql.elements import ClauseElement
@@ -15,6 +23,36 @@ from app.db.d1_client import D1Connection
 
 T = TypeVar("T", bound=SQLModel)
 _DIALECT: Dialect = sqlite_dialect.dialect()
+
+
+def _bind_value(value: Any) -> Any:
+    """Convert Python values to D1 HTTP API bindable primitives."""
+    if isinstance(value, (dict, list)):
+        return json.dumps(value)
+    if isinstance(value, datetime):
+        return value.isoformat()
+    return value
+
+
+def _json_column_names(model: type[SQLModel]) -> set[str]:
+    table = sa_inspect(model).local_table
+    return {c.name for c in table.columns if isinstance(c.type, JSON)}
+
+
+def _parse_json_columns(model: type[SQLModel], row: dict[str, Any]) -> dict[str, Any]:
+    """Decode JSON TEXT columns returned by D1 back into dict/list values."""
+    json_cols = _json_column_names(model)
+    if not json_cols:
+        return row
+    parsed = dict(row)
+    for name in json_cols:
+        value = parsed.get(name)
+        if isinstance(value, str) and value:
+            try:
+                parsed[name] = json.loads(value)
+            except ValueError:
+                pass
+    return parsed
 
 
 def _compile(statement: ClauseElement) -> tuple[str, dict[str, Any]]:
@@ -88,7 +126,7 @@ class D1HTTPResult:
 
     def _instantiate(self, row: dict[str, Any]) -> Any:
         if self._model is not None:
-            return self._model.model_validate(row)
+            return self._model.model_validate(_parse_json_columns(self._model, row))
         return row
 
     def scalars(self) -> _D1ScalarResult:
@@ -98,7 +136,7 @@ class D1HTTPResult:
                 if len(row) == 1:
                     items.append(next(iter(row.values())))
                 elif self._model is not None:
-                    items.append(self._model.model_validate(row))
+                    items.append(self._instantiate(row))
                 else:
                     items.append(row)
             else:
@@ -129,13 +167,14 @@ class D1HTTPAsyncSession:
     def __init__(self, d1: D1Connection) -> None:
         self._d1 = d1
         self._new: list[SQLModel] = []
-        self._dirty: set[SQLModel] = set()
+        # Identity-keyed dict, not a set: SQLModel instances are unhashable.
+        self._dirty: dict[int, SQLModel] = {}
         self._deleted: list[SQLModel] = []
 
     def mark_dirty(self, instance: SQLModel) -> None:
         """Track an existing instance for UPDATE on flush."""
-        if instance not in self._new:
-            self._dirty.add(instance)
+        if not any(instance is obj for obj in self._new):
+            self._dirty[id(instance)] = instance
 
     async def execute_raw(self, sql: str, params: list[Any] | None = None) -> int:
         """Run parameterized SQL and return the number of rows changed."""
@@ -192,7 +231,7 @@ class D1HTTPAsyncSession:
         rows = _rows_from_d1_response(response)
         if not rows:
             return None
-        return entity.model_validate(rows[0])
+        return entity.model_validate(_parse_json_columns(entity, rows[0]))
 
     def add(self, instance: SQLModel) -> None:
         self._new.append(instance)
@@ -213,7 +252,7 @@ class D1HTTPAsyncSession:
             ]
         placeholders = ", ".join("?" for _ in cols)
         col_names = ", ".join(cols)
-        values = [data[c] for c in cols]
+        values = [_bind_value(data[c]) for c in cols]
         sql = f"INSERT INTO {table.name} ({col_names}) VALUES ({placeholders})"
         return sql, values
 
@@ -227,7 +266,7 @@ class D1HTTPAsyncSession:
         data = obj.model_dump()
         pk_val = data[pk_name]
         sets = [f"{k} = ?" for k in data if k != pk_name]
-        values = [data[k] for k in data if k != pk_name]
+        values = [_bind_value(data[k]) for k in data if k != pk_name]
         values.append(pk_val)
         sql = f"UPDATE {table.name} SET {', '.join(sets)} WHERE {pk_name} = ?"
         return sql, values
@@ -243,7 +282,7 @@ class D1HTTPAsyncSession:
 
     async def flush(self) -> None:
         new_objs = list(self._new)
-        dirty_objs = list(self._dirty)
+        dirty_objs = list(self._dirty.values())
         deleted_objs = list(self._deleted)
         if not new_objs and not dirty_objs and not deleted_objs:
             return
@@ -263,16 +302,18 @@ class D1HTTPAsyncSession:
             statements.append({"sql": sql, "params": values})
 
         results = await self._d1.batch_query(statements)
-        insert_idx = 0
-        for batch in results:
+        # Inserts occupy the first len(insert_objs) statements, so pair each
+        # insert with its result by position. The old "advance on any rows"
+        # scan let a row-returning UPDATE/DELETE batch steal an insert's id.
+        for i, obj in enumerate(insert_objs):
+            if i >= len(results):
+                break
+            batch = results[i]
             rows = _rows_from_d1_response(
                 batch if isinstance(batch, dict) else [batch]
             )
-            if insert_idx < len(insert_objs) and rows:
-                obj = insert_objs[insert_idx]
-                if getattr(obj, "id", None) is None and "id" in rows[0]:
-                    obj.id = rows[0]["id"]
-                insert_idx += 1
+            if rows and getattr(obj, "id", None) is None and "id" in rows[0]:
+                obj.id = rows[0]["id"]
 
         self._new.clear()
         self._dirty.clear()
@@ -297,6 +338,12 @@ class D1HTTPAsyncSession:
         await self.flush()
 
     async def rollback(self) -> None:
+        """Discard pending in-memory changes only.
+
+        D1 over HTTP has no session-level transaction: statements already sent
+        by a previous flush()/execute() are committed and cannot be undone here.
+        Callers needing atomicity must fit their writes in a single flush batch.
+        """
         self._new.clear()
         self._dirty.clear()
         self._deleted.clear()
@@ -316,7 +363,8 @@ class D1HTTPAsyncSession:
         response = await self._d1.query(sql, [pk_val])
         rows = _rows_from_d1_response(response)
         if rows:
-            for key, value in rows[0].items():
+            row = _parse_json_columns(instance.__class__, rows[0])
+            for key, value in row.items():
                 setattr(instance, key, value)
 
     async def close(self) -> None:

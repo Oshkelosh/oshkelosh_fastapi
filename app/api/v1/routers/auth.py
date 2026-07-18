@@ -13,8 +13,8 @@ from app.core.exceptions import AuthenticationError, NotFound, ValidationError
 from app.core.rate_limit import limiter
 from app.core.security import (
     decode_refresh_token,
-    hash_password,
-    verify_password,
+    hash_password_async,
+    verify_password_async,
 )
 from app.db.connection import get_session, mark_instance_dirty
 from models.user import User
@@ -128,7 +128,7 @@ async def register(
 
     user = User(
         email=email,
-        password_hash=hash_password(body.password),
+        password_hash=await hash_password_async(body.password),
         full_name=body.full_name,
         phone=body.phone,
         default_shipping_address=shipping,
@@ -185,7 +185,7 @@ async def login(
         raise AuthenticationError(message="Invalid email or password")
     if user.password_hash is None:
         raise AuthenticationError(message="This account uses social sign-in")
-    if not verify_password(body.password, user.password_hash):
+    if not await verify_password_async(body.password, user.password_hash):
         raise AuthenticationError(message="Invalid email or password")
 
     ensure_user_can_access(user)
@@ -249,10 +249,10 @@ async def update_me(
     if body.password is not None:
         if user.password_hash is not None and (
             body.current_password is None
-            or not verify_password(body.current_password, user.password_hash)
+            or not await verify_password_async(body.current_password, user.password_hash)
         ):
             raise ValidationError(message="Current password is incorrect")
-        user.password_hash = hash_password(body.password)
+        user.password_hash = await hash_password_async(body.password)
     _apply_push_subscription(user, body)
 
     mark_instance_dirty(session, user)

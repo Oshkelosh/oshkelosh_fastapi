@@ -26,11 +26,24 @@ PRIVATE_PATH_PREFIXES = (
     "/register",
     "/checkout",
     "/account",
-    "/orders/",
+    "/orders",
+    "/cart",
     "/forgot-password",
     "/reset-password",
     "/verify-email",
     "/auth/",
+)
+
+# Exact SPA paths that need crawler noindex HTML (before the static mount).
+# Omit /verify-email and /reset-password — owned by auth_links.
+PRIVATE_SEO_PATHS = (
+    "/cart",
+    "/checkout",
+    "/account",
+    "/orders",
+    "/login",
+    "/register",
+    "/forgot-password",
 )
 
 DEFAULT_CURRENCY = "USD"
@@ -47,6 +60,7 @@ class SeoMeta:
     canonical_url: str = ""
     og_type: str = "website"
     og_image: str | None = None
+    site_name: str | None = None
     robots: str = "index, follow"
     json_ld: list[dict[str, Any]] = field(default_factory=list)
 
@@ -187,29 +201,17 @@ def build_product_json_ld(
 
 async def _product_primary_image(session: Any, product: Product) -> str | None:
     """Return the best product image URL, preferring shared (non-variant) images."""
-    shared_result = await session.execute(
-        select(ProductImage)
-        .where(
-            col(ProductImage.product_id) == product.id,
-            col(ProductImage.variant_id).is_(None),
-        )
-        .order_by(ProductImage.sort_order.asc())
-        .limit(1)
-    )
-    shared_image = shared_result.scalar_one_or_none()
-    if shared_image is not None:
-        return shared_image.url
-
-    any_result = await session.execute(
+    result = await session.execute(
         select(ProductImage)
         .where(col(ProductImage.product_id) == product.id)
-        .order_by(ProductImage.sort_order.asc())
+        .order_by(
+            col(ProductImage.variant_id).is_not(None),
+            ProductImage.sort_order.asc(),
+        )
         .limit(1)
     )
-    image = any_result.scalar_one_or_none()
-    if image is not None:
-        return image.url
-    return None
+    image = result.scalar_one_or_none()
+    return image.url if image is not None else None
 
 
 async def resolve_meta_for_path(
@@ -228,6 +230,8 @@ async def resolve_meta_for_path(
             title=store_name,
             description=default_description,
             canonical_url=f"{site_url}/",
+            site_name=store_name,
+            og_image=site_settings.logo_url,
             json_ld=[build_organization_json_ld(site_settings, site_url)],
         )
 
@@ -236,6 +240,17 @@ async def resolve_meta_for_path(
             title=f"Products | {store_name}",
             description=default_description or f"Browse products at {store_name}",
             canonical_url=f"{site_url}/products",
+            site_name=store_name,
+            og_image=site_settings.logo_url,
+        )
+
+    if normalized == "/categories":
+        return SeoMeta(
+            title=f"Categories | {store_name}",
+            description=default_description or f"Browse categories at {store_name}",
+            canonical_url=f"{site_url}/categories",
+            site_name=store_name,
+            og_image=site_settings.logo_url,
         )
 
     if normalized.startswith("/products/"):
@@ -276,8 +291,15 @@ async def resolve_meta_for_path(
             canonical_url=canonical,
             og_type="product",
             og_image=image_url or site_settings.logo_url,
+            site_name=store_name,
             json_ld=[
-                build_product_json_ld(product, site_url, image_url, variants),
+                build_product_json_ld(
+                    product,
+                    site_url,
+                    image_url,
+                    variants,
+                    currency=getattr(site_settings, "shop_currency", None) or DEFAULT_CURRENCY,
+                ),
                 build_breadcrumb_json_ld(breadcrumbs),
             ],
         )
@@ -310,6 +332,7 @@ async def resolve_meta_for_path(
             description=description,
             canonical_url=canonical,
             og_image=site_settings.logo_url,
+            site_name=store_name,
             json_ld=[build_breadcrumb_json_ld(breadcrumbs)],
         )
 
@@ -318,6 +341,7 @@ async def resolve_meta_for_path(
             title=store_name,
             description=default_description,
             canonical_url=f"{site_url}{normalized}",
+            site_name=store_name,
             robots="noindex, nofollow",
         )
 
@@ -350,9 +374,22 @@ def _render_head_tags(meta: SeoMeta) -> str:
     if meta.canonical_url:
         parts.append(f'<meta property="og:url" content="{html.escape(meta.canonical_url)}">')
     parts.append(f'<meta property="og:type" content="{html.escape(meta.og_type)}">')
+    if meta.site_name:
+        parts.append(
+            f'<meta property="og:site_name" content="{html.escape(meta.site_name)}">'
+        )
     if meta.og_image:
         parts.append(f'<meta property="og:image" content="{html.escape(meta.og_image)}">')
     parts.append('<meta name="twitter:card" content="summary_large_image">')
+    parts.append(f'<meta name="twitter:title" content="{html.escape(meta.title)}">')
+    if meta.description:
+        parts.append(
+            f'<meta name="twitter:description" content="{html.escape(meta.description)}">'
+        )
+    if meta.og_image:
+        parts.append(
+            f'<meta name="twitter:image" content="{html.escape(meta.og_image)}">'
+        )
     parts.append(f'<meta name="robots" content="{html.escape(meta.robots)}">')
     for block in meta.json_ld:
         parts.append(
@@ -363,12 +400,26 @@ def _render_head_tags(meta: SeoMeta) -> str:
     return "\n".join(parts)
 
 
+_index_html_cache: tuple[str, float, str] | None = None
+
+
 def read_storefront_index_html(dist_directory: Path) -> str | None:
-    """Read index.html from a storefront dist directory."""
+    """Read index.html from a storefront dist directory (mtime-cached)."""
+    global _index_html_cache
     index_path = dist_directory / "index.html"
     if not index_path.is_file():
         return None
-    return index_path.read_text(encoding="utf-8")
+    path_key = str(index_path.resolve())
+    mtime = index_path.stat().st_mtime
+    if (
+        _index_html_cache is not None
+        and _index_html_cache[0] == path_key
+        and _index_html_cache[1] == mtime
+    ):
+        return _index_html_cache[2]
+    content = index_path.read_text(encoding="utf-8")
+    _index_html_cache = (path_key, mtime, content)
+    return content
 
 
 def render_robots_txt(site_url: str) -> str:
@@ -378,11 +429,15 @@ def render_robots_txt(site_url: str) -> str:
         "Allow: /",
         "Disallow: /admin/",
         "Disallow: /api/",
+        "Disallow: /cart",
         "Disallow: /checkout",
         "Disallow: /account",
-        "Disallow: /orders/",
+        "Disallow: /orders",
         "Disallow: /login",
         "Disallow: /register",
+        "Disallow: /forgot-password",
+        "Disallow: /reset-password",
+        "Disallow: /verify-email",
         f"Sitemap: {site_url}/sitemap.xml",
         "",
     ]
@@ -407,6 +462,7 @@ def render_sitemap_xml(
     entries: list[tuple[str, str | None]] = [
         (f"{site_url}/", None),
         (f"{site_url}/products", None),
+        (f"{site_url}/categories", None),
     ]
     for product in products:
         if product.slug:

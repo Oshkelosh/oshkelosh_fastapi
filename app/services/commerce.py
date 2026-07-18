@@ -8,6 +8,7 @@ raw update, call ``session.refresh(product)`` so the ORM identity map reflects t
 
 from __future__ import annotations
 
+import logging
 from typing import Any, Sequence
 
 from sqlalchemy import text
@@ -24,6 +25,8 @@ from app.services.product_variants import (
     build_variant_snapshot,
     refresh_product_listing_cache,
 )
+
+logger = logging.getLogger(__name__)
 
 _INVENTORY_RESTORABLE = frozenset({"pending", "paid"})
 
@@ -114,17 +117,16 @@ def ensure_product_purchasable(product: Product) -> None:
 
 
 async def load_variants_for_cart_items(
-    session: Any, items: Sequence[CartItem]
+    session: Any, items: Sequence[Any]
 ) -> dict[int, ProductVariant]:
-    """Load variants for cart line items."""
-    variants: dict[int, ProductVariant] = {}
-    for item in items:
-        if item.variant_id in variants:
-            continue
-        variant = await session.get(ProductVariant, item.variant_id)
-        if variant is not None:
-            variants[item.variant_id] = variant
-    return variants
+    """Batch-load variants for cart/order line items (one IN query, no N+1)."""
+    ids = {item.variant_id for item in items if item.variant_id is not None}
+    if not ids:
+        return {}
+    result = await session.execute(
+        select(ProductVariant).where(col(ProductVariant.id).in_(ids))
+    )
+    return {variant.id: variant for variant in result.scalars().all()}
 
 
 async def load_cart_items(session: Any, cart_id: int) -> list[CartItem]:
@@ -136,17 +138,14 @@ async def load_cart_items(session: Any, cart_id: int) -> list[CartItem]:
 
 
 async def load_products_for_cart_items(
-    session: Any, items: Sequence[CartItem]
+    session: Any, items: Sequence[Any]
 ) -> dict[int, Product]:
-    """Load products for cart line items without ORM lazy loads."""
-    products: dict[int, Product] = {}
-    for item in items:
-        if item.product_id in products:
-            continue
-        product = await session.get(Product, item.product_id)
-        if product is not None:
-            products[item.product_id] = product
-    return products
+    """Batch-load products for cart/order line items (one IN query, no N+1)."""
+    ids = {item.product_id for item in items if item.product_id is not None}
+    if not ids:
+        return {}
+    result = await session.execute(select(Product).where(col(Product.id).in_(ids)))
+    return {product.id: product for product in result.scalars().all()}
 
 
 async def load_user_cart(session: Any, user_id: int) -> tuple[Cart | None, list[CartItem]]:
@@ -296,15 +295,24 @@ async def apply_order_status_change(
 
             await decrement_product_units_sold(session, items)
     elif new_status == "paid" and old_status == "pending":
-        from app.services.fulfillment import fulfill_order_with_suppliers
         from app.services.product_popularity import increment_product_units_sold
 
-        await fulfill_order_with_suppliers(session, order, items)
         await increment_product_units_sold(session, items)
 
     order.status = new_status
     if hasattr(session, "mark_dirty"):
         session.mark_dirty(order)
+
+    if new_status == "paid" and old_status == "pending":
+        # Payment is the source of truth: fulfillment runs after the paid state
+        # is set and must never abort it. Failures are recorded on the order
+        # (notes + supplier_orders) for retry/manual follow-up.
+        from app.services.fulfillment import fulfill_order_with_suppliers
+
+        try:
+            await fulfill_order_with_suppliers(session, order, items)
+        except Exception:
+            logger.exception("Fulfillment failed for paid order %s", order.id)
 
     from app.services.notifications import notify_order_status_change
 
@@ -336,16 +344,31 @@ async def cancel_order_as_admin(session: Any, order: Order) -> None:
     )
 
 
-async def serialize_order(session: Any, order: Order):
-    """Build an OrderRead schema without triggering ORM lazy loads."""
+def _order_read(order: Order, items: list[OrderItem]):
     from schemas.order import OrderItemRead, OrderRead
 
-    items = await load_order_items(session, order.id)
-    subtotal_cents = sum(item.total_price_cents for item in items)
     read = OrderRead.model_validate(order)
     return read.model_copy(
         update={
-            "subtotal_cents": subtotal_cents,
+            "subtotal_cents": sum(item.total_price_cents for item in items),
             "items": [OrderItemRead.model_validate(item) for item in items],
         }
     )
+
+
+async def serialize_order(session: Any, order: Order):
+    """Build an OrderRead schema without triggering ORM lazy loads."""
+    return _order_read(order, await load_order_items(session, order.id))
+
+
+async def serialize_orders(session: Any, orders: Sequence[Order]) -> list:
+    """Serialize many orders with one batched item query instead of one per order."""
+    if not orders:
+        return []
+    result = await session.execute(
+        select(OrderItem).where(col(OrderItem.order_id).in_([o.id for o in orders]))
+    )
+    by_order: dict[int, list[OrderItem]] = {}
+    for item in result.scalars().all():
+        by_order.setdefault(item.order_id, []).append(item)
+    return [_order_read(order, by_order.get(order.id, [])) for order in orders]

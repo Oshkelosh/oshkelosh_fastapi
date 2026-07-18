@@ -58,12 +58,11 @@ async def db_session():
         Path(__file__).resolve().parents[1] / "migrations" / "d1" / "000_initial.sql"
     )
     if migration_path.exists():
+        from app.db.migrations import _split_statements
+
         raw = migration_path.read_text()
         async with engine.begin() as conn:
-            for statement in raw.split(";"):
-                stmt = statement.strip()
-                if not stmt or stmt.startswith("--"):
-                    continue
+            for stmt in _split_statements(raw):
                 await conn.execute(text(stmt))
 
     factory = async_sessionmaker(engine, expire_on_commit=False)

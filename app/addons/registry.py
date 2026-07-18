@@ -159,14 +159,6 @@ class AddonRegistry:
 
         invalidate_frontend_cache()
 
-    def enable(self, addon_id: str, config: dict) -> None:
-        """Sync alias – prefer ``enable_async`` in async contexts."""
-        raise RuntimeError("Use enable_async() from async code")
-
-    def disable(self, addon_id: str) -> None:
-        """Sync alias – prefer ``disable_async`` in async contexts."""
-        raise RuntimeError("Use disable_async() from async code")
-
     # ------------------------------------------------------------------
     # Config helpers
     # ------------------------------------------------------------------

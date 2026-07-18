@@ -8,6 +8,7 @@ Utility scripts for local development, deployment, and maintenance. Run from the
 | [`create_admin.py`](create_admin.py) | Create the first admin user interactively (one-shot CLI) |
 | [`watch_addon_restart.py`](watch_addon_restart.py) | Poll `data/restart.flag` and run `ADDON_INSTALL_RESTART_COMMAND` after addon install |
 | [`export_openapi.py`](export_openapi.py) | Export OpenAPI schema to `docs/api/openapi.json` |
+| [`commit_push_addons.sh`](commit_push_addons.sh) | Commit and push each nested addon repo under `app/addons/*/*/` |
 
 ## Common invocations
 
@@ -16,6 +17,8 @@ Utility scripts for local development, deployment, and maintenance. Run from the
 python scripts/create_admin.py
 python scripts/export_openapi.py
 ADDON_INSTALL_RESTART_COMMAND='kill -HUP $(cat .oshkelosh.pid)' python scripts/watch_addon_restart.py
+./scripts/commit_push_addons.sh -m "Shipping quote fixes"
+./scripts/commit_push_addons.sh -m "…" --dry-run
 ```
 
 See [app/addons/README.md](../app/addons/README.md) for addon install and restart-flag details.

@@ -48,6 +48,16 @@ async def find_or_create_sso_user(session: Any, profile: SsoProfile) -> User:
     if user is None:
         result = await session.execute(select(User).where(col(User.email) == email))
         user = result.scalar_one_or_none()
+        if user is not None and not profile.email_verified:
+            # Linking by email requires the provider to have verified it,
+            # otherwise anyone who registers the victim's address at the IdP
+            # takes over the existing account.
+            raise AuthenticationError(
+                message=(
+                    "This email is already registered. Verify the email with your "
+                    "SSO provider or sign in with your password first."
+                )
+            )
 
     if user is not None:
         if user.banned:

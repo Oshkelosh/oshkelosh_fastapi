@@ -43,7 +43,6 @@ The same `migrations/d1/` directory is used for all SQL backends:
 |---------|-------------------|
 | `sqlite` | Direct `sqlite3` connection to `data/oshkelosh.db` |
 | `d1_http` | `D1Connection.execute()` per statement |
-| `d1_binding` | `D1BindingConnection.execute()` per statement |
 
 The folder name reflects the original D1/wrangler target; local SQLite dev uses the same files.
 

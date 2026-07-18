@@ -17,25 +17,26 @@ from app.services.commerce import (
     apply_order_status_change,
     cart_line_totals,
     ensure_product_purchasable,
+    load_products_for_cart_items,
     load_user_cart,
     load_variants_for_cart_items,
     release_order_inventory,
     reserve_order_inventory,
     serialize_order,
+    serialize_orders,
     validate_status_transition,
 )
-from app.services.product_variants import ensure_variant_purchasable, get_variant_for_product
+from app.services.product_variants import ensure_variant_purchasable
 from app.services.checkout_pricing import (
     compute_order_total_cents,
     quote_order_charges,
     reprice_pending_order,
 )
 from app.services.order_idempotency import find_idempotent_order, record_idempotent_order
+from app.services.currency import order_currency_code, shop_currency_from_settings
 from app.services.site_settings import get_site_settings
 from models.order import Order
 from models.order_item import OrderItem
-from models.product import Product
-from models.product_variant import ProductVariant
 from models.user import User
 from schemas.order import OrderCheckoutUpdate, OrderCreateFromCart, OrderRead
 from app.services.user_accounts import resolve_order_shipping_address, resolve_order_billing_address
@@ -94,20 +95,20 @@ async def create_order(
     if cart is None or not cart_items:
         raise ValidationError(message="Cart is empty")
 
-    products: dict[int, Product] = {}
-    variants: dict[int, ProductVariant] = {}
+    products = await load_products_for_cart_items(session, cart_items)
+    variants = await load_variants_for_cart_items(session, cart_items)
 
     for item in cart_items:
-        product = await session.get(Product, item.product_id)
+        product = products.get(item.product_id)
         if product is None:
             raise ValidationError(
                 message=f"Product {item.product_id} is no longer available"
             )
-        variant = await get_variant_for_product(session, item.product_id, item.variant_id)
+        variant = variants.get(item.variant_id)
+        if variant is None or variant.product_id != item.product_id:
+            raise NotFound(message="Variant not found for this product")
         ensure_product_purchasable(product)
         ensure_variant_purchasable(product, variant, item.quantity)
-        products[product.id] = product
-        variants[variant.id] = variant
 
     subtotal_cents, order_items_data = cart_line_totals(cart_items, products, variants)
 
@@ -119,12 +120,15 @@ async def create_order(
     billing_address = resolve_order_billing_address(user, payload.billing_address)
 
     site = await get_site_settings(session)
+    shop_currency = shop_currency_from_settings(site)
     charges = await quote_order_charges(
         cart_items,
         products,
         shipping_address,
         site,
         variants,
+        shipping_selections=payload.shipping_selections,
+        currency=shop_currency,
     )
 
     order = Order(
@@ -133,9 +137,10 @@ async def create_order(
         total_cents=compute_order_total_cents(subtotal_cents, charges, site),
         tax_cents=charges.tax_cents,
         shipping_cents=charges.shipping_cents,
-        currency=payload.currency,
+        currency=order_currency_code(shop_currency),
         shipping_address=shipping_address,
         billing_address=billing_address,
+        shipping_selections=payload.shipping_selections,
         notes=payload.notes,
     )
     session.add(order)
@@ -208,15 +213,23 @@ async def checkout_order(
         raise ValidationError(message=f"Cannot checkout order with status '{order.status}'")
 
     if body is not None:
+        user = await session.get(User, user_id)
         if body.shipping_address is not None:
-            user = await session.get(User, user_id)
             order.shipping_address = (
                 resolve_order_shipping_address(user, body.shipping_address)
                 if user
                 else body.shipping_address
             )
         if body.billing_address is not None:
-            order.billing_address = body.billing_address
+            order.billing_address = (
+                resolve_order_billing_address(user, body.billing_address)
+                if user
+                else body.billing_address
+            )
+        if body.shipping_selections is not None:
+            order.shipping_selections = body.shipping_selections
+        if hasattr(session, "mark_dirty"):
+            session.mark_dirty(order)
 
     site = await get_site_settings(session)
     await reprice_pending_order(session, order, site)
@@ -271,7 +284,7 @@ async def list_orders(
 
     return {
         "items": [
-            (await serialize_order(session, o)).model_dump() for o in orders
+            read.model_dump() for read in await serialize_orders(session, orders)
         ],
         "total": total_count,
         "page": page,

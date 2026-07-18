@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.requests import Request
-from starlette.responses import RedirectResponse, Response
+from starlette.responses import JSONResponse, RedirectResponse, Response
 
 from app.config import settings
 
@@ -38,14 +38,15 @@ def _should_redirect_to_setup(path: str) -> bool:
 
 
 class SetupRedirectMiddleware(BaseHTTPMiddleware):
-    """Send GET requests to /setup while no admin user exists."""
+    """Gate the app while no admin user exists.
+
+    Browsers are redirected to /setup; the public API is disabled (503) so an
+    unconfigured deployment does not expose a live commerce surface.
+    """
 
     async def dispatch(
         self, request: Request, call_next: RequestResponseEndpoint
     ) -> Response:
-        if request.method != "GET":
-            return await call_next(request)
-
         if not getattr(request.app.state, "needs_setup", False):
             return await call_next(request)
 
@@ -58,6 +59,18 @@ class SetupRedirectMiddleware(BaseHTTPMiddleware):
                 return await call_next(request)
 
         path = request.url.path
+        if path.startswith("/api/"):
+            return JSONResponse(
+                status_code=503,
+                content={
+                    "error": "setup_required",
+                    "message": "Store setup is not complete",
+                },
+            )
+
+        if request.method != "GET":
+            return await call_next(request)
+
         if _is_exempt_path(path) or not _should_redirect_to_setup(path):
             return await call_next(request)
 

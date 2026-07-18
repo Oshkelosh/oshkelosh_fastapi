@@ -11,6 +11,7 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any
 
+from app.services.currency import shop_currency_from_settings
 from app.services.pricing.protocols import TaxQuote
 from app.services.commerce import build_cart_pricing_lines, cart_line_totals
 from app.services.pricing.shipping import SiteShippingQuoter
@@ -96,6 +97,8 @@ async def quote_order_charges(
     shipping_address: dict[str, Any] | None,
     site: SiteSettings,
     variants: dict[int, ProductVariant],
+    shipping_selections: dict[str, str] | None = None,
+    currency: str | None = None,
 ) -> OrderCharges:
     """Resolve tax and shipping for a cart at checkout."""
     subtotal_cents = _cart_subtotal_cents(cart_items, products, variants)
@@ -129,11 +132,14 @@ async def quote_order_charges(
             tax_cents = max(0, int(site_tax_cents))
             tax_source = site_source
 
+    shop_currency = currency or shop_currency_from_settings(site)
     shipping_quote = await SiteShippingQuoter(site).quote(
         cart_items,
         products,
         shipping_address,
         variants,
+        shipping_selections=shipping_selections,
+        currency=shop_currency,
     )
 
     return OrderCharges(
@@ -161,20 +167,16 @@ def compute_order_total_cents(
 
 async def reprice_pending_order(session: Any, order: Any, site: SiteSettings) -> None:
     """Re-quote tax/shipping and update totals on a pending order."""
-    from app.services.commerce import load_order_items
+    from app.services.commerce import (
+        load_order_items,
+        load_products_for_cart_items,
+        load_variants_for_cart_items,
+    )
+    from app.services.currency import normalize_currency
 
     items = await load_order_items(session, order.id)
-    products: dict[int, Product] = {}
-    variants: dict[int, ProductVariant] = {}
-    for item in items:
-        if item.product_id not in products:
-            product = await session.get(Product, item.product_id)
-            if product is not None:
-                products[item.product_id] = product
-        if item.variant_id is not None and item.variant_id not in variants:
-            variant = await session.get(ProductVariant, item.variant_id)
-            if variant is not None:
-                variants[item.variant_id] = variant
+    products = await load_products_for_cart_items(session, items)
+    variants = await load_variants_for_cart_items(session, items)
 
     priced_variants = {
         variant_id: copy(variant)
@@ -193,6 +195,11 @@ async def reprice_pending_order(session: Any, order: Any, site: SiteSettings) ->
         order.shipping_address,
         site,
         priced_variants,
+        shipping_selections=getattr(order, "shipping_selections", None),
+        currency=normalize_currency(
+            getattr(order, "currency", None),
+            default=shop_currency_from_settings(site),
+        ),
     )
     subtotal_cents = sum(item.total_price_cents for item in items)
     order.tax_cents = charges.tax_cents

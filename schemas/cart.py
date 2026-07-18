@@ -92,6 +92,31 @@ class CartQuoteRequest(BaseModel):
     """Optional shipping address for checkout tax/shipping preview."""
 
     shipping_address: dict | None = None
+    shipping_selections: dict[str, str] | None = None
+
+
+class ShippingRateOption(BaseModel):
+    """One selectable shipping method for a supplier fulfillment group."""
+
+    id: str
+    name: str
+    cents: int
+    min_delivery_days: int | None = None
+    max_delivery_days: int | None = None
+
+
+class ShippingBreakdownItem(BaseModel):
+    """One shipping bucket (supplier quote or site-settings fallback)."""
+
+    source: str
+    fulfillment_key: str
+    cents: int
+    label: str = ""
+    cart_item_ids: list[int] = Field(default_factory=list)
+    addon_id: str | None = None
+    subtotal_cents: int | None = None
+    options: list[ShippingRateOption] = Field(default_factory=list)
+    selected_id: str | None = None
 
 
 class CartQuoteResponse(BaseModel):
@@ -100,5 +125,31 @@ class CartQuoteResponse(BaseModel):
     subtotal_cents: int
     tax_cents: int
     shipping_cents: int
+    total_cents: int = Field(
+        default=0,
+        description=(
+            "Chargeable total. Under tax-inclusive pricing tax is already inside "
+            "subtotal_cents — clients must not add tax_cents again."
+        ),
+    )
+    tax_inclusive: bool = Field(
+        default=False,
+        description="True when prices already include tax (tax_cents is informational).",
+    )
     tax_source: str
-    shipping_breakdown: list[dict] = Field(default_factory=list)
+    currency: str = Field(default="USD", description="Shop currency (ISO 4217).")
+    preferred_currency: str | None = Field(
+        default=None,
+        description="Soft currency hint from address/IP; charge currency stays shop currency until FX.",
+    )
+    shipping_breakdown: list[ShippingBreakdownItem] = Field(default_factory=list)
+
+
+class CartItemShippingEstimateResponse(BaseModel):
+    """Standalone per-line shipping estimate (not used for checkout totals)."""
+
+    cart_item_id: int
+    shipping_cents: int
+    currency: str = Field(default="USD", description="Shop currency (ISO 4217).")
+    label: str = ""
+    source: str = ""

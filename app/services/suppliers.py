@@ -51,9 +51,8 @@ def _resolve_supplier_addon(addon_id: str) -> SupplierAddon | None:
 
 
 def _addon_id_from_supplier_value(supplier_value: str) -> str:
-    if supplier_value.startswith("manual:"):
-        return "manual"
-    return supplier_value
+    """Dropdown values are ``addon_id`` or ``addon_id:ref`` (see admin_form_meta_key)."""
+    return supplier_value.partition(":")[0]
 
 
 def parse_supplier_tag(tag: dict[str, Any]) -> SupplierAssignment | None:

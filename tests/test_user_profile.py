@@ -15,6 +15,7 @@ def _mock_payment_addon():
     mock_addon.addon_id = "mock_payment"
     mock_addon.create_payment = AsyncMock(
         return_value={
+            "success": True,
             "checkout_url": "https://pay.test",
             "session_id": "sess_mock",
             "payment_id": "pi_mock",
@@ -97,7 +98,7 @@ class TestOrderAddresses:
                 headers=headers,
                 json={"shipping_address": shipping},
             )
-        assert checkout.status_code == 200
+        assert checkout.status_code == 200, checkout.text
 
         detail = await client.get(f"/api/v1/orders/{order_id}", headers=headers)
         assert detail.json()["shipping_address"]["line1"] == "9 Oak Rd"
@@ -171,7 +172,7 @@ class TestOrderAddresses:
                 headers=headers,
                 json={"shipping_address": {"country": "DE"}},
             )
-        assert checkout.status_code == 200
+        assert checkout.status_code == 200, checkout.text
 
         detail = await client.get(f"/api/v1/orders/{order_id}", headers=headers)
         de_total = detail.json()["total_cents"]

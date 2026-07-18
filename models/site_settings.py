@@ -34,6 +34,10 @@ class SiteSettings(ModelBase, table=True):
     support_email: Optional[str] = Field(default=None, sa_column=Column(String(255), nullable=True))
     meta_description: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
     site_url: Optional[str] = Field(default=None, sa_column=Column(String(2048), nullable=True))
+    shop_currency: str = Field(
+        default="USD",
+        sa_column=Column(String(3), nullable=False, server_default="USD"),
+    )
 
     # Built-in tax rules (defaults: 8% tax enabled)
     tax_enabled: bool = Field(

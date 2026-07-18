@@ -82,7 +82,7 @@ async def reset_password_link(
     except AuthenticationError:
         return _forgot_password_redirect(reason="invalid")
 
-    return await serve_spa_html(request, session, inject_meta=False)
+    return await serve_spa_html(request, session)
 
 
 def register_auth_link_routes(app) -> None:

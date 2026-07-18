@@ -98,22 +98,17 @@ def build_variant_snapshot(variant: ProductVariant) -> dict[str, Any]:
 
 
 def supplier_assignment_from_variant(variant: ProductVariant) -> SupplierAssignment | None:
-    """Build supplier assignment from variant supplier fields."""
+    """Build supplier assignment from variant supplier fields (addon hook)."""
     addon_id = variant.supplier_addon_id
     if not addon_id:
         return None
+    from app.services.suppliers import _resolve_supplier_addon
+
+    addon = _resolve_supplier_addon(str(addon_id))
+    if addon is not None:
+        return addon.assignment_from_variant(variant)
+    # Addon not installed: keep the linkage readable with the generic shape.
     product_id = variant.supplier_product_id or ""
-    if addon_id == "manual":
-        manual_slug = (
-            variant.supplier_variant_id
-            or (variant.attributes or {}).get("manual_supplier_slug")
-        )
-        return SupplierAssignment(
-            addon_id="manual",
-            supplier_product_id=product_id,
-            manual_slug=str(manual_slug) if manual_slug else None,
-            variant_id=None,
-        )
     if not product_id and not variant.supplier_variant_id:
         return None
     return SupplierAssignment(

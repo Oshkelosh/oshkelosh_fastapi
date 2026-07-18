@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+
 import logging
 import mimetypes
 from typing import Any
@@ -174,7 +176,9 @@ async def upload_standalone_image(
     storage: StorageBackend,
 ) -> dict[str, Any]:
     """Process and upload an image not tied to a product."""
-    processed = process_product_image(content, source_content_type=content_type)
+    processed = await asyncio.to_thread(
+        process_product_image, content, source_content_type=content_type
+    )
     full_url, variants = await upload_processed_variants(storage, processed)
     key = storage_key_from_url(full_url) or ""
     return {"url": full_url, "key": key, "variants": variants}
@@ -192,7 +196,9 @@ async def upload_product_image(
     variant_id: int | None = None,
 ) -> ProductImage:
     """Process, upload variants, and attach a ProductImage row."""
-    processed = process_product_image(content, source_content_type=content_type)
+    processed = await asyncio.to_thread(
+        process_product_image, content, source_content_type=content_type
+    )
     public_url, _variants = await upload_processed_variants(storage, processed)
 
     if sort_order is None:
@@ -369,14 +375,13 @@ async def build_product_read(session: Any, product: Product) -> ProductRead:
 
 async def build_product_detail_read(session: Any, product: Product) -> ProductDetailRead:
     """Build ProductDetailRead with variants and images."""
-    base = await build_product_read(session, product)
+    images_map = await images_by_product_id(session, [product.id])
+    all_images = images_map.get(product.id, [])
     result = await session.execute(
         select(ProductVariant).where(col(ProductVariant.product_id) == product.id)
     )
     all_variants = list(result.scalars().all())
     active = get_active_variants(all_variants)
-    images_map = await images_by_product_id(session, [product.id])
-    all_images = images_map.get(product.id, [])
 
     variant_reads: list[ProductVariantRead] = []
     for variant in active:
@@ -389,14 +394,16 @@ async def build_product_detail_read(session: Any, product: Product) -> ProductDe
         payload["images"] = variant_images
         variant_reads.append(ProductVariantRead.model_validate(payload))
 
-    detail = base.model_dump()
+    detail = product.model_dump()
+    detail["popularity_score"] = compute_popularity_score(
+        detail.get("units_sold", 0), product.created_at
+    )
     shared_images = [
         product_image_to_dict(img)
         for img in all_images
         if img.variant_id is None
     ]
-    if shared_images:
-        detail["images"] = shared_images
+    detail["images"] = shared_images if shared_images else effective_images(all_images)
     detail["variants"] = [v.model_dump() for v in variant_reads]
     return ProductDetailRead.model_validate(detail)
 

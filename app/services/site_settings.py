@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any
 from sqlmodel import select
 
 from app.config import settings
+from app.services.currency import normalize_currency, shop_currency_from_settings
 from models.site_settings import SiteSettings
 
 if TYPE_CHECKING:
@@ -94,6 +95,7 @@ async def update_site_settings(session: Any, data: dict) -> SiteSettings:
         "support_email",
         "meta_description",
         "site_url",
+        "shop_currency",
         "tax_enabled",
         "tax_inclusive",
         "tax_rate_bps",
@@ -139,6 +141,8 @@ async def update_site_settings(session: Any, data: dict) -> SiteSettings:
                 setattr(row, key, max(0, int(value)))
         elif key in ("abandoned_cart_delay_hours", "abandoned_cart_max_reminders"):
             setattr(row, key, max(1, int(value)))
+        elif key == "shop_currency":
+            setattr(row, key, normalize_currency(str(value) if value is not None else None))
         else:
             setattr(row, key, value)
 
@@ -161,6 +165,7 @@ def site_settings_to_dict(row: SiteSettings) -> dict:
         "support_email": row.support_email,
         "meta_description": row.meta_description,
         "site_url": row.site_url,
+        "shop_currency": shop_currency_from_settings(row),
         "tax_enabled": row.tax_enabled,
         "tax_inclusive": row.tax_inclusive,
         "tax_rate_bps": row.tax_rate_bps,

@@ -21,7 +21,7 @@ from app.admin.routes._deps import (
     select,
     set_session_cookie,
     settings,
-    verify_password,
+    verify_password_async,
 )
 
 router = APIRouter()
@@ -92,7 +92,7 @@ async def admin_login_submit(
     result = await session.execute(select(User).where(User.email == email))
     user = result.scalar_one_or_none()
 
-    if not user or not verify_password(password, user.password_hash):
+    if not user or not await verify_password_async(password, user.password_hash):
         return _render_login(
             request,
             error="Invalid email or password",

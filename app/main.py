@@ -244,10 +244,10 @@ def create_app() -> FastAPI:
 
     @app.get("/firebase-messaging-sw.js", include_in_schema=False)
     async def firebase_messaging_service_worker():
-        from app.services.push_discovery import build_fcm_service_worker_js
+        from app.services.push_discovery import build_push_service_worker_js
         from fastapi.responses import Response
 
-        js = build_fcm_service_worker_js()
+        js = build_push_service_worker_js()
         if js is None:
             return Response(status_code=404, content="Not found", media_type="text/plain")
         return Response(content=js, media_type="application/javascript")

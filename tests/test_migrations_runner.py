@@ -56,3 +56,40 @@ async def test_apply_migrations_async_tracks_files_and_tolerates_duplicate_colum
         "002_add_code.sql",
         "003_add_code_again.sql",
     ]
+
+
+_REAL_MIGRATIONS_DIR = (
+    Path(__file__).resolve().parents[1] / "migrations" / "d1"
+)
+
+
+def test_split_statements_preserves_ddl_after_comment_headers():
+    """Real migration files begin with comment headers; the DDL must survive."""
+    from app.db.migrations import _split_statements
+
+    for name in (
+        "001_user_default_billing_address.sql",
+        "002_order_shipping_selections.sql",
+        "003_site_shop_currency.sql",
+    ):
+        sql = (_REAL_MIGRATIONS_DIR / name).read_text(encoding="utf-8")
+        statements = _split_statements(sql)
+        assert statements, f"{name} produced no statements"
+        assert any(s.upper().startswith("ALTER TABLE") for s in statements), name
+        assert not any(s.lstrip().startswith("--") for s in statements)
+
+
+def test_split_statements_keeps_cart_unique_index_from_initial():
+    from app.db.migrations import _split_statements
+
+    sql = (_REAL_MIGRATIONS_DIR / "000_initial.sql").read_text(encoding="utf-8")
+    statements = _split_statements(sql)
+    assert any("idx_cart_items_cart_variant" in s for s in statements)
+
+
+def test_split_statements_ignores_double_dash_inside_string_literal():
+    from app.db.migrations import _split_statements
+
+    sql = "UPDATE t SET note = 'a--b' WHERE id = 1; -- trailing comment\n"
+    statements = _split_statements(sql)
+    assert statements == ["UPDATE t SET note = 'a--b' WHERE id = 1"]

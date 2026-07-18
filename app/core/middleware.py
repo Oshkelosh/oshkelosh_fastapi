@@ -31,7 +31,15 @@ def setup_cors(app: FastAPI) -> None:
     """Configure CORS on the FastAPI application."""
     if settings.app_env == "production":
         allow_methods = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
-        allow_headers = ["Authorization", "Content-Type", "Accept", "X-Request-ID"]
+        allow_headers = [
+            "Authorization",
+            "Content-Type",
+            "Accept",
+            "X-Request-ID",
+            # Order creation dedupe header — without it cross-origin storefront
+            # checkouts fail the CORS preflight in production.
+            "Idempotency-Key",
+        ]
     else:
         allow_methods = ["*"]
         allow_headers = ["*"]

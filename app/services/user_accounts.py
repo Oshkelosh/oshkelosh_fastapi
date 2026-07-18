@@ -12,7 +12,7 @@ from sqlmodel import col, select
 
 from app.config import settings
 from app.core.exceptions import AuthenticationError, ValidationError
-from app.core.security import hash_password
+from app.core.security import hash_password_async
 from app.db.base import utc_now
 from models.user import User
 
@@ -139,7 +139,7 @@ async def validate_password_reset_token(session: Any, token: str) -> User:
 
 async def reset_password_with_token(session: Any, token: str, new_password: str) -> User:
     user = await validate_password_reset_token(session, token)
-    user.password_hash = hash_password(new_password)
+    user.password_hash = await hash_password_async(new_password)
     clear_password_reset(user)
     return user
 

@@ -6,7 +6,7 @@ All payment integrations (Stripe, PayPal, etc.) must inherit from
 """
 
 from abc import abstractmethod
-from typing import Any, Dict
+from typing import Any, Dict, Mapping
 
 from app.addons.base import BaseAddon
 from schemas.payment import PaymentWebhookOutcome
@@ -16,6 +16,22 @@ class PaymentAddon(BaseAddon):
     """Abstract base for payment-gateway integrations."""
 
     addon_category: str = "payment"
+
+    async def verify_webhook(
+        self,
+        *,
+        headers: Mapping[str, str],
+        body: bytes,
+    ) -> bool:
+        """Return True only when the webhook is provably from the provider.
+
+        Fails closed: the default rejects everything. Each payment addon MUST
+        override this to verify the provider signature (HMAC, verify API, etc.)
+        before core will mark any order paid. An addon that cannot verify a
+        webhook must return False rather than trusting the body.
+        """
+        del headers, body
+        return False
 
     @abstractmethod
     async def create_payment(
@@ -32,16 +48,6 @@ class PaymentAddon(BaseAddon):
         ...
 
     @abstractmethod
-    async def confirm_payment(self, payment_id: str) -> Dict[str, Any]:
-        """Mark a payment as confirmed / captured."""
-        ...
-
-    @abstractmethod
-    async def refund_payment(self, payment_id: str, amount: int) -> Dict[str, Any]:
-        """Refund a payment (full or partial)."""
-        ...
-
-    @abstractmethod
     async def get_payment_status(self, payment_id: str) -> Dict[str, Any]:
         """Return the current status of a payment."""
         ...
@@ -52,18 +58,6 @@ class PaymentAddon(BaseAddon):
     ) -> PaymentWebhookOutcome:
         """Parse a provider webhook into a structured outcome (no DB writes)."""
         ...
-
-    async def handle_webhook(
-        self, payload: Dict[str, Any], signature: str
-    ) -> Dict[str, Any]:
-        """Legacy adapter — prefer ``parse_webhook``."""
-        outcome = await self.parse_webhook(payload, signature)
-        return {
-            "handled": outcome.handled,
-            "event_type": outcome.event_type,
-            "event_id": outcome.event_id,
-            "error": outcome.error,
-        }
 
     def webhook_event_id(self, payload: Dict[str, Any]) -> str:
         """Extract a stable event id from a provider payload."""

@@ -24,7 +24,7 @@ from app.admin.session import (
     set_session_cookie,
 )
 from app.core.exceptions import NotFound
-from app.core.security import verify_password
+from app.core.security import verify_password, verify_password_async
 from app.db.connection import get_session, mark_instance_dirty
 
 # Jinja2 setup
@@ -269,6 +269,7 @@ __all__ = [
     "settings",
     "status",
     "verify_password",
+    "verify_password_async",
     "datetime",
     "timedelta",
     "timezone",

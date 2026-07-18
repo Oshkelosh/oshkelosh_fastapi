@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import getpass
+import os
 import sys
 from pathlib import Path
 
@@ -53,7 +54,6 @@ async def _run(email: str, password: str, full_name: str | None) -> int:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Create the first Oshkelosh admin user")
     parser.add_argument("--email", default=None, help="Admin email")
-    parser.add_argument("--password", default=None, help="Admin password")
     parser.add_argument("--full-name", default=None, help="Optional display name")
     args = parser.parse_args()
 
@@ -62,7 +62,9 @@ def main() -> int:
         print("Email is required.", file=sys.stderr)
         return 1
 
-    password = args.password
+    # No --password flag: argv leaks through process lists and shell history.
+    # Non-interactive use: OSHKELOSH_ADMIN_PASSWORD env var.
+    password = os.environ.get("OSHKELOSH_ADMIN_PASSWORD", "")
     if not password:
         password = getpass.getpass("Password: ")
         confirm = getpass.getpass("Confirm password: ")

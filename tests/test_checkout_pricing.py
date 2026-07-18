@@ -44,7 +44,14 @@ def _site(**overrides) -> SiteSettings:
 
 
 class _CartItem:
-    def __init__(self, product_id: int, variant_id: int, quantity: int) -> None:
+    def __init__(
+        self,
+        product_id: int,
+        variant_id: int,
+        quantity: int,
+        item_id: int | None = None,
+    ) -> None:
+        self.id = item_id if item_id is not None else product_id
         self.product_id = product_id
         self.variant_id = variant_id
         self.quantity = quantity
@@ -267,8 +274,149 @@ class TestQuoteOrderCharges:
             charges = await quote_order_charges(items, products, {"country": "US"}, site, variants)
             assert charges.shipping_cents == 250
             assert charges.shipping_breakdown[0]["source"] == "supplier"
+            assert charges.shipping_breakdown[0]["label"] == "Mock Ship"
+            assert charges.shipping_breakdown[0]["cart_item_ids"] == [1]
         finally:
             addon_registry._registry.pop("mock_ship", None)
+
+    async def test_single_line_estimate_quotes_only_that_line_quantity(self, monkeypatch):
+        from app.addons.registry import addon_registry
+        from app.services.pricing.shipping import SiteShippingQuoter
+
+        supplier = MockShippingSupplier(quote_cents=175)
+        addon_registry._registry["mock_ship"] = supplier
+        monkeypatch.setattr(
+            "app.services.pricing.shipping.get_supplier_addon",
+            lambda addon_id: supplier if addon_id == "mock_ship" else None,
+        )
+        try:
+            site = _site(shipping_flat_cents=999)
+            items = [_CartItem(1, 1, 3, item_id=42)]
+            products = {1: _Product(1, 1000)}
+            variants = {
+                1: _Variant(
+                    1,
+                    1,
+                    1000,
+                    supplier_addon_id="mock_ship",
+                    supplier_product_id="p1",
+                )
+            }
+            quote = await SiteShippingQuoter(site).quote(
+                items,
+                products,
+                {"country": "US"},
+                variants,
+            )
+            assert quote.shipping_cents == 175
+            assert quote.breakdown[0]["cart_item_ids"] == [42]
+            assert quote.breakdown[0]["label"] == "Mock Ship"
+            supplier.quote_shipping.assert_awaited_once()
+            quoted_items = supplier.quote_shipping.await_args.args[0]
+            assert len(quoted_items) == 1
+            assert quoted_items[0]["quantity"] == 3
+            assert quoted_items[0]["cart_item_id"] == 42
+        finally:
+            addon_registry._registry.pop("mock_ship", None)
+
+    async def test_shipping_selection_updates_supplier_cents(self, monkeypatch):
+        from app.addons.registry import addon_registry
+        from app.addons.suppliers.base import SupplierAddon
+
+        class OptionSupplier(SupplierAddon):
+            addon_name = "Options"
+            version = "1.0.0"
+            addon_id = "mock_options"
+
+            def __init__(self) -> None:
+                super().__init__()
+                self.is_enabled = True
+
+            @classmethod
+            def config_schema(cls):
+                from pydantic import BaseModel
+
+                return BaseModel
+
+            def supports_shipping_quotes(self) -> bool:
+                return True
+
+            async def initialize(self, config: dict) -> None:
+                pass
+
+            async def shutdown(self) -> None:
+                pass
+
+            async def list_products(self, **kwargs):
+                return []
+
+            async def get_product(self, product_id: str):
+                return {}
+
+            async def create_order(self, items, shipping_address, **kwargs):
+                return {}
+
+            async def get_order_status(self, order_id: str):
+                return {}
+
+            async def sync_inventory(self) -> None:
+                pass
+
+            async def quote_shipping_details(
+                self, items, shipping_address, *, selected_id=None
+            ):
+                options = [
+                    {"id": "STANDARD", "name": "Standard", "cents": 300},
+                    {"id": "EXPRESS", "name": "Express", "cents": 900},
+                ]
+                chosen = next(
+                    (row for row in options if row["id"] == selected_id),
+                    options[0],
+                )
+                return {
+                    "cents": chosen["cents"],
+                    "selected_id": chosen["id"],
+                    "options": options,
+                }
+
+        supplier = OptionSupplier()
+        addon_registry._registry["mock_options"] = supplier
+        monkeypatch.setattr(
+            "app.services.pricing.shipping.get_supplier_addon",
+            lambda addon_id: supplier if addon_id == "mock_options" else None,
+        )
+        try:
+            site = _site(shipping_flat_cents=999)
+            items = [_CartItem(1, 1, 1, item_id=7)]
+            products = {1: _Product(1, 1000)}
+            variants = {
+                1: _Variant(
+                    1,
+                    1,
+                    1000,
+                    supplier_addon_id="mock_options",
+                    supplier_product_id="p1",
+                )
+            }
+            default = await quote_order_charges(
+                items, products, {"country": "US"}, site, variants
+            )
+            assert default.shipping_cents == 300
+            assert default.shipping_breakdown[0]["selected_id"] == "STANDARD"
+            assert len(default.shipping_breakdown[0]["options"]) == 2
+
+            express = await quote_order_charges(
+                items,
+                products,
+                {"country": "US"},
+                site,
+                variants,
+                shipping_selections={"mock_options": "EXPRESS"},
+            )
+            assert express.shipping_cents == 900
+            assert express.shipping_breakdown[0]["selected_id"] == "EXPRESS"
+        finally:
+            addon_registry._registry.pop("mock_options", None)
 
     async def test_mixed_cart_supplier_and_merchant(self, monkeypatch):
         from app.addons.registry import addon_registry
@@ -297,6 +445,11 @@ class TestQuoteOrderCharges:
             assert charges.shipping_cents == 250 + 400
             sources = {row["source"] for row in charges.shipping_breakdown}
             assert sources == {"supplier", "site_settings"}
+            by_source = {row["source"]: row for row in charges.shipping_breakdown}
+            assert by_source["supplier"]["cart_item_ids"] == [1]
+            assert by_source["supplier"]["label"] == "Mock Ship"
+            assert by_source["site_settings"]["cart_item_ids"] == [2]
+            assert by_source["site_settings"]["label"] == "Standard shipping"
         finally:
             addon_registry._registry.pop("mock_ship", None)
 
@@ -345,6 +498,8 @@ class TestQuoteOrderCharges:
                 "mock_ship_b",
             }
             assert {row["cents"] for row in supplier_rows} == {300, 450}
+            assert {tuple(row["cart_item_ids"]) for row in supplier_rows} == {(1,), (2,)}
+            assert all(row["label"] == "Mock Ship" for row in supplier_rows)
             assert not any(
                 row["source"] == "site_settings" for row in charges.shipping_breakdown
             )
@@ -381,6 +536,8 @@ class TestQuoteOrderCharges:
                 {
                     "source": "site_settings",
                     "fulfillment_key": "__merchant__",
+                    "label": "Standard shipping",
+                    "cart_item_ids": [1],
                     "subtotal_cents": 1000,
                     "cents": 600,
                 }

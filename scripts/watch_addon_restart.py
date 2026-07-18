@@ -51,6 +51,10 @@ def _resolve_restart_command() -> str:
 
 def _run_restart(command: str) -> bool:
     print(f"Running restart command: {command}")
+    # shell=True is intentional: the command comes from the operator's own
+    # ADDON_INSTALL_RESTART_COMMAND env var (trusted, same privilege level)
+    # and legitimately uses shell features like `$(cat .oshkelosh.pid)`.
+    # Never feed this from request/user data.
     result = subprocess.run(
         command,
         shell=True,

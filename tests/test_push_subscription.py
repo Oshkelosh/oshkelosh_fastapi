@@ -34,19 +34,20 @@ class TestPushDiscovery:
 
     async def test_fcm_service_worker_404_when_disabled(self, client):
         with patch(
-            "app.services.push_discovery.get_public_push_config",
+            "app.services.push_discovery.get_notification_addon_for_channel",
             return_value=None,
         ):
             response = await client.get("/firebase-messaging-sw.js")
         assert response.status_code == 404
 
     async def test_fcm_service_worker_returns_js_when_enabled(self, client):
+        from app.addons.notifications.fcm.addon import FcmAddon
+
+        addon = FcmAddon()
+        addon._config = {"web_api_key": "key", "project_id": "proj"}
         with patch(
-            "app.services.push_discovery.get_public_push_config",
-            return_value={
-                "provider": "fcm",
-                "config": {"apiKey": "key", "projectId": "proj"},
-            },
+            "app.services.push_discovery.get_notification_addon_for_channel",
+            return_value=addon,
         ):
             response = await client.get("/firebase-messaging-sw.js")
         assert response.status_code == 200

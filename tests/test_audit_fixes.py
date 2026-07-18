@@ -53,6 +53,107 @@ class TestCartSubtotal:
         assert data["items"][0]["line_total_cents"] == test_product.price_cents * 2
 
 
+class TestCartItemShippingEstimate:
+    async def test_estimate_requires_saved_address(
+        self, client: AsyncClient, test_user, test_product, test_variant, db_session
+    ):
+        test_user.default_shipping_address = None
+        await db_session.flush()
+
+        headers = await _auth_headers(client, test_user.email, "SecurePass123!")
+        add = await client.post(
+            "/api/v1/cart/items",
+            headers=headers,
+            json={"product_id": test_product.id, "variant_id": test_variant.id, "quantity": 1},
+        )
+        item_id = add.json()["id"]
+
+        resp = await client.post(
+            f"/api/v1/cart/items/{item_id}/shipping-estimate",
+            headers=headers,
+        )
+        assert resp.status_code == 422
+        assert "shipping address" in resp.json()["message"].lower()
+
+    async def test_estimate_rejects_other_users_item(
+        self, client: AsyncClient, test_user, test_product, test_variant, db_session
+    ):
+        other = User(
+            email="estimate-other@example.com",
+            password_hash=hash_password("SecurePass123!"),
+            full_name="Other User",
+            is_admin=False,
+            verified=True,
+            default_shipping_address={
+                "line1": "1 Main St",
+                "city": "Town",
+                "postal_code": "10001",
+                "country": "US",
+            },
+        )
+        db_session.add(other)
+        await db_session.flush()
+        await db_session.refresh(other)
+
+        owner_headers = await _auth_headers(client, test_user.email, "SecurePass123!")
+        add = await client.post(
+            "/api/v1/cart/items",
+            headers=owner_headers,
+            json={"product_id": test_product.id, "variant_id": test_variant.id, "quantity": 1},
+        )
+        item_id = add.json()["id"]
+
+        other_headers = await _auth_headers(client, other.email, "SecurePass123!")
+        resp = await client.post(
+            f"/api/v1/cart/items/{item_id}/shipping-estimate",
+            headers=other_headers,
+        )
+        assert resp.status_code == 404
+
+    async def test_estimate_returns_shipping_for_line(
+        self, client: AsyncClient, test_user, test_product, test_variant, db_session
+    ):
+        from models.site_settings import SiteSettings
+        from sqlmodel import select
+
+        test_user.default_shipping_address = {
+            "line1": "1 Main St",
+            "city": "Town",
+            "postal_code": "10001",
+            "country": "US",
+        }
+        await db_session.flush()
+
+        result = await db_session.execute(select(SiteSettings).limit(1))
+        site = result.scalar_one_or_none()
+        if site is None:
+            site = SiteSettings(store_name="Test", shipping_mode="flat", shipping_flat_cents=750)
+            db_session.add(site)
+        else:
+            site.shipping_mode = "flat"
+            site.shipping_flat_cents = 750
+        await db_session.flush()
+
+        headers = await _auth_headers(client, test_user.email, "SecurePass123!")
+        add = await client.post(
+            "/api/v1/cart/items",
+            headers=headers,
+            json={"product_id": test_product.id, "variant_id": test_variant.id, "quantity": 2},
+        )
+        item_id = add.json()["id"]
+
+        resp = await client.post(
+            f"/api/v1/cart/items/{item_id}/shipping-estimate",
+            headers=headers,
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["cart_item_id"] == item_id
+        assert data["shipping_cents"] == 750
+        assert data["source"] == "site_settings"
+        assert data["label"] == "Standard shipping"
+
+
 class TestOrderIdor:
     async def test_user_cannot_read_other_users_order(
         self, client: AsyncClient, test_user, test_product, db_session

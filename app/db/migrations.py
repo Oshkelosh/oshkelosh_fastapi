@@ -128,10 +128,44 @@ async def _run_sql_file_async(
 ) -> None:
     sql = path.read_text(encoding="utf-8")
     for statement in _split_statements(sql):
-        await execute_fn(statement)
+        try:
+            await execute_fn(statement)
+        except Exception as exc:  # noqa: BLE001 - tolerate idempotent re-adds on D1
+            if "duplicate column name" in str(exc).lower():
+                logger.debug("Skipping duplicate column migration: {}", exc)
+                continue
+            raise
     logger.info("Applied migration: {}", path.name)
 
 
+def _strip_sql_comments(sql: str) -> str:
+    """Remove ``--`` line comments, ignoring ``--`` inside single-quoted strings.
+
+    The previous implementation dropped any semicolon-delimited chunk that merely
+    *started* with ``--``, which silently discarded the DDL that followed a comment
+    header (every ALTER in 001-003, plus indexes/backfills in 000). Stripping the
+    comment text instead preserves the statements.
+    """
+    out_lines: list[str] = []
+    for line in sql.splitlines():
+        result: list[str] = []
+        in_string = False
+        i = 0
+        while i < len(line):
+            ch = line[i]
+            if ch == "'":
+                in_string = not in_string
+                result.append(ch)
+            elif ch == "-" and not in_string and line[i + 1 : i + 2] == "-":
+                break
+            else:
+                result.append(ch)
+            i += 1
+        out_lines.append("".join(result))
+    return "\n".join(out_lines)
+
+
 def _split_statements(sql: str) -> list[str]:
-    parts = [part.strip() for part in sql.split(";")]
-    return [part for part in parts if part and not part.startswith("--")]
+    cleaned = _strip_sql_comments(sql)
+    parts = [part.strip() for part in cleaned.split(";")]
+    return [part for part in parts if part]

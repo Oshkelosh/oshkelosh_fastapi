@@ -9,7 +9,7 @@ from app.db.base import ModelBase, utc_now
 
 
 class ProcessedWebhookEvent(ModelBase, table=True):
-    """Stripe (and other) webhook events already handled."""
+    """Payment-provider webhook events already handled (dedupe/replay guard)."""
 
     __tablename__ = "processed_webhook_events"
 
@@ -17,7 +17,7 @@ class ProcessedWebhookEvent(ModelBase, table=True):
         sa_column=Column(String(255), unique=True, nullable=False, index=True),
     )
     provider: str = Field(
-        sa_column=Column(String(50), nullable=False, server_default="stripe"),
+        sa_column=Column(String(50), nullable=False),
     )
     event_type: str = Field(
         sa_column=Column(String(100), nullable=False, server_default=""),

@@ -44,13 +44,26 @@ class NotificationAddon(BaseAddon):
         """Send a push notification to a device token or provider user id."""
         ...
 
-    @abstractmethod
     async def send_webhook(self, url: str, payload: Dict[str, Any]) -> Dict[str, Any]:
-        """Send a POST request to a webhook URL."""
-        ...
+        """POST JSON to a merchant-configured webhook URL (SSRF-guarded)."""
+        from app.addons.log import label_for, warning
+        from app.addons.notifications.helpers import post_json_webhook
+
+        result = await post_json_webhook(url, payload)
+        if not result.get("success"):
+            warning(label_for(self), "send_webhook to={} error: {}", url, result.get("error"))
+        return result
 
     def list_public_push_config(self) -> dict[str, Any] | None:
         """Return public web push client config for the storefront, or None."""
+        return None
+
+    def push_service_worker_js(self) -> str | None:
+        """Return provider-specific JS for the root-scope web-push service worker.
+
+        Core serves this verbatim from its service-worker routes; return None
+        when the addon needs no service worker (or is not configured).
+        """
         return None
 
     @classmethod

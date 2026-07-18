@@ -7,7 +7,7 @@ import pytest
 
 from app.config import settings
 from app.services.product_variants import refresh_product_listing_cache
-from app.services.site_settings import get_site_settings, update_site_settings
+from app.services.site_settings import update_site_settings
 from app.storefront.seo import (
     build_product_json_ld,
     build_product_offers_json_ld,
@@ -39,8 +39,11 @@ async def test_robots_txt_disallows_admin_and_api(client, db_session):
     body = response.text
     assert "Disallow: /admin/" in body
     assert "Disallow: /api/" in body
+    assert "Disallow: /cart" in body
     assert "Disallow: /checkout" in body
+    assert "Disallow: /orders" in body
     assert "Sitemap: https://shop.example.com/sitemap.xml" in body
+    assert response.headers.get("cache-control") == "public, max-age=600"
 
 
 @pytest.mark.asyncio
@@ -73,9 +76,11 @@ async def test_sitemap_includes_published_products_only(
     body = response.text
     assert "<loc>https://shop.example.com/</loc>" in body
     assert "<loc>https://shop.example.com/products</loc>" in body
+    assert "<loc>https://shop.example.com/categories</loc>" in body
     assert "<loc>https://shop.example.com/products/test-product</loc>" in body
     assert "draft-product" not in body
     assert "<loc>https://shop.example.com/categories/shirts</loc>" in body
+    assert response.headers.get("cache-control") == "public, max-age=600"
 
 
 @pytest.mark.asyncio
@@ -101,9 +106,48 @@ async def test_product_page_html_injection(client, db_session, test_product: Pro
     assert 'meta name="description" content="A test product for SEO"' in body
     assert 'rel="canonical" href="https://shop.example.com/products/test-product"' in body
     assert 'property="og:type" content="product"' in body
+    assert 'property="og:site_name" content="Test Shop"' in body
+    assert 'name="twitter:card" content="summary_large_image"' in body
+    assert 'name="twitter:title" content="Test Product | Test Shop"' in body
     assert 'type="application/ld+json"' in body
     assert '"@type": "Product"' in body
     assert '"@type": "Offer"' in body
+
+
+@pytest.mark.asyncio
+async def test_private_paths_inject_noindex(client, db_session):
+    await update_site_settings(
+        db_session,
+        {"site_url": "https://shop.example.com", "store_name": "Test Shop"},
+    )
+    await db_session.commit()
+
+    for path in ("/cart", "/checkout", "/account", "/orders", "/login"):
+        response = await client.get(path)
+        assert response.status_code == 200, path
+        body = response.text
+        assert 'meta name="robots" content="noindex, nofollow"' in body, path
+        assert response.headers.get("cache-control") == "private, no-store", path
+
+
+@pytest.mark.asyncio
+async def test_categories_index_html_injection(client, db_session):
+    await update_site_settings(
+        db_session,
+        {
+            "site_url": "https://shop.example.com",
+            "store_name": "Test Shop",
+            "meta_description": "Shop great things",
+        },
+    )
+    await db_session.commit()
+
+    response = await client.get("/categories")
+    assert response.status_code == 200
+    body = response.text
+    assert "<title>Categories | Test Shop</title>" in body
+    assert 'rel="canonical" href="https://shop.example.com/categories"' in body
+    assert 'meta name="robots" content="index, follow"' in body
 
 
 @pytest.mark.asyncio
@@ -176,6 +220,7 @@ def test_inject_seo_into_html_replaces_title_and_adds_meta():
         description="New description",
         canonical_url="https://shop.example.com/products/foo",
         og_type="product",
+        site_name="Test Shop",
         json_ld=[{"@type": "Product", "name": "Foo"}],
     )
     result = inject_seo_into_html(html, meta)
@@ -183,6 +228,8 @@ def test_inject_seo_into_html_replaces_title_and_adds_meta():
     assert "Old" not in result
     assert 'meta name="description" content="New description"' in result
     assert 'rel="canonical" href="https://shop.example.com/products/foo"' in result
+    assert 'property="og:site_name" content="Test Shop"' in result
+    assert 'name="twitter:title" content="New Title"' in result
     assert '"@type": "Product"' in result
 
 
@@ -196,6 +243,7 @@ def test_render_sitemap_xml_escapes_urls():
     )
     xml = render_sitemap_xml("https://shop.example.com", products=[product], categories=[])
     assert "<loc>https://shop.example.com/products/test</loc>" in xml
+    assert "<loc>https://shop.example.com/categories</loc>" in xml
 
 
 def test_build_product_offers_single_variant():

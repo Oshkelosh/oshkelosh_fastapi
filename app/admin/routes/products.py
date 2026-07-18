@@ -46,18 +46,18 @@ def _supplier_variant_fields(
     supplier_product_id: str,
     supplier_variant_id: str,
 ) -> tuple[str | None, str | None, str | None]:
-    from app.services.suppliers import _addon_id_from_supplier_value
+    from app.services.suppliers import _addon_id_from_supplier_value, _resolve_supplier_addon
 
     if not supplier_value.strip():
         return None, None, None
     addon_id = _addon_id_from_supplier_value(supplier_value)
-    product_ref = supplier_product_id.strip() or None
-    variant_ref = supplier_variant_id.strip() or None
-    if addon_id == "manual" and supplier_value.startswith("manual:"):
-        slug = supplier_value.removeprefix("manual:").strip()
-        if slug:
-            variant_ref = slug
-    return addon_id, product_ref, variant_ref
+    addon = _resolve_supplier_addon(addon_id)
+    if addon is not None:
+        product_ref, variant_ref = addon.variant_fields_from_form(
+            supplier_value, supplier_product_id, supplier_variant_id
+        )
+        return addon_id, product_ref, variant_ref
+    return addon_id, supplier_product_id.strip() or None, supplier_variant_id.strip() or None
 
 
 async def _apply_manual_variant_updates(

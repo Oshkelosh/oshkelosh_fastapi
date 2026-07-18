@@ -26,3 +26,35 @@ def to_cents(value: Any) -> int | None:
     except (InvalidOperation, ValueError, TypeError):
         return None
     return cents if cents >= 0 else None
+
+
+def pick_shipping_option(
+    options: list[dict[str, Any]],
+    *,
+    selected_id: str | None = None,
+    preferred_ids: tuple[str, ...] = ("standard",),
+) -> dict[str, Any] | None:
+    """Resolve a selected method, else first matching preferred id, else cheapest.
+
+    Option rows must include ``id`` and ``cents``. Matching is case-insensitive.
+    ``preferred_ids`` is ordered: the first preference that matches any option wins
+    (cheapest among that preference's matches).
+    """
+    if not options:
+        return None
+    if selected_id:
+        needle = str(selected_id).strip().lower()
+        for option in options:
+            if str(option.get("id") or "").strip().lower() == needle:
+                return option
+    for pref in preferred_ids:
+        pref_l = str(pref).lower()
+        matches = [
+            option
+            for option in options
+            if str(option.get("id") or "").strip().lower() == pref_l
+            or pref_l in str(option.get("name") or "").strip().lower()
+        ]
+        if matches:
+            return min(matches, key=lambda row: int(row["cents"]))
+    return min(options, key=lambda row: int(row["cents"]))

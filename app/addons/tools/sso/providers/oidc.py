@@ -86,9 +86,9 @@ class OidcOAuthProvider(OAuthProvider):
                 data = {}
 
         email = data.get("email") or ""
-        email_verified = data.get("email_verified")
-        if email_verified is None:
-            email_verified = bool(email)
+        # Absent claim means NOT verified; assuming verified enables account
+        # takeover via email collision at a lax IdP.
+        email_verified = bool(data.get("email_verified", False))
         return SsoProfile(
             provider=self.descriptor.id,
             subject=str(data.get("sub", "")),

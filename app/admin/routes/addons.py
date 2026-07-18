@@ -99,11 +99,16 @@ async def _admin_addon_category_list(
         except Exception:
             pass
 
+    from app.addons.registry import addon_registry as _registry
+
+    def _hidden(addon_id: str) -> bool:
+        reg = _registry.get(addon_id)
+        return bool(reg and getattr(reg, "has_dedicated_admin_page", lambda: False)())
+
     addons = [
         a
         for a in merge_addon_list(stored)
-        if a["addon_category"] == category
-        and not (category == "supplier" and a["addon_id"] == "manual")
+        if a["addon_category"] == category and not _hidden(a["addon_id"])
     ]
 
     from app.services.addon_install import read_installed_manifest
@@ -664,6 +669,15 @@ async def admin_addon_configure(
             pass
 
     config = stored_addon.config if stored_addon else addon_registry.get_config(addon_id)
+
+    # Never render stored secrets in cleartext; the save handler treats the
+    # masked placeholders as "keep the stored value".
+    try:
+        from app.addons.admin_helpers import redact_config_for_schema
+
+        config = redact_config_for_schema(addon.config_schema(), dict(config or {}))
+    except Exception:
+        config = dict(config or {})
     config_json = json.dumps(config, indent=2)
 
     list_path = _addon_list_path(addon.addon_category)
@@ -694,7 +708,7 @@ async def admin_addon_save_config(
     """Save generic JSON configuration for an addon."""
     from fastapi.responses import RedirectResponse
     from app.addons.registry import addon_registry
-    from app.services.addons import persist_addon_config
+    from app.services.addons import merge_config_updates, persist_addon_config
     from app.services.audit import admin_request_meta, diff_fields, log_change
     from models.addon_config import AddonConfig
 
@@ -726,7 +740,14 @@ async def admin_addon_save_config(
             else addon_registry.get_config(addon_id) or {}
         )
 
-        await persist_addon_config(db, addon_id, config_data, enabled)
+        # The form echoes redacted secrets; merge keeps the stored values for
+        # any masked/empty fields instead of persisting the placeholders.
+        merged_config = (
+            merge_config_updates(addon_id, config_data)
+            if isinstance(config_data, dict)
+            else config_data
+        )
+        await persist_addon_config(db, addon_id, merged_config, enabled)
         await db.commit()
 
         changes: dict[str, Any] = {}
@@ -734,7 +755,7 @@ async def admin_addon_save_config(
             changes["is_enabled"] = {"from": before_enabled, "to": enabled}
         config_changes = diff_fields(
             before_config if isinstance(before_config, dict) else {},
-            config_data if isinstance(config_data, dict) else {},
+            merged_config if isinstance(merged_config, dict) else {},
         )
         if config_changes:
             changes["config"] = config_changes

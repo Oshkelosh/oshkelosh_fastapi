@@ -66,7 +66,15 @@ async def sso_authorize(
     redirect: str = Query("/", max_length=512),
 ):
     addon = _get_sso_addon()
-    safe_redirect = redirect if redirect.startswith("/") else "/"
+    # Require a single-slash relative path: "//host" is protocol-relative and
+    # "/\host" is treated as "//host" by browsers — both are open redirects.
+    if (
+        not redirect.startswith("/")
+        or redirect.startswith("//")
+        or "\\" in redirect
+    ):
+        redirect = "/"
+    safe_redirect = redirect
     if provider_id not in addon.providers:
         warning("SSO", "Authorize requested for unknown provider={}", provider_id)
     url = build_authorize_url(addon.providers, provider_id, safe_redirect)

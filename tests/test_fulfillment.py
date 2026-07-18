@@ -6,7 +6,6 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from app.core.exceptions import ValidationError
 from app.services.fulfillment import fulfill_order_with_suppliers
 from app.services.suppliers import (
     parse_supplier_tag,
@@ -279,6 +278,17 @@ async def test_mixed_order_fans_out_to_multiple_suppliers(db_session):
     assert "printful" in order.notes
     assert "manual:local_workshop" in order.notes
 
+    # Supplier results are persisted for idempotent retry...
+    assert order.supplier_orders["printful"]["success"] is True
+    assert order.supplier_orders["printful"]["supplier_order_id"] == "pf-1"
+    assert order.supplier_orders["manual:local_workshop"]["success"] is True
+
+    # ...so a re-run does not order twice.
+    with patch("app.services.fulfillment.get_supplier_addon", side_effect=fake_get_supplier):
+        await fulfill_order_with_suppliers(db_session, order, items)
+    assert printful_mock.await_count == 1
+    assert manual_mock.await_count == 1
+
 
 @pytest.mark.asyncio
 async def test_disabled_supplier_skipped_other_still_fulfills(db_session):
@@ -322,14 +332,14 @@ async def test_disabled_supplier_skipped_other_still_fulfills(db_session):
     await db_session.flush()
 
     with patch("app.services.fulfillment.get_supplier_addon", return_value=None):
-        with pytest.raises(ValidationError, match="not enabled"):
-            await fulfill_order_with_suppliers(db_session, order, items)
+        failures = await fulfill_order_with_suppliers(db_session, order, items)
 
+    assert failures and "not enabled" in failures[0]
     assert "not enabled" in (order.notes or "")
 
 
 @pytest.mark.asyncio
-async def test_supplier_failure_raises_validation_error(db_session):
+async def test_supplier_failure_is_recorded_not_raised(db_session):
     product = Product(
         name="Printful only",
         price_cents=1000,
@@ -375,7 +385,8 @@ async def test_supplier_failure_raises_validation_error(db_session):
         create_order = failure_mock
 
     with patch("app.services.fulfillment.get_supplier_addon", return_value=FakeAddon()):
-        with pytest.raises(ValidationError, match="supplier unavailable"):
-            await fulfill_order_with_suppliers(db_session, order, [item])
+        failures = await fulfill_order_with_suppliers(db_session, order, [item])
 
+    assert failures and "supplier unavailable" in failures[0]
     assert "supplier unavailable" in (order.notes or "")
+    assert order.supplier_orders["printful"]["success"] is False

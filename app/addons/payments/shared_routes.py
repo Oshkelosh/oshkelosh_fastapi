@@ -121,21 +121,28 @@ def build_payment_routers(
                 content={"error": f"{addon_id} addon is not registered"},
             )
 
-        verify = getattr(addon, "verify_webhook", None)
-        if callable(verify):
-            try:
-                ok = await verify(headers=request.headers, body=body)
-            except Exception:
-                exception(page_title, "webhook verification failed")
-                return JSONResponse(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    content={"error": "Webhook verification failed"},
-                )
-            if not ok:
-                return JSONResponse(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    content={"error": "Invalid webhook signature"},
-                )
+        if not getattr(addon, "is_enabled", False):
+            return JSONResponse(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                content={"error": f"{addon_id} addon is not enabled"},
+            )
+
+        # Fail closed: a payment addon must positively verify the webhook before
+        # core marks any order paid. The base PaymentAddon.verify_webhook rejects
+        # by default, so a missing/incorrect override rejects rather than trusts.
+        try:
+            ok = await addon.verify_webhook(headers=request.headers, body=body)
+        except Exception:
+            exception(page_title, "webhook verification failed")
+            return JSONResponse(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                content={"error": "Webhook verification failed"},
+            )
+        if not ok:
+            return JSONResponse(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                content={"error": "Invalid webhook signature"},
+            )
 
         try:
             payload = json.loads(body.decode("utf-8"))

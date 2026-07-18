@@ -66,3 +66,4 @@ class TestSiteSettingsPublicDict:
             data = site_settings_to_public_dict(site)
         assert data["site_url"] == "https://env.example.com"
         assert data["store_name"] == "Shop"
+        assert data["shop_currency"] == "USD"
