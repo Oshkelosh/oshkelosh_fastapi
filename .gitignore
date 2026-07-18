@@ -74,3 +74,6 @@ app/addons/.backups/
 # Ignore submodule metadata so accidental `git submodule` use is never committed.
 .gitmodules
 .git/modules/
+
+# Agent rules
+.cursor/

@@ -134,6 +134,11 @@ class UserProfileUpdate(BaseModel):
     default_shipping_address: Optional[Address] = None
     default_billing_address: Optional[Address] = None
     password: Optional[str] = Field(default=None, min_length=8, max_length=128)
+    current_password: Optional[str] = Field(
+        default=None,
+        max_length=128,
+        description="Required to change an existing password.",
+    )
     push_token: Optional[str] = Field(default=None, max_length=512)
     push_provider: Optional[str] = Field(default=None, max_length=32)
 

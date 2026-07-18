@@ -247,6 +247,11 @@ async def update_me(
     if body.default_billing_address is not None:
         user.default_billing_address = body.default_billing_address.to_storage_dict()
     if body.password is not None:
+        if user.password_hash is not None and (
+            body.current_password is None
+            or not verify_password(body.current_password, user.password_hash)
+        ):
+            raise ValidationError(message="Current password is incorrect")
         user.password_hash = hash_password(body.password)
     _apply_push_subscription(user, body)
 

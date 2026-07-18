@@ -216,6 +216,72 @@ class TestUserProfile:
         assert data["default_shipping_address"] == address
         assert data["default_billing_address"] == billing
 
+    async def test_change_password_requires_current_password(
+        self, client: AsyncClient, test_user
+    ):
+        login = await client.post(
+            "/api/v1/auth/login",
+            json={"email": test_user.email, "password": "SecurePass123!"},
+        )
+        headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
+
+        missing = await client.patch(
+            "/api/v1/auth/me",
+            headers=headers,
+            json={"password": "NewSecurePass456!"},
+        )
+        assert missing.status_code == 422
+
+        wrong = await client.patch(
+            "/api/v1/auth/me",
+            headers=headers,
+            json={"password": "NewSecurePass456!", "current_password": "WrongPass999!"},
+        )
+        assert wrong.status_code == 422
+
+        correct = await client.patch(
+            "/api/v1/auth/me",
+            headers=headers,
+            json={"password": "NewSecurePass456!", "current_password": "SecurePass123!"},
+        )
+        assert correct.status_code == 200
+
+        relogin = await client.post(
+            "/api/v1/auth/login",
+            json={"email": test_user.email, "password": "NewSecurePass456!"},
+        )
+        assert relogin.status_code == 200
+
+    async def test_sso_only_user_sets_initial_password_without_current(
+        self, client: AsyncClient, db_session
+    ):
+        from app.core.security import create_access_token
+
+        user = User(
+            email="sso-only@example.com",
+            password_hash=None,
+            verified=True,
+            banned=False,
+            oauth_identities={"google": "sub-123"},
+        )
+        db_session.add(user)
+        await db_session.flush()
+
+        headers = {"Authorization": f"Bearer {create_access_token(user.id)}"}
+        response = await client.patch(
+            "/api/v1/auth/me",
+            headers=headers,
+            json={"password": "FirstPass123!"},
+        )
+        assert response.status_code == 200
+        assert "password" in response.json()["auth_methods"]
+
+        login = await client.post(
+            "/api/v1/auth/login",
+            json={"email": "sso-only@example.com", "password": "FirstPass123!"},
+        )
+        assert login.status_code == 200
+
     async def test_patch_me_updates_push_subscription(self, client: AsyncClient, test_user):
         from app.addons.registry import addon_registry
 
