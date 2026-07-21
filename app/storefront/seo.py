@@ -19,7 +19,7 @@ from models.category import Category
 from models.product import Product
 from models.product_image import ProductImage
 from models.product_variant import ProductVariant
-from models.site_settings import SiteSettings
+from models.site_settings import DEFAULT_PRIVACY_POLICY_TITLE, SiteSettings
 
 PRIVATE_PATH_PREFIXES = (
     "/login",
@@ -253,6 +253,27 @@ async def resolve_meta_for_path(
             og_image=site_settings.logo_url,
         )
 
+    if normalized == "/privacy":
+        title = (site_settings.privacy_policy_title or DEFAULT_PRIVACY_POLICY_TITLE).strip() or (
+            DEFAULT_PRIVACY_POLICY_TITLE
+        )
+        published = bool(
+            site_settings.privacy_policy_enabled
+            and (site_settings.privacy_policy_body or "").strip()
+        )
+        return SeoMeta(
+            title=f"{title} | {store_name}",
+            description=(
+                truncate_text(site_settings.privacy_policy_body, _DESCRIPTION_MAX)
+                if published
+                else default_description
+            ),
+            canonical_url=f"{site_url}/privacy",
+            site_name=store_name,
+            og_image=site_settings.logo_url,
+            robots="index, follow" if published else "noindex, nofollow",
+        )
+
     if normalized.startswith("/products/"):
         slug = normalized.removeprefix("/products/")
         if not slug:
@@ -457,13 +478,19 @@ def render_sitemap_xml(
     *,
     products: list[Product],
     categories: list[Category],
+    privacy_policy: tuple[str, str | None] | None = None,
 ) -> str:
-    """Render sitemap.xml for public catalog URLs."""
+    """Render sitemap.xml for public catalog URLs.
+
+    ``privacy_policy`` is an optional ``(loc, lastmod)`` entry for ``/privacy``.
+    """
     entries: list[tuple[str, str | None]] = [
         (f"{site_url}/", None),
         (f"{site_url}/products", None),
         (f"{site_url}/categories", None),
     ]
+    if privacy_policy is not None:
+        entries.append(privacy_policy)
     for product in products:
         if product.slug:
             entries.append((f"{site_url}/products/{product.slug}", _format_lastmod(product.updated_at)))

@@ -105,7 +105,19 @@ async def sitemap_xml(request: Request, session=Depends(get_session)) -> Respons
     products = products_result.scalars().all()
     categories = categories_result.scalars().all()
 
-    body = render_sitemap_xml(site_url, products=products, categories=categories)
+    privacy_policy = None
+    if site_settings.privacy_policy_enabled and (site_settings.privacy_policy_body or "").strip():
+        privacy_policy = (
+            f"{site_url}/privacy",
+            site_settings.privacy_policy_effective_date or None,
+        )
+
+    body = render_sitemap_xml(
+        site_url,
+        products=products,
+        categories=categories,
+        privacy_policy=privacy_policy,
+    )
     return Response(
         content=body,
         media_type="application/xml",
@@ -159,6 +171,12 @@ async def storefront_category_detail(
     session=Depends(get_session),
 ) -> Response:
     """Serve a category page; unknown slugs fall back to the plain SPA shell."""
+    return await serve_spa_html(request, session)
+
+
+@router.get("/privacy", include_in_schema=False)
+async def storefront_privacy(request: Request, session=Depends(get_session)) -> Response:
+    """Serve the SPA privacy policy page with injected SEO metadata."""
     return await serve_spa_html(request, session)
 
 

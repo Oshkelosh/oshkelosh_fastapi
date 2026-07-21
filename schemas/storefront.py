@@ -4,6 +4,8 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from models.site_settings import DEFAULT_PRIVACY_POLICY_BODY, DEFAULT_PRIVACY_POLICY_TITLE
+
 
 class SiteSettingsPublic(BaseModel):
     """Site-wide branding exposed to the storefront SPA."""
@@ -68,6 +70,30 @@ class SiteSettingsPublic(BaseModel):
     shipping_free_threshold_cents: int | None = Field(
         default=None,
         description="Subtotal in cents above which shipping is free (free_over_threshold mode).",
+    )
+    gdpr_banner_enabled: bool = Field(
+        default=False,
+        description="When true, storefront shows a dismissible cookie / GDPR notice.",
+    )
+    gdpr_banner_text: str | None = Field(
+        default=None,
+        description="Custom banner message; SPA uses a default when empty.",
+    )
+    privacy_policy_enabled: bool = Field(
+        default=False,
+        description="When true and body is set, /privacy is published and linked.",
+    )
+    privacy_policy_title: str = Field(
+        default=DEFAULT_PRIVACY_POLICY_TITLE,
+        description="Title shown on the built-in /privacy page.",
+    )
+    privacy_policy_body: str | None = Field(
+        default=DEFAULT_PRIVACY_POLICY_BODY,
+        description="Plain-text privacy policy body for /privacy.",
+    )
+    privacy_policy_effective_date: str | None = Field(
+        default=None,
+        description="Optional effective date (YYYY-MM-DD) shown on /privacy.",
     )
 
     model_config = ConfigDict(from_attributes=True)

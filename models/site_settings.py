@@ -7,6 +7,49 @@ from sqlmodel import Field
 
 from app.db.base import ModelBase
 
+DEFAULT_PRIVACY_POLICY_TITLE = "Privacy Policy"
+
+# Starter text for new shops — merchants should adapt this to their business and jurisdiction.
+DEFAULT_PRIVACY_POLICY_BODY = """\
+This Privacy Policy describes how we collect, use, and share information when you use our online store.
+
+Who we are
+We operate this store and are responsible for the personal data we process in connection with your orders and account.
+
+Information we collect
+- Contact and account details you provide (such as name, email address, and shipping address)
+- Order and payment-related information needed to fulfill purchases (payment details are typically processed by our payment provider)
+- Technical data such as IP address, browser type, and basic usage data needed to run and secure the store
+- Communications you send us (for example support requests)
+
+How we use your information
+- To process and fulfill orders, including shipping and returns
+- To create and manage your account, if you register
+- To communicate about your orders, account, or support requests
+- To operate, secure, and improve the store (including fraud prevention)
+- To comply with legal obligations
+
+Cookies and similar technologies
+We use necessary cookies and similar technologies to run the store (for example session and security features). If we use optional analytics or marketing tools, we will describe them here and, where required, ask for your consent.
+
+Sharing your information
+We share personal data only as needed with service providers that help us run the store (such as hosting, payment, shipping, and email providers), or when required by law. We do not sell your personal data.
+
+Data retention
+We keep personal data only as long as needed for the purposes above, including order records and legal retention requirements, then delete or anonymize it where appropriate.
+
+Your rights
+Depending on where you live, you may have rights to access, correct, delete, or restrict use of your personal data, and to object to certain processing or request data portability. To exercise these rights, contact us using the details below.
+
+Contact
+If you have questions about this policy or your personal data, contact us at the support email shown on this store.
+
+Updates
+We may update this Privacy Policy from time to time. The effective date on this page shows when it last changed.
+
+This text is a starting template only. Customize it for your business, products, tools, and local legal requirements before publishing.\
+"""
+
 
 class SiteSettings(ModelBase, table=True):
     """Global site branding used by storefront, admin, and notifications."""
@@ -92,4 +135,33 @@ class SiteSettings(ModelBase, table=True):
         default=1,
         ge=1,
         sa_column=Column(Integer, nullable=False, server_default="1"),
+    )
+
+    # Simple GDPR / cookie notice (dismissible; no consent gating)
+    gdpr_banner_enabled: bool = Field(
+        default=False,
+        sa_column=Column(Boolean, nullable=False, server_default="0"),
+    )
+    gdpr_banner_text: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
+
+    # Built-in privacy policy page at /privacy
+    privacy_policy_enabled: bool = Field(
+        default=False,
+        sa_column=Column(Boolean, nullable=False, server_default="0"),
+    )
+    privacy_policy_title: str = Field(
+        default=DEFAULT_PRIVACY_POLICY_TITLE,
+        sa_column=Column(
+            String(255),
+            nullable=False,
+            server_default=DEFAULT_PRIVACY_POLICY_TITLE,
+        ),
+    )
+    privacy_policy_body: Optional[str] = Field(
+        default=DEFAULT_PRIVACY_POLICY_BODY,
+        sa_column=Column(Text, nullable=True),
+    )
+    privacy_policy_effective_date: Optional[str] = Field(
+        default=None,
+        sa_column=Column(String(10), nullable=True),
     )

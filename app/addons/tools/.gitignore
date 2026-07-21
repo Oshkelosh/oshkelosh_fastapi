@@ -2,3 +2,5 @@
 */
 !sso/
 !sso/**
+!scripts/
+!scripts/**

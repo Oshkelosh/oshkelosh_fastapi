@@ -25,6 +25,7 @@ router = APIRouter()
 async def admin_site_settings(request: Request, db=Depends(require_admin_session)):
     """Edit site-wide branding and contact settings."""
     from app.services.site_settings import get_site_settings
+    from models.site_settings import DEFAULT_PRIVACY_POLICY_BODY, DEFAULT_PRIVACY_POLICY_TITLE
 
     site = await get_site_settings(db)
     return _template(
@@ -33,6 +34,8 @@ async def admin_site_settings(request: Request, db=Depends(require_admin_session
         site=site,
         tax_zones_json=json.dumps(site.tax_zones_json or [], indent=2),
         shipping_zones_json=json.dumps(site.shipping_zones_json or [], indent=2),
+        privacy_policy_default_title=DEFAULT_PRIVACY_POLICY_TITLE,
+        privacy_policy_default_body=DEFAULT_PRIVACY_POLICY_BODY,
     )
 
 
@@ -57,6 +60,12 @@ async def admin_site_settings_save(
     abandoned_cart_enabled: str = Form(""),
     abandoned_cart_delay_hours: int = Form(24),
     abandoned_cart_max_reminders: int = Form(1),
+    gdpr_banner_enabled: str = Form(""),
+    gdpr_banner_text: str = Form("", max_length=L.TEXT_LEN),
+    privacy_policy_enabled: str = Form(""),
+    privacy_policy_title: str = Form("", max_length=L.NAME_LEN),
+    privacy_policy_body: str = Form("", max_length=L.CONFIG_JSON_LEN),
+    privacy_policy_effective_date: str = Form("", max_length=10),
     csrf_token: str = Form(..., max_length=128),
     db=Depends(require_admin_session),
 ):
@@ -92,6 +101,12 @@ async def admin_site_settings_save(
                 "abandoned_cart_enabled": abandoned_cart_enabled,
                 "abandoned_cart_delay_hours": abandoned_cart_delay_hours,
                 "abandoned_cart_max_reminders": abandoned_cart_max_reminders,
+                "gdpr_banner_enabled": gdpr_banner_enabled,
+                "gdpr_banner_text": gdpr_banner_text,
+                "privacy_policy_enabled": privacy_policy_enabled,
+                "privacy_policy_title": privacy_policy_title,
+                "privacy_policy_body": privacy_policy_body,
+                "privacy_policy_effective_date": privacy_policy_effective_date,
             },
         )
         await db.commit()

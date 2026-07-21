@@ -9,7 +9,7 @@ from sqlmodel import select
 
 from app.config import settings
 from app.services.currency import normalize_currency, shop_currency_from_settings
-from models.site_settings import SiteSettings
+from models.site_settings import DEFAULT_PRIVACY_POLICY_TITLE, SiteSettings
 
 if TYPE_CHECKING:
     from starlette.requests import Request
@@ -107,6 +107,12 @@ async def update_site_settings(session: Any, data: dict) -> SiteSettings:
         "abandoned_cart_enabled",
         "abandoned_cart_delay_hours",
         "abandoned_cart_max_reminders",
+        "gdpr_banner_enabled",
+        "gdpr_banner_text",
+        "privacy_policy_enabled",
+        "privacy_policy_title",
+        "privacy_policy_body",
+        "privacy_policy_effective_date",
     }
     optional_fields = {
         "logo_url",
@@ -115,8 +121,17 @@ async def update_site_settings(session: Any, data: dict) -> SiteSettings:
         "meta_description",
         "site_url",
         "shipping_free_threshold_cents",
+        "gdpr_banner_text",
+        "privacy_policy_body",
+        "privacy_policy_effective_date",
     }
-    bool_fields = {"tax_enabled", "tax_inclusive", "abandoned_cart_enabled"}
+    bool_fields = {
+        "tax_enabled",
+        "tax_inclusive",
+        "abandoned_cart_enabled",
+        "gdpr_banner_enabled",
+        "privacy_policy_enabled",
+    }
     json_list_fields = {"tax_zones_json", "shipping_zones_json"}
 
     for key, value in data.items():
@@ -143,6 +158,9 @@ async def update_site_settings(session: Any, data: dict) -> SiteSettings:
             setattr(row, key, max(1, int(value)))
         elif key == "shop_currency":
             setattr(row, key, normalize_currency(str(value) if value is not None else None))
+        elif key == "privacy_policy_title":
+            title = str(value).strip() if value is not None else ""
+            setattr(row, key, title or DEFAULT_PRIVACY_POLICY_TITLE)
         else:
             setattr(row, key, value)
 
@@ -177,6 +195,12 @@ def site_settings_to_dict(row: SiteSettings) -> dict:
         "abandoned_cart_enabled": row.abandoned_cart_enabled,
         "abandoned_cart_delay_hours": row.abandoned_cart_delay_hours,
         "abandoned_cart_max_reminders": row.abandoned_cart_max_reminders,
+        "gdpr_banner_enabled": row.gdpr_banner_enabled,
+        "gdpr_banner_text": row.gdpr_banner_text,
+        "privacy_policy_enabled": row.privacy_policy_enabled,
+        "privacy_policy_title": row.privacy_policy_title,
+        "privacy_policy_body": row.privacy_policy_body,
+        "privacy_policy_effective_date": row.privacy_policy_effective_date,
     }
 
 

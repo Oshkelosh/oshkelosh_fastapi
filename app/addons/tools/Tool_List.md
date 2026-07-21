@@ -75,6 +75,7 @@ Document new seams in this file and in [../README.md](../README.md#how-core-comm
 | Addon ID | Status | README |
 |----------|--------|--------|
 | `sso` | **Shipped** — Google, Facebook, custom OIDC | [sso/README.md](sso/README.md) |
+| `scripts` | **Shipped** — paste external `<script>` tags with all/public/private route scope | [scripts/README.md](scripts/README.md) |
 
 ---
 

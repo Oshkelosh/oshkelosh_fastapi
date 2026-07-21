@@ -1,0 +1,9 @@
+{
+  "addon_id": "scripts",
+  "addon_name": "Scripts",
+  "addon_description": "Inject external storefront script tags (analytics, chat widgets, etc.) with public/private route scope.",
+  "category": "tool",
+  "version": "1.0.0",
+  "min_oshkelosh_version": "0.1.0",
+  "python_requires": ">=3.11"
+}

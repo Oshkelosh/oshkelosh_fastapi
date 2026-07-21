@@ -67,3 +67,17 @@ class TestSiteSettingsPublicDict:
         assert data["site_url"] == "https://env.example.com"
         assert data["store_name"] == "Shop"
         assert data["shop_currency"] == "USD"
+
+
+class TestPrivacyPolicyDefaults:
+    def test_new_site_settings_have_standard_policy_content(self):
+        from models.site_settings import (
+            DEFAULT_PRIVACY_POLICY_BODY,
+            DEFAULT_PRIVACY_POLICY_TITLE,
+        )
+
+        site = SiteSettings()
+        assert site.privacy_policy_title == DEFAULT_PRIVACY_POLICY_TITLE
+        assert site.privacy_policy_body == DEFAULT_PRIVACY_POLICY_BODY
+        assert "Information we collect" in (site.privacy_policy_body or "")
+        assert site.privacy_policy_enabled is False

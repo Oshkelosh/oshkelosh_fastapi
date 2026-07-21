@@ -80,7 +80,28 @@ async def test_sitemap_includes_published_products_only(
     assert "<loc>https://shop.example.com/products/test-product</loc>" in body
     assert "draft-product" not in body
     assert "<loc>https://shop.example.com/categories/shirts</loc>" in body
+    assert "<loc>https://shop.example.com/privacy</loc>" not in body
     assert response.headers.get("cache-control") == "public, max-age=600"
+
+
+@pytest.mark.asyncio
+async def test_sitemap_includes_privacy_when_published(client, db_session):
+    await update_site_settings(
+        db_session,
+        {
+            "site_url": "https://shop.example.com",
+            "privacy_policy_enabled": True,
+            "privacy_policy_body": "We collect emails for orders.",
+            "privacy_policy_effective_date": "2026-07-21",
+        },
+    )
+    await db_session.commit()
+
+    response = await client.get("/sitemap.xml")
+    assert response.status_code == 200
+    body = response.text
+    assert "<loc>https://shop.example.com/privacy</loc>" in body
+    assert "<lastmod>2026-07-21</lastmod>" in body
 
 
 @pytest.mark.asyncio
@@ -148,6 +169,48 @@ async def test_categories_index_html_injection(client, db_session):
     assert "<title>Categories | Test Shop</title>" in body
     assert 'rel="canonical" href="https://shop.example.com/categories"' in body
     assert 'meta name="robots" content="index, follow"' in body
+
+
+@pytest.mark.asyncio
+async def test_privacy_page_html_injection_when_published(client, db_session):
+    await update_site_settings(
+        db_session,
+        {
+            "site_url": "https://shop.example.com",
+            "store_name": "Test Shop",
+            "privacy_policy_enabled": True,
+            "privacy_policy_title": "Our Privacy Policy",
+            "privacy_policy_body": "We collect emails for orders and shipping.",
+        },
+    )
+    await db_session.commit()
+
+    response = await client.get("/privacy")
+    assert response.status_code == 200
+    body = response.text
+    assert "<title>Our Privacy Policy | Test Shop</title>" in body
+    assert 'rel="canonical" href="https://shop.example.com/privacy"' in body
+    assert 'meta name="robots" content="index, follow"' in body
+
+
+@pytest.mark.asyncio
+async def test_privacy_page_noindex_when_unpublished(client, db_session):
+    await update_site_settings(
+        db_session,
+        {
+            "site_url": "https://shop.example.com",
+            "store_name": "Test Shop",
+            "privacy_policy_enabled": False,
+            "privacy_policy_body": "",
+        },
+    )
+    await db_session.commit()
+
+    response = await client.get("/privacy")
+    assert response.status_code == 200
+    body = response.text
+    assert "<title>Privacy Policy | Test Shop</title>" in body
+    assert 'meta name="robots" content="noindex, nofollow"' in body
 
 
 @pytest.mark.asyncio

@@ -155,6 +155,57 @@ changing it does not convert existing prices.
     </div>
   </div>
 
+  <div class="card" style="margin-bottom:16px;">
+    <h3 style="margin-top:0;">Privacy / GDPR</h3>
+    <p style="color:var(--clr-text-muted);font-size:0.875rem;margin-bottom:16px;">
+      Simple dismissible cookie notice on the storefront. Does not block cookies or scripts.
+      Publishing a privacy policy page does not itself guarantee regulatory compliance —
+      you supply the legal text.
+    </p>
+    <div class="form-group">
+      <label class="form-label">
+        <input type="checkbox" name="gdpr_banner_enabled" value="1"
+               {% if site.gdpr_banner_enabled %}checked{% endif %} />
+        Show GDPR banner
+      </label>
+    </div>
+    <div class="form-group">
+      <label class="form-label" for="gdpr_banner_text">Banner message</label>
+      <textarea id="gdpr_banner_text" name="gdpr_banner_text" class="form-textarea" rows="3"
+                placeholder="Leave blank for the default notice.">{{ site.gdpr_banner_text or '' }}</textarea>
+    </div>
+    <hr style="border:none;border-top:1px solid var(--clr-border);margin:16px 0;" />
+    <div class="form-group">
+      <label class="form-label">
+        <input type="checkbox" name="privacy_policy_enabled" value="1"
+               {% if site.privacy_policy_enabled %}checked{% endif %} />
+        Publish privacy policy
+      </label>
+      <small style="color:var(--clr-text-muted);display:block;margin-top:4px;">
+        Shows at <code>/privacy</code> and links from the banner and footer when body text is set.
+      </small>
+    </div>
+    <div class="form-group">
+      <label class="form-label" for="privacy_policy_title">Policy title</label>
+      <input type="text" id="privacy_policy_title" name="privacy_policy_title" class="form-input"
+             value="{{ site.privacy_policy_title or privacy_policy_default_title }}" maxlength="255" />
+    </div>
+    <div class="form-group">
+      <label class="form-label" for="privacy_policy_effective_date">Effective date</label>
+      <input type="date" id="privacy_policy_effective_date" name="privacy_policy_effective_date" class="form-input"
+             value="{{ site.privacy_policy_effective_date or '' }}" />
+      <small style="color:var(--clr-text-muted);">Optional. Shown on the policy page.</small>
+    </div>
+    <div class="form-group">
+      <label class="form-label" for="privacy_policy_body">Policy text</label>
+      <textarea id="privacy_policy_body" name="privacy_policy_body" class="form-textarea" rows="12"
+                placeholder="Plain text. Line breaks are preserved on the storefront.">{{ site.privacy_policy_body or privacy_policy_default_body }}</textarea>
+      <small style="color:var(--clr-text-muted);">
+        Pre-filled with a starter template. Customize it before publishing.
+      </small>
+    </div>
+  </div>
+
   <button type="submit" class="btn btn--primary">Save site settings</button>
 </form>
 

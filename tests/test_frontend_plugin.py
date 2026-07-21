@@ -146,6 +146,38 @@ class TestStorefrontAPI:
         assert data["frontend"]["addon_id"] == "default"
         assert data["frontend"]["config"]["layout"] == "list"
 
+    async def test_config_includes_gdpr_and_privacy_policy_fields(self, client: AsyncClient, db_session):
+        from app.addons.registry import addon_registry
+
+        addon = addon_registry.get("default")
+        if addon is None:
+            addon_registry.register(DefaultFrontendAddon())
+
+        await persist_addon_config(db_session, "default", {}, enabled=True)
+        await update_site_settings(
+            db_session,
+            {
+                "gdpr_banner_enabled": True,
+                "gdpr_banner_text": "We care about your privacy.",
+                "privacy_policy_enabled": True,
+                "privacy_policy_title": "Our Privacy Policy",
+                "privacy_policy_body": "We collect emails for orders.",
+                "privacy_policy_effective_date": "2026-07-21",
+            },
+        )
+        await db_session.commit()
+
+        resp = await client.get("/api/v1/storefront/config")
+        assert resp.status_code == 200
+        site = resp.json()["site"]
+        assert site["gdpr_banner_enabled"] is True
+        assert site["gdpr_banner_text"] == "We care about your privacy."
+        assert site["privacy_policy_enabled"] is True
+        assert site["privacy_policy_title"] == "Our Privacy Policy"
+        assert site["privacy_policy_body"] == "We collect emails for orders."
+        assert site["privacy_policy_effective_date"] == "2026-07-21"
+        assert "gdpr_privacy_url" not in site
+
     async def test_theme_css_returns_variables(self, client: AsyncClient, db_session):
         await update_site_settings(db_session, {"primary_color": "#aabbcc"})
         await db_session.commit()

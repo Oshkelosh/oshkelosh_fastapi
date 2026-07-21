@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+
+{% block title %}Scripts{% endblock %}
+
+{% block content %}
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+  <h2 style="margin:0;">Scripts</h2>
+  <a href="/admin/tools" class="btn btn--secondary">← Back to Tools</a>
+</div>
+
+<p style="color:var(--clr-text-muted);margin:0 0 20px;font-size:14px;">
+  Paste an external <code>&lt;script&gt;</code> tag (for example Umami analytics).
+  The storefront recreates matching tags in <code>&lt;head&gt;</code>.
+  Inline JavaScript is not allowed — only <code>https://</code> sources with safe attributes.
+</p>
+
+<form method="POST" action="/admin/tools/scripts/settings" style="margin-bottom:20px;">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <div class="card">
+    <h3 style="margin-top:0;">Addon status</h3>
+    <label style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
+      <input type="checkbox" name="is_enabled" value="on" {% if addon and addon.is_enabled %}checked{% endif %}>
+      Enable Scripts addon
+    </label>
+    <button type="submit" class="btn btn--primary">Save status</button>
+  </div>
+</form>
+
+{% if edit_entry %}
+<div class="card" style="margin-bottom:20px;">
+  <h3 style="margin-top:0;">Edit script</h3>
+  <form method="POST" action="/admin/tools/scripts/{{ edit_entry.id }}/save">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div class="form-group">
+      <label class="form-label">Name</label>
+      <input type="text" name="name" class="form-input" required maxlength="120"
+             value="{{ form_values.get('name', edit_entry.name) }}">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Script tag</label>
+      <textarea name="tag" class="form-input" rows="3" required
+                style="font-family:ui-monospace,monospace;font-size:13px;">{{ form_values.get('tag', edit_entry.tag) }}</textarea>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Routes</label>
+      <select name="routes" class="form-input">
+        {% set routes_val = form_values.get('routes', edit_entry.routes) %}
+        <option value="all" {% if routes_val == 'all' %}selected{% endif %}>All routes</option>
+        <option value="public" {% if routes_val == 'public' %}selected{% endif %}>Public routes only</option>
+        <option value="private" {% if routes_val == 'private' %}selected{% endif %}>Private routes only</option>
+      </select>
+      <p style="font-size:12px;color:var(--clr-text-muted);margin:6px 0 0;">
+        Private routes: <code>/account</code>, <code>/checkout</code>, <code>/orders</code>
+      </p>
+    </div>
+    <label style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
+      {% set en = form_values.get('enabled', edit_entry.enabled) %}
+      <input type="checkbox" name="enabled" value="on" {% if en %}checked{% endif %}>
+      Enabled
+    </label>
+    <div style="display:flex;gap:8px;">
+      <button type="submit" class="btn btn--primary">Update script</button>
+      <a href="/admin/tools/scripts" class="btn btn--secondary">Cancel</a>
+    </div>
+  </form>
+</div>
+{% else %}
+<div class="card" style="margin-bottom:20px;">
+  <h3 style="margin-top:0;">Add script</h3>
+  <form method="POST" action="/admin/tools/scripts/add">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div class="form-group">
+      <label class="form-label">Name</label>
+      <input type="text" name="name" class="form-input" required maxlength="120"
+             placeholder="Umami analytics" value="{{ form_values.get('name', '') }}">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Script tag</label>
+      <textarea name="tag" class="form-input" rows="3" required
+                style="font-family:ui-monospace,monospace;font-size:13px;"
+                placeholder='&lt;script defer src="https://analytics.example.com/script.js" data-website-id="…"&gt;&lt;/script&gt;'>{{ form_values.get('tag', '') }}</textarea>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Routes</label>
+      <select name="routes" class="form-input">
+        {% set routes_val = form_values.get('routes', 'all') %}
+        <option value="all" {% if routes_val == 'all' %}selected{% endif %}>All routes</option>
+        <option value="public" {% if routes_val == 'public' %}selected{% endif %}>Public routes only</option>
+        <option value="private" {% if routes_val == 'private' %}selected{% endif %}>Private routes only</option>
+      </select>
+      <p style="font-size:12px;color:var(--clr-text-muted);margin:6px 0 0;">
+        Private routes: <code>/account</code>, <code>/checkout</code>, <code>/orders</code>
+      </p>
+    </div>
+    <label style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
+      <input type="checkbox" name="enabled" value="on"
+             {% if form_values.get('enabled', True) %}checked{% endif %}>
+      Enabled
+    </label>
+    <button type="submit" class="btn btn--primary">Add script</button>
+  </form>
+</div>
+{% endif %}
+
+<div class="card">
+  <h3 style="margin-top:0;">Configured scripts</h3>
+  {% if scripts %}
+  <table class="table" style="width:100%;">
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Source</th>
+        <th>Routes</th>
+        <th>Status</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for s in scripts %}
+      <tr>
+        <td>{{ s.name }}</td>
+        <td style="font-size:12px;word-break:break-all;"><code>{{ s.src }}</code></td>
+        <td>{{ s.routes }}</td>
+        <td>{% if s.enabled %}Enabled{% else %}Disabled{% endif %}</td>
+        <td style="white-space:nowrap;text-align:right;">
+          <a href="/admin/tools/scripts?edit={{ s.id }}" class="btn btn--secondary btn--sm">Edit</a>
+          <form method="POST" action="/admin/tools/scripts/{{ s.id }}/delete" style="display:inline;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <button type="submit" class="btn btn--danger btn--sm"
+                    onclick="return confirm('Delete this script?');">Delete</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p style="color:var(--clr-text-muted);margin:0;">No scripts yet.</p>
+  {% endif %}
+</div>
+{% endblock %}
