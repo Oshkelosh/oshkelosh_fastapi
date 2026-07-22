@@ -25,7 +25,13 @@ router = APIRouter()
 async def admin_site_settings(request: Request, db=Depends(require_admin_session)):
     """Edit site-wide branding and contact settings."""
     from app.services.site_settings import get_site_settings
-    from models.site_settings import DEFAULT_PRIVACY_POLICY_BODY, DEFAULT_PRIVACY_POLICY_TITLE
+    from models.site_settings import (
+        DEFAULT_ABOUT_CONTACT_BODY,
+        DEFAULT_ABOUT_PAGE_BODY,
+        DEFAULT_ABOUT_PAGE_TITLE,
+        DEFAULT_PRIVACY_POLICY_BODY,
+        DEFAULT_PRIVACY_POLICY_TITLE,
+    )
 
     site = await get_site_settings(db)
     return _template(
@@ -36,6 +42,9 @@ async def admin_site_settings(request: Request, db=Depends(require_admin_session
         shipping_zones_json=json.dumps(site.shipping_zones_json or [], indent=2),
         privacy_policy_default_title=DEFAULT_PRIVACY_POLICY_TITLE,
         privacy_policy_default_body=DEFAULT_PRIVACY_POLICY_BODY,
+        about_page_default_title=DEFAULT_ABOUT_PAGE_TITLE,
+        about_page_default_body=DEFAULT_ABOUT_PAGE_BODY,
+        about_contact_default_body=DEFAULT_ABOUT_CONTACT_BODY,
     )
 
 
@@ -66,6 +75,10 @@ async def admin_site_settings_save(
     privacy_policy_title: str = Form("", max_length=L.NAME_LEN),
     privacy_policy_body: str = Form("", max_length=L.CONFIG_JSON_LEN),
     privacy_policy_effective_date: str = Form("", max_length=10),
+    about_page_enabled: str = Form(""),
+    about_page_title: str = Form("", max_length=L.NAME_LEN),
+    about_page_body: str = Form("", max_length=L.CONFIG_JSON_LEN),
+    about_contact_body: str = Form("", max_length=L.CONFIG_JSON_LEN),
     csrf_token: str = Form(..., max_length=128),
     db=Depends(require_admin_session),
 ):
@@ -107,6 +120,10 @@ async def admin_site_settings_save(
                 "privacy_policy_title": privacy_policy_title,
                 "privacy_policy_body": privacy_policy_body,
                 "privacy_policy_effective_date": privacy_policy_effective_date,
+                "about_page_enabled": about_page_enabled,
+                "about_page_title": about_page_title,
+                "about_page_body": about_page_body,
+                "about_contact_body": about_contact_body,
             },
         )
         await db.commit()

@@ -9,7 +9,11 @@ from sqlmodel import select
 
 from app.config import settings
 from app.services.currency import normalize_currency, shop_currency_from_settings
-from models.site_settings import DEFAULT_PRIVACY_POLICY_TITLE, SiteSettings
+from models.site_settings import (
+    DEFAULT_ABOUT_PAGE_TITLE,
+    DEFAULT_PRIVACY_POLICY_TITLE,
+    SiteSettings,
+)
 
 if TYPE_CHECKING:
     from starlette.requests import Request
@@ -113,6 +117,10 @@ async def update_site_settings(session: Any, data: dict) -> SiteSettings:
         "privacy_policy_title",
         "privacy_policy_body",
         "privacy_policy_effective_date",
+        "about_page_enabled",
+        "about_page_title",
+        "about_page_body",
+        "about_contact_body",
     }
     optional_fields = {
         "logo_url",
@@ -124,6 +132,8 @@ async def update_site_settings(session: Any, data: dict) -> SiteSettings:
         "gdpr_banner_text",
         "privacy_policy_body",
         "privacy_policy_effective_date",
+        "about_page_body",
+        "about_contact_body",
     }
     bool_fields = {
         "tax_enabled",
@@ -131,6 +141,7 @@ async def update_site_settings(session: Any, data: dict) -> SiteSettings:
         "abandoned_cart_enabled",
         "gdpr_banner_enabled",
         "privacy_policy_enabled",
+        "about_page_enabled",
     }
     json_list_fields = {"tax_zones_json", "shipping_zones_json"}
 
@@ -161,6 +172,9 @@ async def update_site_settings(session: Any, data: dict) -> SiteSettings:
         elif key == "privacy_policy_title":
             title = str(value).strip() if value is not None else ""
             setattr(row, key, title or DEFAULT_PRIVACY_POLICY_TITLE)
+        elif key == "about_page_title":
+            title = str(value).strip() if value is not None else ""
+            setattr(row, key, title or DEFAULT_ABOUT_PAGE_TITLE)
         else:
             setattr(row, key, value)
 
@@ -201,6 +215,10 @@ def site_settings_to_dict(row: SiteSettings) -> dict:
         "privacy_policy_title": row.privacy_policy_title,
         "privacy_policy_body": row.privacy_policy_body,
         "privacy_policy_effective_date": row.privacy_policy_effective_date,
+        "about_page_enabled": row.about_page_enabled,
+        "about_page_title": row.about_page_title,
+        "about_page_body": row.about_page_body,
+        "about_contact_body": row.about_contact_body,
     }
 
 

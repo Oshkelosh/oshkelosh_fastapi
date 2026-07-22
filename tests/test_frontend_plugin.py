@@ -146,7 +146,7 @@ class TestStorefrontAPI:
         assert data["frontend"]["addon_id"] == "default"
         assert data["frontend"]["config"]["layout"] == "list"
 
-    async def test_config_includes_gdpr_and_privacy_policy_fields(self, client: AsyncClient, db_session):
+    async def test_config_includes_gdpr_privacy_and_about_fields(self, client: AsyncClient, db_session):
         from app.addons.registry import addon_registry
 
         addon = addon_registry.get("default")
@@ -163,6 +163,10 @@ class TestStorefrontAPI:
                 "privacy_policy_title": "Our Privacy Policy",
                 "privacy_policy_body": "We collect emails for orders.",
                 "privacy_policy_effective_date": "2026-07-21",
+                "about_page_enabled": True,
+                "about_page_title": "About Us",
+                "about_page_body": "We sell great things.",
+                "about_contact_body": "Email us anytime.",
             },
         )
         await db_session.commit()
@@ -176,6 +180,10 @@ class TestStorefrontAPI:
         assert site["privacy_policy_title"] == "Our Privacy Policy"
         assert site["privacy_policy_body"] == "We collect emails for orders."
         assert site["privacy_policy_effective_date"] == "2026-07-21"
+        assert site["about_page_enabled"] is True
+        assert site["about_page_title"] == "About Us"
+        assert site["about_page_body"] == "We sell great things."
+        assert site["about_contact_body"] == "Email us anytime."
         assert "gdpr_privacy_url" not in site
 
     async def test_theme_css_returns_variables(self, client: AsyncClient, db_session):

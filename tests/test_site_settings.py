@@ -81,3 +81,20 @@ class TestPrivacyPolicyDefaults:
         assert site.privacy_policy_body == DEFAULT_PRIVACY_POLICY_BODY
         assert "Information we collect" in (site.privacy_policy_body or "")
         assert site.privacy_policy_enabled is False
+
+
+class TestAboutPageDefaults:
+    def test_new_site_settings_have_standard_about_content(self):
+        from models.site_settings import (
+            DEFAULT_ABOUT_CONTACT_BODY,
+            DEFAULT_ABOUT_PAGE_BODY,
+            DEFAULT_ABOUT_PAGE_TITLE,
+        )
+
+        site = SiteSettings()
+        assert site.about_page_title == DEFAULT_ABOUT_PAGE_TITLE
+        assert site.about_page_body == DEFAULT_ABOUT_PAGE_BODY
+        assert site.about_contact_body == DEFAULT_ABOUT_CONTACT_BODY
+        assert "Welcome to our store" in (site.about_page_body or "")
+        assert "support email" in (site.about_contact_body or "")
+        assert site.about_page_enabled is False

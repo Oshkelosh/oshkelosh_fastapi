@@ -19,7 +19,7 @@ from models.category import Category
 from models.product import Product
 from models.product_image import ProductImage
 from models.product_variant import ProductVariant
-from models.site_settings import DEFAULT_PRIVACY_POLICY_TITLE, SiteSettings
+from models.site_settings import DEFAULT_ABOUT_PAGE_TITLE, DEFAULT_PRIVACY_POLICY_TITLE, SiteSettings
 
 PRIVATE_PATH_PREFIXES = (
     "/login",
@@ -274,6 +274,26 @@ async def resolve_meta_for_path(
             robots="index, follow" if published else "noindex, nofollow",
         )
 
+    if normalized == "/about":
+        title = (site_settings.about_page_title or DEFAULT_ABOUT_PAGE_TITLE).strip() or (
+            DEFAULT_ABOUT_PAGE_TITLE
+        )
+        published = bool(
+            site_settings.about_page_enabled and (site_settings.about_page_body or "").strip()
+        )
+        return SeoMeta(
+            title=f"{title} | {store_name}",
+            description=(
+                truncate_text(site_settings.about_page_body, _DESCRIPTION_MAX)
+                if published
+                else default_description
+            ),
+            canonical_url=f"{site_url}/about",
+            site_name=store_name,
+            og_image=site_settings.logo_url,
+            robots="index, follow" if published else "noindex, nofollow",
+        )
+
     if normalized.startswith("/products/"):
         slug = normalized.removeprefix("/products/")
         if not slug:
@@ -479,16 +499,19 @@ def render_sitemap_xml(
     products: list[Product],
     categories: list[Category],
     privacy_policy: tuple[str, str | None] | None = None,
+    about_page: tuple[str, str | None] | None = None,
 ) -> str:
     """Render sitemap.xml for public catalog URLs.
 
-    ``privacy_policy`` is an optional ``(loc, lastmod)`` entry for ``/privacy``.
+    ``privacy_policy`` / ``about_page`` are optional ``(loc, lastmod)`` entries.
     """
     entries: list[tuple[str, str | None]] = [
         (f"{site_url}/", None),
         (f"{site_url}/products", None),
         (f"{site_url}/categories", None),
     ]
+    if about_page is not None:
+        entries.append(about_page)
     if privacy_policy is not None:
         entries.append(privacy_policy)
     for product in products:

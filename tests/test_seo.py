@@ -81,6 +81,7 @@ async def test_sitemap_includes_published_products_only(
     assert "draft-product" not in body
     assert "<loc>https://shop.example.com/categories/shirts</loc>" in body
     assert "<loc>https://shop.example.com/privacy</loc>" not in body
+    assert "<loc>https://shop.example.com/about</loc>" not in body
     assert response.headers.get("cache-control") == "public, max-age=600"
 
 
@@ -102,6 +103,23 @@ async def test_sitemap_includes_privacy_when_published(client, db_session):
     body = response.text
     assert "<loc>https://shop.example.com/privacy</loc>" in body
     assert "<lastmod>2026-07-21</lastmod>" in body
+
+
+@pytest.mark.asyncio
+async def test_sitemap_includes_about_when_published(client, db_session):
+    await update_site_settings(
+        db_session,
+        {
+            "site_url": "https://shop.example.com",
+            "about_page_enabled": True,
+            "about_page_body": "We sell great things.",
+        },
+    )
+    await db_session.commit()
+
+    response = await client.get("/sitemap.xml")
+    assert response.status_code == 200
+    assert "<loc>https://shop.example.com/about</loc>" in response.text
 
 
 @pytest.mark.asyncio
@@ -210,6 +228,48 @@ async def test_privacy_page_noindex_when_unpublished(client, db_session):
     assert response.status_code == 200
     body = response.text
     assert "<title>Privacy Policy | Test Shop</title>" in body
+    assert 'meta name="robots" content="noindex, nofollow"' in body
+
+
+@pytest.mark.asyncio
+async def test_about_page_html_injection_when_published(client, db_session):
+    await update_site_settings(
+        db_session,
+        {
+            "site_url": "https://shop.example.com",
+            "store_name": "Test Shop",
+            "about_page_enabled": True,
+            "about_page_title": "About Us",
+            "about_page_body": "We sell great things for everyone.",
+        },
+    )
+    await db_session.commit()
+
+    response = await client.get("/about")
+    assert response.status_code == 200
+    body = response.text
+    assert "<title>About Us | Test Shop</title>" in body
+    assert 'rel="canonical" href="https://shop.example.com/about"' in body
+    assert 'meta name="robots" content="index, follow"' in body
+
+
+@pytest.mark.asyncio
+async def test_about_page_noindex_when_unpublished(client, db_session):
+    await update_site_settings(
+        db_session,
+        {
+            "site_url": "https://shop.example.com",
+            "store_name": "Test Shop",
+            "about_page_enabled": False,
+            "about_page_body": "",
+        },
+    )
+    await db_session.commit()
+
+    response = await client.get("/about")
+    assert response.status_code == 200
+    body = response.text
+    assert "<title>About | Test Shop</title>" in body
     assert 'meta name="robots" content="noindex, nofollow"' in body
 
 

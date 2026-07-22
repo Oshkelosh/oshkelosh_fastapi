@@ -112,11 +112,16 @@ async def sitemap_xml(request: Request, session=Depends(get_session)) -> Respons
             site_settings.privacy_policy_effective_date or None,
         )
 
+    about_page = None
+    if site_settings.about_page_enabled and (site_settings.about_page_body or "").strip():
+        about_page = (f"{site_url}/about", None)
+
     body = render_sitemap_xml(
         site_url,
         products=products,
         categories=categories,
         privacy_policy=privacy_policy,
+        about_page=about_page,
     )
     return Response(
         content=body,
@@ -177,6 +182,12 @@ async def storefront_category_detail(
 @router.get("/privacy", include_in_schema=False)
 async def storefront_privacy(request: Request, session=Depends(get_session)) -> Response:
     """Serve the SPA privacy policy page with injected SEO metadata."""
+    return await serve_spa_html(request, session)
+
+
+@router.get("/about", include_in_schema=False)
+async def storefront_about(request: Request, session=Depends(get_session)) -> Response:
+    """Serve the SPA about page with injected SEO metadata."""
     return await serve_spa_html(request, session)
 
 

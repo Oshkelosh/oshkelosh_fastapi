@@ -50,6 +50,22 @@ We may update this Privacy Policy from time to time. The effective date on this 
 This text is a starting template only. Customize it for your business, products, tools, and local legal requirements before publishing.\
 """
 
+DEFAULT_ABOUT_PAGE_TITLE = "About"
+
+DEFAULT_ABOUT_PAGE_BODY = """\
+Welcome to our store.
+
+We are a small team dedicated to offering quality products and straightforward shopping. Tell your customers who you are, what you sell, and what makes your shop different.
+
+This text is a starting template only. Customize it with your story before publishing.\
+"""
+
+DEFAULT_ABOUT_CONTACT_BODY = """\
+Have a question about an order or our products? We are happy to help.
+
+Add your business hours, shipping region, or other contact details here. If a support email is set in site settings, it will appear below as a contact link.\
+"""
+
 
 class SiteSettings(ModelBase, table=True):
     """Global site branding used by storefront, admin, and notifications."""
@@ -164,4 +180,26 @@ class SiteSettings(ModelBase, table=True):
     privacy_policy_effective_date: Optional[str] = Field(
         default=None,
         sa_column=Column(String(10), nullable=True),
+    )
+
+    # Built-in about page at /about (About + Contact Us sections)
+    about_page_enabled: bool = Field(
+        default=False,
+        sa_column=Column(Boolean, nullable=False, server_default="0"),
+    )
+    about_page_title: str = Field(
+        default=DEFAULT_ABOUT_PAGE_TITLE,
+        sa_column=Column(
+            String(255),
+            nullable=False,
+            server_default=DEFAULT_ABOUT_PAGE_TITLE,
+        ),
+    )
+    about_page_body: Optional[str] = Field(
+        default=DEFAULT_ABOUT_PAGE_BODY,
+        sa_column=Column(Text, nullable=True),
+    )
+    about_contact_body: Optional[str] = Field(
+        default=DEFAULT_ABOUT_CONTACT_BODY,
+        sa_column=Column(Text, nullable=True),
     )

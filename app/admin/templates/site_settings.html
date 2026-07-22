@@ -206,6 +206,44 @@ changing it does not convert existing prices.
     </div>
   </div>
 
+  <div class="card" style="margin-bottom:16px;">
+    <h3 style="margin-top:0;">About page</h3>
+    <p style="color:var(--clr-text-muted);font-size:0.875rem;margin-bottom:16px;">
+      Optional storefront page at <code>/about</code> with an About section and a Contact Us section.
+      Contact Us also shows the support email from branding settings when set.
+    </p>
+    <div class="form-group">
+      <label class="form-label">
+        <input type="checkbox" name="about_page_enabled" value="1"
+               {% if site.about_page_enabled %}checked{% endif %} />
+        Publish about page
+      </label>
+      <small style="color:var(--clr-text-muted);display:block;margin-top:4px;">
+        Linked from the footer when About body text is set.
+      </small>
+    </div>
+    <div class="form-group">
+      <label class="form-label" for="about_page_title">About title</label>
+      <input type="text" id="about_page_title" name="about_page_title" class="form-input"
+             value="{{ site.about_page_title or about_page_default_title }}" maxlength="255" />
+    </div>
+    <div class="form-group">
+      <label class="form-label" for="about_page_body">About text</label>
+      <textarea id="about_page_body" name="about_page_body" class="form-textarea" rows="8"
+                placeholder="Plain text. Line breaks are preserved on the storefront.">{{ site.about_page_body or about_page_default_body }}</textarea>
+    </div>
+    <hr style="border:none;border-top:1px solid var(--clr-border);margin:16px 0;" />
+    <h4 style="margin:0 0 12px;">Contact Us</h4>
+    <div class="form-group">
+      <label class="form-label" for="about_contact_body">Contact text</label>
+      <textarea id="about_contact_body" name="about_contact_body" class="form-textarea" rows="6"
+                placeholder="Hours, address, or how to reach you.">{{ site.about_contact_body or about_contact_default_body }}</textarea>
+      <small style="color:var(--clr-text-muted);">
+        Shown under a Contact Us heading. Support email from branding appears as a mailto link when set.
+      </small>
+    </div>
+  </div>
+
   <button type="submit" class="btn btn--primary">Save site settings</button>
 </form>
 

@@ -4,7 +4,13 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from models.site_settings import DEFAULT_PRIVACY_POLICY_BODY, DEFAULT_PRIVACY_POLICY_TITLE
+from models.site_settings import (
+    DEFAULT_ABOUT_CONTACT_BODY,
+    DEFAULT_ABOUT_PAGE_BODY,
+    DEFAULT_ABOUT_PAGE_TITLE,
+    DEFAULT_PRIVACY_POLICY_BODY,
+    DEFAULT_PRIVACY_POLICY_TITLE,
+)
 
 
 class SiteSettingsPublic(BaseModel):
@@ -94,6 +100,22 @@ class SiteSettingsPublic(BaseModel):
     privacy_policy_effective_date: str | None = Field(
         default=None,
         description="Optional effective date (YYYY-MM-DD) shown on /privacy.",
+    )
+    about_page_enabled: bool = Field(
+        default=False,
+        description="When true and About body is set, /about is published and linked.",
+    )
+    about_page_title: str = Field(
+        default=DEFAULT_ABOUT_PAGE_TITLE,
+        description="Title for the About section on /about.",
+    )
+    about_page_body: str | None = Field(
+        default=DEFAULT_ABOUT_PAGE_BODY,
+        description="Plain-text About section body for /about.",
+    )
+    about_contact_body: str | None = Field(
+        default=DEFAULT_ABOUT_CONTACT_BODY,
+        description="Plain-text Contact Us section body for /about.",
     )
 
     model_config = ConfigDict(from_attributes=True)
