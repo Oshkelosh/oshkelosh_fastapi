@@ -78,9 +78,23 @@ def test_process_product_image_outputs_webp_variants():
 def test_variant_urls_from_primary_url():
     full = "http://testserver/media/files/products/abc123/full.webp"
     assert variant_urls_from_primary_url(full) == {
-        "card": "http://testserver/media/files/products/abc123/card.webp",
-        "thumb": "http://testserver/media/files/products/abc123/thumb.webp",
+        "card": "/media/files/products/abc123/card.webp",
+        "thumb": "/media/files/products/abc123/thumb.webp",
     }
+    assert variant_urls_from_primary_url("/media/files/products/abc123/full.webp") == {
+        "card": "/media/files/products/abc123/card.webp",
+        "thumb": "/media/files/products/abc123/thumb.webp",
+    }
+
+
+def test_local_media_display_url_strips_host():
+    from app.services.product_images import absolutize_media_url, local_media_display_url
+
+    abs_url = "http://192.168.10.100:8000/media/files/products/x/full.webp"
+    assert local_media_display_url(abs_url) == "/media/files/products/x/full.webp"
+    assert absolutize_media_url(abs_url, origin="https://shop.example.com") == (
+        "https://shop.example.com/media/files/products/x/full.webp"
+    )
 
 
 def test_variant_keys_from_primary_key():

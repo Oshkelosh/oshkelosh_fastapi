@@ -433,7 +433,7 @@ async def admin_product_create(
 async def admin_product_edit(request: Request, product_id: int, db=Depends(require_admin_session)):
     """Show the edit-product form."""
     from app.services.product_defaults import product_is_sync_imported
-    from app.services.product_images import list_product_images
+    from app.services.product_images import list_product_images, product_image_to_dict
     from app.services.product_variants import list_variants_for_product
     from app.services.suppliers import non_supplier_tags, supplier_form_values, variant_supplier_label
     from models.product import Product
@@ -455,7 +455,9 @@ async def admin_product_edit(request: Request, product_id: int, db=Depends(requi
     supplier_value, supplier_product_id, supplier_variant_id = supplier_form_values(
         product, default_variant
     )
-    product_images = await list_product_images(db, product_id)
+    product_images = [
+        product_image_to_dict(img) for img in await list_product_images(db, product_id)
+    ]
 
     return await _render_product_form(
         request,
@@ -549,7 +551,6 @@ async def admin_product_update(
         supplier_value=supplier_value,
         supplier_product_id=supplier_product_id,
         supplier_variant_id=supplier_variant_id,
-        category_id=category_id,
     )
     if immutable_error:
         return await _render_product_form(
@@ -617,8 +618,7 @@ async def admin_product_update(
     product.meta_description = meta_description or None
     product.status = status
     product.options = parsed_options
-    if not synced:
-        product.category_id = await resolve_category_id(db, category_id)
+    product.category_id = await resolve_category_id(db, category_id)
     product.tags = parsed_tags
     product.updated_by = request.state.admin_user.id
     await _apply_manual_variant_updates(request, db, product, synced=synced)

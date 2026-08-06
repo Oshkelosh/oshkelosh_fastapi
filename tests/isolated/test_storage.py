@@ -51,7 +51,7 @@ async def test_local_storage_upload_and_url(local_storage):
     content = b"fake-image-bytes"
     url = await backend.upload(key, content, "image/jpeg")
 
-    assert url == "http://testserver/media/files/products/test-image.jpg"
+    assert url == "/media/files/products/test-image.jpg"
     file_path = tmp_path / "data" / "uploads" / "products" / "test-image.jpg"
     assert file_path.exists()
     assert file_path.read_bytes() == content

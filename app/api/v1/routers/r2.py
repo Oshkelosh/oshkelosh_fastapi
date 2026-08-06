@@ -12,6 +12,7 @@ from app.core.exceptions import NotFound, ValidationError
 from app.db.connection import get_session
 from app.services.product_images import (
     delete_product_image,
+    local_media_display_url,
     read_upload_file,
     storage_key_from_url,
     upload_product_image,
@@ -74,12 +75,13 @@ async def upload_image(
             alt_text=alt_text,
         )
         key = storage_key_from_url(image.url) or ""
+        display = local_media_display_url(image.url)
 
         return {
-            "url": image.url,
+            "url": display,
             "key": key,
             "image_id": image.id,
-            "variants": variant_urls_from_primary_url(image.url),
+            "variants": variant_urls_from_primary_url(display),
             "message": "Image uploaded and associated with product",
         }
 

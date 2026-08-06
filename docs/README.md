@@ -6,6 +6,8 @@ Developer documentation for the Oshkelosh modular e-commerce backend.
 
 | I want to… | Read |
 |------------|------|
+| Agent ops contract (ceilings, run/test, gotchas) | [AGENTS.md](../AGENTS.md) |
+| Product design contract (vision, Planned, non-goals) | [DESIGN.md](../DESIGN.md) |
 | Understand core vs addon responsibilities | [app/addons/README.md](../app/addons/README.md#core-vs-addon-responsibilities) |
 | Understand the whole plugin system | [app/addons/README.md](../app/addons/README.md) |
 | Build or customize a storefront SPA | [app/addons/frontends/README.md](../app/addons/frontends/README.md) |

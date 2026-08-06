@@ -51,6 +51,10 @@ class TestProductListing:
         data = response.json()
         assert data["name"] == "Test Product"
         assert data["sku"] == "TEST-001"
+        assert data["category_id"] == test_product.category_id
+        assert data["category"] == "test-category"
+        assert data["category_slug"] == "test-category"
+        assert data["category_name"] == "Test Category"
 
     async def test_get_product_not_found(self, client: AsyncClient):
         """Test getting a non-existent product."""
@@ -132,6 +136,73 @@ class TestProductListing:
         data = response.json()
         assert data["items"] == []
         assert data["total"] == 0
+
+
+class TestProductAdminCategory:
+    """Category is visible/editable on the product edit form (non-synced)."""
+
+    async def test_edit_form_shows_category_select(
+        self, client: AsyncClient, test_product, test_user
+    ):
+        from app.main import app
+
+        app.state.needs_setup = False
+        cookies, _csrf = _admin_session(test_user.id)
+        response = await client.get(f"/admin/products/{test_product.id}", cookies=cookies)
+        assert response.status_code == 200
+        html = response.text
+        assert 'name="category_id"' in html
+        assert '<select name="category_id"' in html
+        assert "Test Category" in html
+
+    async def test_create_form_shows_category_select(self, client: AsyncClient, test_user):
+        from app.main import app
+
+        app.state.needs_setup = False
+        cookies, _csrf = _admin_session(test_user.id)
+        response = await client.get("/admin/products/new", cookies=cookies)
+        assert response.status_code == 200
+        assert '<select name="category_id"' in response.text
+
+    async def test_update_changes_category(
+        self, client: AsyncClient, test_product, test_user, db_session
+    ):
+        from app.main import app
+
+        app.state.needs_setup = False
+        other = Category(name="Other Category", slug="other-category")
+        db_session.add(other)
+        await db_session.flush()
+
+        cookies, csrf = _admin_session(test_user.id)
+        response = await client.post(
+            f"/admin/products/{test_product.id}",
+            cookies=cookies,
+            data={
+                "name": test_product.name,
+                "description": test_product.description or "",
+                "slug": test_product.slug or "",
+                "meta_title": "",
+                "meta_description": "",
+                "price_cents": test_product.price_cents,
+                "compare_at_price_cents": "",
+                "sku": test_product.sku or "",
+                "inventory_quantity": test_product.inventory_quantity,
+                "status": test_product.status,
+                "category_id": other.id,
+                "supplier_value": "",
+                "supplier_product_id": "",
+                "supplier_variant_id": "",
+                "tags": "[]",
+                "product_options": "{}",
+                "csrf_token": csrf,
+            },
+            follow_redirects=False,
+        )
+        assert response.status_code == 302
+
+        await db_session.refresh(test_product)
+        assert test_product.category_id == other.id
 
 
 class TestProductAdminDelete:

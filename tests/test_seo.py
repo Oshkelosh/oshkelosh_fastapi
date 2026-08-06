@@ -9,6 +9,7 @@ from app.config import settings
 from app.services.product_variants import refresh_product_listing_cache
 from app.services.site_settings import update_site_settings
 from app.storefront.seo import (
+    build_item_list_json_ld,
     build_product_json_ld,
     build_product_offers_json_ld,
     inject_seo_into_html,
@@ -151,6 +152,91 @@ async def test_product_page_html_injection(client, db_session, test_product: Pro
     assert 'type="application/ld+json"' in body
     assert '"@type": "Product"' in body
     assert '"@type": "Offer"' in body
+    assert 'aria-label="Catalog"' in body
+    assert 'href="https://shop.example.com/products"' in body
+    assert 'href="https://shop.example.com/categories"' in body
+    assert 'href="https://shop.example.com/categories/test-category"' in body
+    assert '"@type": "BreadcrumbList"' in body
+    assert '"Categories"' in body
+    assert '"category": "Test Category"' in body
+
+
+@pytest.mark.asyncio
+async def test_products_list_injects_collection_and_crawl_links(client, db_session, test_product: Product):
+    await update_site_settings(
+        db_session,
+        {
+            "site_url": "https://shop.example.com",
+            "store_name": "Test Shop",
+        },
+    )
+    test_product.slug = "listed-product"
+    test_product.status = "published"
+    db_session.add(test_product)
+    await db_session.commit()
+
+    response = await client.get("/products")
+    assert response.status_code == 200
+    body = response.text
+    assert '"@type": "CollectionPage"' in body
+    assert '"@type": "ItemList"' in body
+    assert 'aria-label="Catalog"' in body
+    assert 'href="https://shop.example.com/products/listed-product"' in body
+
+
+@pytest.mark.asyncio
+async def test_category_page_breadcrumb_uses_categories_hub(
+    client, db_session, test_category: Category, test_product: Product
+):
+    await update_site_settings(
+        db_session,
+        {
+            "site_url": "https://shop.example.com",
+            "store_name": "Test Shop",
+        },
+    )
+    test_product.slug = "cat-product"
+    test_product.status = "published"
+    test_product.category_id = test_category.id
+    db_session.add(test_product)
+    await db_session.commit()
+
+    response = await client.get(f"/categories/{test_category.slug}")
+    assert response.status_code == 200
+    body = response.text
+    assert '"@type": "BreadcrumbList"' in body
+    assert "https://shop.example.com/categories" in body
+    # Middle crumb must be Categories hub, not Products
+    assert '"name": "Categories"' in body
+    assert '"item": "https://shop.example.com/categories"' in body
+    assert '"@type": "CollectionPage"' in body
+    assert 'href="https://shop.example.com/products/cat-product"' in body
+    assert 'aria-label="Catalog"' in body
+    # Breadcrumb trail should not use Products as the hub for category pages
+    assert '"item": "https://shop.example.com/products"' not in body.split('"@type": "CollectionPage"')[0]
+
+
+@pytest.mark.asyncio
+async def test_home_page_injects_crawl_catalog_nav(client, db_session, test_product: Product):
+    await update_site_settings(
+        db_session,
+        {
+            "site_url": "https://shop.example.com",
+            "store_name": "Test Shop",
+        },
+    )
+    test_product.slug = "home-product"
+    test_product.status = "published"
+    db_session.add(test_product)
+    await db_session.commit()
+
+    response = await client.get("/")
+    assert response.status_code == 200
+    body = response.text
+    assert 'aria-label="Catalog"' in body
+    assert 'href="https://shop.example.com/products"' in body
+    assert 'href="https://shop.example.com/categories"' in body
+    assert 'href="https://shop.example.com/products/home-product"' in body
 
 
 @pytest.mark.asyncio
@@ -345,6 +431,10 @@ def test_inject_seo_into_html_replaces_title_and_adds_meta():
         og_type="product",
         site_name="Test Shop",
         json_ld=[{"@type": "Product", "name": "Foo"}],
+        crawl_links=[
+            ("Products", "https://shop.example.com/products"),
+            ("Foo", "https://shop.example.com/products/foo"),
+        ],
     )
     result = inject_seo_into_html(html, meta)
     assert "<title>New Title</title>" in result
@@ -354,6 +444,21 @@ def test_inject_seo_into_html_replaces_title_and_adds_meta():
     assert 'property="og:site_name" content="Test Shop"' in result
     assert 'name="twitter:title" content="New Title"' in result
     assert '"@type": "Product"' in result
+    assert 'aria-label="Catalog"' in result
+    assert 'href="https://shop.example.com/products/foo"' in result
+    assert result.index('aria-label="Catalog"') < result.index("</body>")
+
+
+def test_build_item_list_json_ld_wraps_collection_page():
+    payload = build_item_list_json_ld(
+        "Products | Shop",
+        "https://shop.example.com/products",
+        [("Tee", "https://shop.example.com/products/tee")],
+    )
+    assert payload["@type"] == "CollectionPage"
+    assert payload["mainEntity"]["@type"] == "ItemList"
+    assert payload["mainEntity"]["numberOfItems"] == 1
+    assert payload["mainEntity"]["itemListElement"][0]["url"].endswith("/products/tee")
 
 
 def test_render_sitemap_xml_escapes_urls():
@@ -446,6 +551,22 @@ def test_build_product_json_ld_uses_variant_sku_for_single_variant():
     payload = build_product_json_ld(product, "https://shop.example.com", None, [variant])
     assert payload["sku"] == "VARIANT-SKU"
     assert payload["offers"]["@type"] == "Offer"
+
+
+def test_build_product_json_ld_includes_category_name():
+    product = Product(
+        name="Tee",
+        slug="tee",
+        price_cents=1500,
+        inventory_quantity=1,
+    )
+    payload = build_product_json_ld(
+        product,
+        "https://shop.example.com",
+        None,
+        category_name="Apparel",
+    )
+    assert payload["category"] == "Apparel"
 
 
 @pytest.mark.asyncio

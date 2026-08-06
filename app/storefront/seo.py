@@ -14,6 +14,7 @@ from xml.sax.saxutils import escape as xml_escape
 from sqlmodel import col, select
 from starlette.requests import Request
 
+from app.services.product_popularity import popularity_order_clause
 from app.services.product_variants import get_active_variants
 from models.category import Category
 from models.product import Product
@@ -50,6 +51,12 @@ DEFAULT_CURRENCY = "USD"
 _TITLE_MAX = 60
 _DESCRIPTION_MAX = 160
 
+_CRAWL_HOME_CATEGORIES = 20
+_CRAWL_HOME_PRODUCTS = 20
+_CRAWL_PRODUCTS_LIST = 50
+_CRAWL_CATEGORY_PRODUCTS = 50
+_CRAWL_SIBLING_PRODUCTS = 20
+
 
 @dataclass
 class SeoMeta:
@@ -63,6 +70,7 @@ class SeoMeta:
     site_name: str | None = None
     robots: str = "index, follow"
     json_ld: list[dict[str, Any]] = field(default_factory=list)
+    crawl_links: list[tuple[str, str]] = field(default_factory=list)
 
 
 def resolve_site_url(request: Request, site_settings: SiteSettings) -> str:
@@ -90,14 +98,17 @@ def is_private_path(path: str) -> bool:
 
 def build_organization_json_ld(site_settings: SiteSettings, site_url: str) -> dict[str, Any]:
     """Build schema.org Organization JSON-LD."""
+    from app.services.product_images import absolutize_media_url
+
     payload: dict[str, Any] = {
         "@context": "https://schema.org",
         "@type": "Organization",
         "name": site_settings.store_name,
         "url": site_url,
     }
-    if site_settings.logo_url:
-        payload["logo"] = site_settings.logo_url
+    logo = absolutize_media_url(site_settings.logo_url, origin=site_url.rstrip("/"))
+    if logo:
+        payload["logo"] = logo
     return payload
 
 
@@ -115,6 +126,33 @@ def build_breadcrumb_json_ld(items: list[tuple[str, str]]) -> dict[str, Any]:
             }
             for index, (name, url) in enumerate(items)
         ],
+    }
+
+
+def build_item_list_json_ld(
+    name: str,
+    url: str,
+    items: list[tuple[str, str]],
+) -> dict[str, Any]:
+    """Build schema.org CollectionPage wrapping an ItemList of catalog URLs."""
+    return {
+        "@context": "https://schema.org",
+        "@type": "CollectionPage",
+        "name": name,
+        "url": url,
+        "mainEntity": {
+            "@type": "ItemList",
+            "numberOfItems": len(items),
+            "itemListElement": [
+                {
+                    "@type": "ListItem",
+                    "position": index + 1,
+                    "name": label,
+                    "url": href,
+                }
+                for index, (label, href) in enumerate(items)
+            ],
+        },
     }
 
 
@@ -174,6 +212,7 @@ def build_product_json_ld(
     variants: list[ProductVariant] | None = None,
     *,
     currency: str = DEFAULT_CURRENCY,
+    category_name: str | None = None,
 ) -> dict[str, Any]:
     """Build schema.org Product JSON-LD."""
     active = get_active_variants(variants or [])
@@ -196,10 +235,78 @@ def build_product_json_ld(
         payload["sku"] = sku
     if image_url:
         payload["image"] = [image_url]
+    if category_name:
+        payload["category"] = category_name
     return payload
 
 
-async def _product_primary_image(session: Any, product: Product) -> str | None:
+def _hub_links(site_url: str) -> list[tuple[str, str]]:
+    return [
+        ("Products", f"{site_url}/products"),
+        ("Categories", f"{site_url}/categories"),
+    ]
+
+
+def _product_link(site_url: str, product: Product) -> tuple[str, str] | None:
+    if not product.slug:
+        return None
+    return (product.name, f"{site_url}/products/{product.slug}")
+
+
+def _category_link(site_url: str, category: Category) -> tuple[str, str]:
+    return (category.name, f"{site_url}/categories/{category.slug}")
+
+
+def _dedupe_links(links: list[tuple[str, str]]) -> list[tuple[str, str]]:
+    seen: set[str] = set()
+    out: list[tuple[str, str]] = []
+    for label, href in links:
+        if href in seen:
+            continue
+        seen.add(href)
+        out.append((label, href))
+    return out
+
+
+async def _load_published_products(
+    session: Any,
+    *,
+    limit: int,
+    category_id: int | None = None,
+    exclude_id: int | None = None,
+    popular: bool = False,
+) -> list[Product]:
+    stmt = select(Product).where(
+        col(Product.status) == "published",
+        col(Product.slug).is_not(None),
+    )
+    if category_id is not None:
+        stmt = stmt.where(col(Product.category_id) == category_id)
+    if exclude_id is not None:
+        stmt = stmt.where(col(Product.id) != exclude_id)
+    if popular:
+        stmt = stmt.order_by(popularity_order_clause("desc"), col(Product.id).desc())
+    else:
+        stmt = stmt.order_by(col(Product.updated_at).desc(), col(Product.id).desc())
+    stmt = stmt.limit(limit)
+    result = await session.execute(stmt)
+    return list(result.scalars().all())
+
+
+async def _load_categories(session: Any, *, limit: int | None = None) -> list[Category]:
+    stmt = select(Category).order_by(col(Category.sort_order).asc(), col(Category.name).asc())
+    if limit is not None:
+        stmt = stmt.limit(limit)
+    result = await session.execute(stmt)
+    return list(result.scalars().all())
+
+
+async def _product_primary_image(
+    session: Any,
+    product: Product,
+    *,
+    origin: str | None = None,
+) -> str | None:
     """Return the best product image URL, preferring shared (non-variant) images."""
     result = await session.execute(
         select(ProductImage)
@@ -211,7 +318,11 @@ async def _product_primary_image(session: Any, product: Product) -> str | None:
         .limit(1)
     )
     image = result.scalar_one_or_none()
-    return image.url if image is not None else None
+    if image is None:
+        return None
+    from app.services.product_images import absolutize_media_url
+
+    return absolutize_media_url(image.url, origin=origin)
 
 
 async def resolve_meta_for_path(
@@ -221,36 +332,78 @@ async def resolve_meta_for_path(
     site_url: str,
 ) -> SeoMeta | None:
     """Map a storefront path to SEO metadata."""
+    from app.services.product_images import absolutize_media_url
+
     normalized = path.rstrip("/") or "/"
     store_name = site_settings.store_name
     default_description = site_settings.meta_description
+    origin = site_url.rstrip("/")
+    logo = absolutize_media_url(site_settings.logo_url, origin=origin)
 
     if normalized == "/":
+        categories = await _load_categories(session, limit=_CRAWL_HOME_CATEGORIES)
+        products = await _load_published_products(
+            session, limit=_CRAWL_HOME_PRODUCTS, popular=True
+        )
+        crawl_links = _dedupe_links(
+            [
+                *_hub_links(site_url),
+                *[_category_link(site_url, cat) for cat in categories],
+                *[
+                    link
+                    for product in products
+                    if (link := _product_link(site_url, product)) is not None
+                ],
+            ]
+        )
         return SeoMeta(
             title=store_name,
             description=default_description,
             canonical_url=f"{site_url}/",
             site_name=store_name,
-            og_image=site_settings.logo_url,
+            og_image=logo,
             json_ld=[build_organization_json_ld(site_settings, site_url)],
+            crawl_links=crawl_links,
         )
 
     if normalized == "/products":
+        products = await _load_published_products(
+            session, limit=_CRAWL_PRODUCTS_LIST, popular=True
+        )
+        product_links = [
+            link
+            for product in products
+            if (link := _product_link(site_url, product)) is not None
+        ]
+        crawl_links = _dedupe_links([*_hub_links(site_url), *product_links])
+        canonical = f"{site_url}/products"
         return SeoMeta(
             title=f"Products | {store_name}",
             description=default_description or f"Browse products at {store_name}",
-            canonical_url=f"{site_url}/products",
+            canonical_url=canonical,
             site_name=store_name,
-            og_image=site_settings.logo_url,
+            og_image=logo,
+            json_ld=[
+                build_item_list_json_ld(
+                    f"Products | {store_name}",
+                    canonical,
+                    product_links,
+                )
+            ],
+            crawl_links=crawl_links,
         )
 
     if normalized == "/categories":
+        categories = await _load_categories(session)
+        category_links = [_category_link(site_url, cat) for cat in categories]
+        crawl_links = _dedupe_links([*_hub_links(site_url), *category_links])
         return SeoMeta(
             title=f"Categories | {store_name}",
             description=default_description or f"Browse categories at {store_name}",
             canonical_url=f"{site_url}/categories",
             site_name=store_name,
-            og_image=site_settings.logo_url,
+            og_image=logo,
+            crawl_links=crawl_links,
         )
 
     if normalized == "/privacy":
@@ -270,7 +423,7 @@ async def resolve_meta_for_path(
             ),
             canonical_url=f"{site_url}/privacy",
             site_name=store_name,
-            og_image=site_settings.logo_url,
+            og_image=logo,
             robots="index, follow" if published else "noindex, nofollow",
         )
 
@@ -290,7 +443,7 @@ async def resolve_meta_for_path(
             ),
             canonical_url=f"{site_url}/about",
             site_name=store_name,
-            og_image=site_settings.logo_url,
+            og_image=logo,
             robots="index, follow" if published else "noindex, nofollow",
         )
 
@@ -313,25 +466,68 @@ async def resolve_meta_for_path(
         )
         variants = list(variants_result.scalars().all())
 
+        category: Category | None = None
+        if product.category_id is not None:
+            cat_result = await session.execute(
+                select(Category).where(col(Category.id) == product.category_id)
+            )
+            category = cat_result.scalar_one_or_none()
+
         title = product.meta_title or f"{product.name} | {store_name}"
         description = (
             product.meta_description
             or truncate_text(product.description, _DESCRIPTION_MAX)
             or default_description
         )
-        image_url = await _product_primary_image(session, product)
+        image_url = await _product_primary_image(session, product, origin=origin)
         canonical = f"{site_url}/products/{product.slug}"
-        breadcrumbs = [
-            ("Home", f"{site_url}/"),
-            ("Products", f"{site_url}/products"),
-            (product.name, canonical),
-        ]
+
+        if category is not None:
+            breadcrumbs = [
+                ("Home", f"{site_url}/"),
+                ("Categories", f"{site_url}/categories"),
+                (category.name, f"{site_url}/categories/{category.slug}"),
+                (product.name, canonical),
+            ]
+        else:
+            breadcrumbs = [
+                ("Home", f"{site_url}/"),
+                ("Products", f"{site_url}/products"),
+                (product.name, canonical),
+            ]
+
+        siblings: list[Product] = []
+        if category is not None:
+            siblings = await _load_published_products(
+                session,
+                limit=_CRAWL_SIBLING_PRODUCTS,
+                category_id=category.id,
+                exclude_id=product.id,
+                popular=True,
+            )
+
+        crawl_links = _dedupe_links(
+            [
+                *_hub_links(site_url),
+                *(
+                    [_category_link(site_url, category)]
+                    if category is not None
+                    else []
+                ),
+                *[
+                    link
+                    for sibling in siblings
+                    if (link := _product_link(site_url, sibling)) is not None
+                ],
+            ]
+        )
+
         return SeoMeta(
             title=truncate_text(title, _TITLE_MAX) or title,
             description=description,
             canonical_url=canonical,
             og_type="product",
-            og_image=image_url or site_settings.logo_url,
+            og_image=image_url or logo,
             site_name=store_name,
             json_ld=[
                 build_product_json_ld(
@@ -340,9 +536,11 @@ async def resolve_meta_for_path(
                     image_url,
                     variants,
                     currency=getattr(site_settings, "shop_currency", None) or DEFAULT_CURRENCY,
+                    category_name=category.name if category is not None else None,
                 ),
                 build_breadcrumb_json_ld(breadcrumbs),
             ],
+            crawl_links=crawl_links,
         )
 
     if normalized.startswith("/categories/"):
@@ -356,6 +554,13 @@ async def resolve_meta_for_path(
         if category is None:
             return None
 
+        parent: Category | None = None
+        if category.parent_id is not None:
+            parent_result = await session.execute(
+                select(Category).where(col(Category.id) == category.parent_id)
+            )
+            parent = parent_result.scalar_one_or_none()
+
         title = category.meta_title or f"{category.name} | {store_name}"
         description = (
             category.meta_description
@@ -363,18 +568,52 @@ async def resolve_meta_for_path(
             or default_description
         )
         canonical = f"{site_url}/categories/{category.slug}"
-        breadcrumbs = [
+        breadcrumbs: list[tuple[str, str]] = [
             ("Home", f"{site_url}/"),
-            ("Products", f"{site_url}/products"),
-            (category.name, canonical),
+            ("Categories", f"{site_url}/categories"),
         ]
+        if parent is not None:
+            breadcrumbs.append(_category_link(site_url, parent))
+        breadcrumbs.append((category.name, canonical))
+
+        products = await _load_published_products(
+            session,
+            limit=_CRAWL_CATEGORY_PRODUCTS,
+            category_id=category.id,
+            popular=True,
+        )
+        product_links = [
+            link
+            for product in products
+            if (link := _product_link(site_url, product)) is not None
+        ]
+        crawl_links = _dedupe_links(
+            [
+                *_hub_links(site_url),
+                *(
+                    [_category_link(site_url, parent)]
+                    if parent is not None
+                    else []
+                ),
+                *product_links,
+            ]
+        )
+
         return SeoMeta(
             title=truncate_text(title, _TITLE_MAX) or title,
             description=description,
             canonical_url=canonical,
-            og_image=site_settings.logo_url,
+            og_image=logo,
             site_name=store_name,
-            json_ld=[build_breadcrumb_json_ld(breadcrumbs)],
+            json_ld=[
+                build_breadcrumb_json_ld(breadcrumbs),
+                build_item_list_json_ld(
+                    title if category.meta_title else f"{category.name} | {store_name}",
+                    canonical,
+                    product_links,
+                ),
+            ],
+            crawl_links=crawl_links,
         )
 
     if is_private_path(normalized):
@@ -390,12 +629,37 @@ async def resolve_meta_for_path(
 
 
 def inject_seo_into_html(page_html: str, meta: SeoMeta) -> str:
-    """Insert SEO tags before </head> and replace any existing <title>."""
+    """Insert SEO head tags and crawler catalog nav into the SPA shell."""
     tags = _render_head_tags(meta)
     updated = re.sub(r"<title>.*?</title>", "", page_html, count=1, flags=re.IGNORECASE | re.DOTALL)
     if "</head>" in updated:
-        return updated.replace("</head>", f"{tags}\n</head>", 1)
-    return f"{tags}\n{updated}"
+        updated = updated.replace("</head>", f"{tags}\n</head>", 1)
+    else:
+        updated = f"{tags}\n{updated}"
+
+    body_nav = _render_crawl_nav(meta)
+    if body_nav:
+        if "</body>" in updated:
+            updated = updated.replace("</body>", f"{body_nav}\n</body>", 1)
+        else:
+            updated = f"{updated}\n{body_nav}"
+    return updated
+
+
+def _render_crawl_nav(meta: SeoMeta) -> str:
+    """Render a visible catalog link block for crawlers (and users)."""
+    if not meta.crawl_links:
+        return ""
+    items = "\n".join(
+        f'<li><a href="{html.escape(href)}">{html.escape(label)}</a></li>'
+        for label, href in meta.crawl_links
+    )
+    return (
+        '<nav aria-label="Catalog" class="seo-catalog-nav">'
+        "<p>Browse</p>"
+        f"<ul>\n{items}\n</ul>"
+        "</nav>"
+    )
 
 
 def _render_head_tags(meta: SeoMeta) -> str:

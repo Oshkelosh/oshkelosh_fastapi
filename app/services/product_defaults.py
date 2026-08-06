@@ -118,7 +118,6 @@ def enforce_immutable_product_fields(
     supplier_value: str,
     supplier_product_id: str,
     supplier_variant_id: str,
-    category_id: int | None,
 ) -> str | None:
     """Return an error message if immutable fields were changed, else None."""
     from app.services.suppliers import supplier_form_values_from_variant
@@ -139,10 +138,6 @@ def enforce_immutable_product_fields(
         if stored_variant_id != supplier_variant_id.strip():
             return "Supplier variant ID cannot be changed after the product is created."
 
-    if product_is_sync_imported(product):
-        if product.category_id != category_id:
-            return "Category cannot be changed for catalog-synced products."
-
     return None
 
 
@@ -155,9 +150,3 @@ def validate_api_product_update(product: Product, update_data: dict[str, Any]) -
         submitted_sku = _normalize_optional(update_data.get("sku"))
         if stored_sku != submitted_sku:
             raise ValidationError(message="SKU cannot be changed after the product is created.")
-
-    if product_is_sync_imported(product) and "category_id" in update_data:
-        if product.category_id != update_data.get("category_id"):
-            raise ValidationError(
-                message="Category cannot be changed for catalog-synced products."
-            )

@@ -26,6 +26,7 @@ from app.services.product_popularity import compute_popularity_score
 from models.product import Product
 from models.product_image import ProductImage
 from models.product_variant import ProductVariant
+from models.category import Category
 from schemas.product import ProductDetailRead, ProductRead, ProductVariantRead
 from app.services.product_variants import VARIANT_STATUS_ACTIVE, get_active_variants
 
@@ -41,6 +42,35 @@ ALLOWED_CONTENT_TYPES = {
 MAX_FILE_SIZE = 5 * 1024 * 1024  # 5 MB
 REMOTE_DOWNLOAD_TIMEOUT = 30.0
 FULL_WEBP_SUFFIX = f"/{FULL_VARIANT}.webp"
+
+
+def local_media_display_url(url: str) -> str:
+    """Rewrite absolute local media URLs to root-relative paths for display.
+
+    Fixes thumbs when ``PUBLIC_APP_URL`` host differs from the browse host.
+    """
+    if not url:
+        return url
+    parsed = urlparse(url)
+    path = parsed.path or ""
+    if not path.startswith("/"):
+        path = f"/{path}"
+    mount = f"/{LOCAL_MEDIA_MOUNT_PATH}/"
+    idx = path.find(mount)
+    if idx >= 0:
+        return path[idx:]
+    return url
+
+
+def absolutize_media_url(url: str | None, *, origin: str | None = None) -> str | None:
+    """Turn a media URL into an absolute URL using PUBLIC_APP_URL when needed."""
+    if not url:
+        return None
+    display = local_media_display_url(url)
+    if display.startswith("/"):
+        base = (origin or settings.public_app_origin()).rstrip("/")
+        return f"{base}{display}"
+    return display
 
 
 def validate_image_content_type(content_type: str) -> str:
@@ -88,6 +118,7 @@ def variant_storage_key(group_id: str, variant: str) -> str:
 
 def variant_urls_from_primary_url(url: str) -> dict[str, str]:
     """Derive card and thumb URLs from the full variant URL."""
+    url = local_media_display_url(url)
     if not url.endswith(FULL_WEBP_SUFFIX):
         return {}
     base = url[: -len(FULL_WEBP_SUFFIX)]
@@ -321,17 +352,19 @@ async def primary_image_urls_for_products(
     primary: dict[int, str] = {}
     for image in images:
         if image.product_id not in primary:
-            variants = variant_urls_from_primary_url(image.url)
-            primary[image.product_id] = variants.get("thumb", image.url)
+            display = local_media_display_url(image.url)
+            variants = variant_urls_from_primary_url(display)
+            primary[image.product_id] = variants.get("thumb", display)
     return primary
 
 
 def product_image_to_dict(image: ProductImage) -> dict[str, Any]:
     """Serialize a ProductImage row for API consumers."""
+    display = local_media_display_url(image.url)
     return {
         "id": image.id,
-        "url": image.url,
-        "variants": variant_urls_from_primary_url(image.url),
+        "url": display,
+        "variants": variant_urls_from_primary_url(display),
         "alt_text": image.alt_text,
         "sort_order": image.sort_order,
         "variant_id": image.variant_id,
@@ -362,14 +395,45 @@ def effective_images(relational: list[ProductImage]) -> list[dict[str, Any]]:
     return [product_image_to_dict(image) for image in relational]
 
 
+async def _categories_by_id(
+    session: Any, products: list[Product]
+) -> dict[int, Category]:
+    """Batch-load categories by id for the given products."""
+    category_ids = {
+        product.category_id
+        for product in products
+        if product.category_id is not None
+    }
+    if not category_ids:
+        return {}
+    result = await session.execute(
+        select(Category).where(col(Category.id).in_(category_ids))
+    )
+    return {category.id: category for category in result.scalars().all()}
+
+
+def _apply_category_fields(payload: dict[str, Any], product: Product, categories: dict[int, Category]) -> None:
+    """Set category / category_slug / category_name on a product read payload."""
+    if product.category_id is None:
+        return
+    category = categories.get(product.category_id)
+    if category is None:
+        return
+    payload["category"] = category.slug
+    payload["category_slug"] = category.slug
+    payload["category_name"] = category.name
+
+
 async def build_product_read(session: Any, product: Product) -> ProductRead:
     """Build ProductRead with relational product image metadata."""
     images_map = await images_by_product_id(session, [product.id])
+    categories = await _categories_by_id(session, [product])
     payload = product.model_dump()
     payload["images"] = effective_images(images_map.get(product.id, []))
     payload["popularity_score"] = compute_popularity_score(
         payload.get("units_sold", 0), product.created_at
     )
+    _apply_category_fields(payload, product, categories)
     return ProductRead.model_validate(payload)
 
 
@@ -394,6 +458,7 @@ async def build_product_detail_read(session: Any, product: Product) -> ProductDe
         payload["images"] = variant_images
         variant_reads.append(ProductVariantRead.model_validate(payload))
 
+    categories = await _categories_by_id(session, [product])
     detail = product.model_dump()
     detail["popularity_score"] = compute_popularity_score(
         detail.get("units_sold", 0), product.created_at
@@ -405,6 +470,7 @@ async def build_product_detail_read(session: Any, product: Product) -> ProductDe
     ]
     detail["images"] = shared_images if shared_images else effective_images(all_images)
     detail["variants"] = [v.model_dump() for v in variant_reads]
+    _apply_category_fields(detail, product, categories)
     return ProductDetailRead.model_validate(detail)
 
 
@@ -415,6 +481,7 @@ async def build_product_reads(session: Any, products: list[Product]) -> list[Pro
 
     product_ids = [product.id for product in products if product.id is not None]
     images_map = await images_by_product_id(session, product_ids)
+    categories = await _categories_by_id(session, products)
     reads: list[ProductRead] = []
     for product in products:
         payload = product.model_dump()
@@ -422,5 +489,6 @@ async def build_product_reads(session: Any, products: list[Product]) -> list[Pro
         payload["popularity_score"] = compute_popularity_score(
             payload.get("units_sold", 0), product.created_at
         )
+        _apply_category_fields(payload, product, categories)
         reads.append(ProductRead.model_validate(payload))
     return reads

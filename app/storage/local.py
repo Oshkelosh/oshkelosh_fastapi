@@ -4,7 +4,7 @@ from pathlib import Path
 
 import aiofiles
 
-from app.config import Settings
+from app.config import LOCAL_MEDIA_MOUNT_PATH, Settings
 
 
 class LocalStorageBackend:
@@ -12,7 +12,6 @@ class LocalStorageBackend:
 
     def __init__(self, settings: Settings) -> None:
         self._dir = settings.local_media_path.resolve()
-        self._base_url = settings.local_media_base_url.rstrip("/")
         self._dir.mkdir(parents=True, exist_ok=True)
 
     def _normalize_key(self, key: str) -> str:
@@ -37,7 +36,8 @@ class LocalStorageBackend:
         return path
 
     def _url_for_key(self, key: str) -> str:
-        return f"{self._base_url}/{self._normalize_key(key)}"
+        """Root-relative URL so admin/storefront work on any browse host."""
+        return f"/{LOCAL_MEDIA_MOUNT_PATH}/{self._normalize_key(key)}"
 
     async def upload(
         self,

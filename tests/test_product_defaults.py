@@ -120,19 +120,17 @@ def test_enforce_immutable_product_fields_rejects_sku_change(test_user):
         supplier_value="",
         supplier_product_id="",
         supplier_variant_id="",
-        category_id=None,
     )
     assert error == "SKU cannot be changed after the product is created."
 
 
-def test_validate_api_product_update_rejects_sync_category_change():
+def test_validate_api_product_update_allows_sync_category_change():
     product = Product(
         name="Synced",
         category_id=1,
         tags=[{"supplier_sync": True, "supplier_external_key": "printful:variant:1"}],
     )
-    with pytest.raises(ValidationError, match="Category cannot be changed"):
-        validate_api_product_update(product, {"category_id": 2})
+    validate_api_product_update(product, {"category_id": 2})
 
 
 def test_validate_api_product_update_rejects_sku_change(test_user):

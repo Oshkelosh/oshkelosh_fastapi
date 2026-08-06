@@ -155,6 +155,18 @@ class ProductRead(BaseModel):
     )
     status: str
     category_id: Optional[int]
+    category: Optional[str] = Field(
+        default=None,
+        description="Category slug when category_id is set (alias of category_slug)",
+    )
+    category_slug: Optional[str] = Field(
+        default=None,
+        description="Category slug when category_id is set",
+    )
+    category_name: Optional[str] = Field(
+        default=None,
+        description="Category display name when category_id is set",
+    )
     has_variants: bool = False
     options: Dict[str, str] = Field(default_factory=dict)
     tags: List[Dict[str, Any]]
