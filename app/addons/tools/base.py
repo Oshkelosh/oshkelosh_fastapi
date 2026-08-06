@@ -67,6 +67,30 @@ class ToolAddon(BaseAddon):
         """Return public script descriptors for storefront injection."""
         return []
 
+    def list_storefront_nav_links(self) -> list[dict[str, str]]:
+        """Return public header/footer links ``[{label, href}, ...]`` when enabled."""
+        return []
+
+    def list_crawl_article_links(self, site_url: str) -> list[dict[str, str]]:
+        """Return article links ``[{label, href}, ...]`` for SEO catalog dropdowns."""
+        return []
+
+    def resolve_seo_meta(
+        self,
+        path: str,
+        *,
+        site_url: str,
+        store_name: str,
+        default_description: str | None = None,
+        logo_url: str | None = None,
+    ) -> dict[str, Any] | None:
+        """Return SEO fields for ``path`` (SeoMeta-shaped dict), or None."""
+        return None
+
+    def list_sitemap_entries(self, site_url: str) -> list[dict[str, str | None]]:
+        """Return sitemap rows ``[{loc, lastmod}, ...]`` for public tool pages."""
+        return []
+
     def supports_product_search(self) -> bool:
         """Whether this tool provides external product search."""
         return False

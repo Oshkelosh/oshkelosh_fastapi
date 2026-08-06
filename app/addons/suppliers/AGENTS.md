@@ -18,6 +18,7 @@ Category package for print-on-demand and fulfillment providers. Multiple supplie
 
 - Implement `SupplierAddon`; do not add provider `if` branches in `app/services/*.py`
 - Credentials and enable flags live in `addon_configs` (admin UI), not host `.env`
+- Shared packing-slip / gift settings live on the suppliers hub (+ Site Settings name/logo/email); provider-only branding stays on each addon page
 - Catalog sync DTOs:
   - Parent name/description from provider **product** fields
   - Variant title includes product/design name when the raw variant label is options-only
@@ -31,8 +32,8 @@ Category package for print-on-demand and fulfillment providers. Multiple supplie
 
 ## Prefer / Avoid
 
-- Prefer: extend the provider package + category ABC; reuse `shared_routes` / `catalog_utils`
-- Avoid: inventing manual shop IDs; putting secrets in host `.env`; editing host services for one provider
+- Prefer: extend the provider package + category ABC; reuse `shared_routes` / `catalog_utils`; map shared `gift_message` / `packing_slip` only when the provider API accepts them
+- Avoid: inventing manual shop IDs; putting secrets in host `.env`; editing host services for one provider; putting provider-only branding on the shared suppliers hub
 
 ## See also
 

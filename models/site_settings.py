@@ -203,3 +203,22 @@ class SiteSettings(ModelBase, table=True):
         default=DEFAULT_ABOUT_CONTACT_BODY,
         sa_column=Column(Text, nullable=True),
     )
+
+    # Shared supplier fulfillment branding (edited from Admin → Suppliers)
+    packing_slip_message: Optional[str] = Field(
+        default=None,
+        sa_column=Column(Text, nullable=True),
+    )
+    packing_slip_phone: Optional[str] = Field(
+        default=None,
+        sa_column=Column(String(64), nullable=True),
+    )
+    gift_messages_enabled: bool = Field(
+        default=False,
+        sa_column=Column(Boolean, nullable=False, server_default="0"),
+    )
+    gift_message_max_length: int = Field(
+        default=200,
+        ge=1,
+        sa_column=Column(Integer, nullable=False, server_default="200"),
+    )

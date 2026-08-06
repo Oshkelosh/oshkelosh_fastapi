@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 from xml.sax.saxutils import escape as xml_escape
 
 from sqlmodel import col, select
@@ -53,9 +54,11 @@ _DESCRIPTION_MAX = 160
 
 _CRAWL_HOME_CATEGORIES = 20
 _CRAWL_HOME_PRODUCTS = 20
+_CRAWL_HOME_ARTICLES = 20
 _CRAWL_PRODUCTS_LIST = 50
 _CRAWL_CATEGORY_PRODUCTS = 50
 _CRAWL_SIBLING_PRODUCTS = 20
+_CRAWL_ARTICLES = 50
 
 
 @dataclass
@@ -70,7 +73,10 @@ class SeoMeta:
     site_name: str | None = None
     robots: str = "index, follow"
     json_ld: list[dict[str, Any]] = field(default_factory=list)
-    crawl_links: list[tuple[str, str]] = field(default_factory=list)
+    crawl_hubs: list[tuple[str, str]] = field(default_factory=list)
+    crawl_products: list[tuple[str, str]] = field(default_factory=list)
+    crawl_categories: list[tuple[str, str]] = field(default_factory=list)
+    crawl_articles: list[tuple[str, str]] = field(default_factory=list)
 
 
 def resolve_site_url(request: Request, site_settings: SiteSettings) -> str:
@@ -241,10 +247,87 @@ def build_product_json_ld(
 
 
 def _hub_links(site_url: str) -> list[tuple[str, str]]:
-    return [
+    links: list[tuple[str, str]] = [
         ("Products", f"{site_url}/products"),
         ("Categories", f"{site_url}/categories"),
     ]
+    try:
+        from app.services.tool_discovery import list_storefront_nav_links
+
+        for entry in list_storefront_nav_links():
+            label = str(entry.get("label") or "").strip()
+            href = str(entry.get("href") or "").strip()
+            if not label or not href:
+                continue
+            absolute = href if href.startswith("http") else f"{site_url.rstrip('/')}{href}"
+            links.append((label, absolute))
+    except Exception:
+        pass
+    return links
+
+
+def _seo_meta_from_tool_dict(raw: dict[str, Any]) -> SeoMeta:
+    def _parse_links(value: Any) -> list[tuple[str, str]]:
+        links: list[tuple[str, str]] = []
+        for item in value or []:
+            if isinstance(item, (list, tuple)) and len(item) >= 2:
+                links.append((str(item[0]), str(item[1])))
+            elif isinstance(item, dict) and item.get("label") and item.get("href"):
+                links.append((str(item["label"]), str(item["href"])))
+        return links
+
+    hubs = _parse_links(raw.get("crawl_hubs"))
+    products = _parse_links(raw.get("crawl_products"))
+    categories = _parse_links(raw.get("crawl_categories"))
+    articles = _parse_links(raw.get("crawl_articles"))
+    # Legacy flat crawl_links: classify by path.
+    if not hubs and not products and not categories and not articles:
+        for label, href in _parse_links(raw.get("crawl_links")):
+            path = urlparse(href).path.rstrip("/") or "/"
+            if path.startswith("/products/") and path != "/products":
+                products.append((label, href))
+            elif path.startswith("/categories/") and path != "/categories":
+                categories.append((label, href))
+            elif path.startswith("/articles/") and path != "/articles":
+                articles.append((label, href))
+            else:
+                hubs.append((label, href))
+
+    json_ld = raw.get("json_ld") or []
+    if not isinstance(json_ld, list):
+        json_ld = []
+    return SeoMeta(
+        title=str(raw.get("title") or ""),
+        description=raw.get("description"),
+        canonical_url=str(raw.get("canonical_url") or ""),
+        og_type=str(raw.get("og_type") or "website"),
+        og_image=raw.get("og_image"),
+        site_name=raw.get("site_name"),
+        robots=str(raw.get("robots") or "index, follow"),
+        json_ld=list(json_ld),
+        crawl_hubs=hubs,
+        crawl_products=products,
+        crawl_categories=categories,
+        crawl_articles=articles,
+    )
+
+
+def _attach_crawl_articles(
+    meta: SeoMeta,
+    site_url: str,
+    *,
+    limit: int = _CRAWL_HOME_ARTICLES,
+) -> SeoMeta:
+    """Seed tool article links into crawl menus (noindex pages untouched)."""
+    if meta.robots.startswith("noindex"):
+        return meta
+    from app.services.tool_discovery import list_tool_crawl_article_links
+
+    seeded = list_tool_crawl_article_links(site_url)[:limit]
+    if not seeded and not meta.crawl_articles:
+        return meta
+    meta.crawl_articles = _dedupe_links([*meta.crawl_articles, *seeded])
+    return meta
 
 
 def _product_link(site_url: str, product: Product) -> tuple[str, str] | None:
@@ -345,39 +428,44 @@ async def resolve_meta_for_path(
         products = await _load_published_products(
             session, limit=_CRAWL_HOME_PRODUCTS, popular=True
         )
-        crawl_links = _dedupe_links(
-            [
-                *_hub_links(site_url),
-                *[_category_link(site_url, cat) for cat in categories],
-                *[
-                    link
-                    for product in products
-                    if (link := _product_link(site_url, product)) is not None
-                ],
-            ]
-        )
-        return SeoMeta(
+        return _attach_crawl_articles(
+            SeoMeta(
             title=store_name,
             description=default_description,
             canonical_url=f"{site_url}/",
             site_name=store_name,
             og_image=logo,
             json_ld=[build_organization_json_ld(site_settings, site_url)],
-            crawl_links=crawl_links,
+            crawl_hubs=_dedupe_links(_hub_links(site_url)),
+            crawl_categories=_dedupe_links(
+                [_category_link(site_url, cat) for cat in categories]
+            ),
+            crawl_products=_dedupe_links(
+                [
+                    link
+                    for product in products
+                    if (link := _product_link(site_url, product)) is not None
+                ]
+            ),
+        ),
+            site_url,
+            limit=_CRAWL_HOME_ARTICLES,
         )
 
     if normalized == "/products":
         products = await _load_published_products(
             session, limit=_CRAWL_PRODUCTS_LIST, popular=True
         )
-        product_links = [
-            link
-            for product in products
-            if (link := _product_link(site_url, product)) is not None
-        ]
-        crawl_links = _dedupe_links([*_hub_links(site_url), *product_links])
+        product_links = _dedupe_links(
+            [
+                link
+                for product in products
+                if (link := _product_link(site_url, product)) is not None
+            ]
+        )
         canonical = f"{site_url}/products"
-        return SeoMeta(
+        return _attach_crawl_articles(
+            SeoMeta(
             title=f"Products | {store_name}",
             description=default_description or f"Browse products at {store_name}",
             canonical_url=canonical,
@@ -390,20 +478,30 @@ async def resolve_meta_for_path(
                     product_links,
                 )
             ],
-            crawl_links=crawl_links,
+            crawl_hubs=_dedupe_links(_hub_links(site_url)),
+            crawl_products=product_links,
+        ),
+            site_url,
+            limit=_CRAWL_HOME_ARTICLES,
         )
 
     if normalized == "/categories":
         categories = await _load_categories(session)
-        category_links = [_category_link(site_url, cat) for cat in categories]
-        crawl_links = _dedupe_links([*_hub_links(site_url), *category_links])
-        return SeoMeta(
+        category_links = _dedupe_links(
+            [_category_link(site_url, cat) for cat in categories]
+        )
+        return _attach_crawl_articles(
+            SeoMeta(
             title=f"Categories | {store_name}",
             description=default_description or f"Browse categories at {store_name}",
             canonical_url=f"{site_url}/categories",
             site_name=store_name,
             og_image=logo,
-            crawl_links=crawl_links,
+            crawl_hubs=_dedupe_links(_hub_links(site_url)),
+            crawl_categories=category_links,
+        ),
+            site_url,
+            limit=_CRAWL_HOME_ARTICLES,
         )
 
     if normalized == "/privacy":
@@ -506,23 +604,19 @@ async def resolve_meta_for_path(
                 popular=True,
             )
 
-        crawl_links = _dedupe_links(
+        crawl_categories = (
+            [_category_link(site_url, category)] if category is not None else []
+        )
+        crawl_products = _dedupe_links(
             [
-                *_hub_links(site_url),
-                *(
-                    [_category_link(site_url, category)]
-                    if category is not None
-                    else []
-                ),
-                *[
-                    link
-                    for sibling in siblings
-                    if (link := _product_link(site_url, sibling)) is not None
-                ],
+                link
+                for sibling in siblings
+                if (link := _product_link(site_url, sibling)) is not None
             ]
         )
 
-        return SeoMeta(
+        return _attach_crawl_articles(
+            SeoMeta(
             title=truncate_text(title, _TITLE_MAX) or title,
             description=description,
             canonical_url=canonical,
@@ -540,7 +634,12 @@ async def resolve_meta_for_path(
                 ),
                 build_breadcrumb_json_ld(breadcrumbs),
             ],
-            crawl_links=crawl_links,
+            crawl_hubs=_dedupe_links(_hub_links(site_url)),
+            crawl_products=crawl_products,
+            crawl_categories=crawl_categories,
+        ),
+            site_url,
+            limit=_CRAWL_HOME_ARTICLES,
         )
 
     if normalized.startswith("/categories/"):
@@ -582,24 +681,19 @@ async def resolve_meta_for_path(
             category_id=category.id,
             popular=True,
         )
-        product_links = [
-            link
-            for product in products
-            if (link := _product_link(site_url, product)) is not None
-        ]
-        crawl_links = _dedupe_links(
+        product_links = _dedupe_links(
             [
-                *_hub_links(site_url),
-                *(
-                    [_category_link(site_url, parent)]
-                    if parent is not None
-                    else []
-                ),
-                *product_links,
+                link
+                for product in products
+                if (link := _product_link(site_url, product)) is not None
             ]
         )
+        crawl_categories = (
+            [_category_link(site_url, parent)] if parent is not None else []
+        )
 
-        return SeoMeta(
+        return _attach_crawl_articles(
+            SeoMeta(
             title=truncate_text(title, _TITLE_MAX) or title,
             description=description,
             canonical_url=canonical,
@@ -613,7 +707,12 @@ async def resolve_meta_for_path(
                     product_links,
                 ),
             ],
-            crawl_links=crawl_links,
+            crawl_hubs=_dedupe_links(_hub_links(site_url)),
+            crawl_products=product_links,
+            crawl_categories=crawl_categories,
+        ),
+            site_url,
+            limit=_CRAWL_HOME_ARTICLES,
         )
 
     if is_private_path(normalized):
@@ -624,6 +723,20 @@ async def resolve_meta_for_path(
             site_name=store_name,
             robots="noindex, nofollow",
         )
+
+    from app.services.tool_discovery import resolve_tool_seo_meta
+
+    tool_meta = resolve_tool_seo_meta(
+        normalized,
+        site_url=site_url,
+        store_name=store_name,
+        default_description=default_description,
+        logo_url=logo,
+    )
+    if tool_meta is not None:
+        meta = _seo_meta_from_tool_dict(tool_meta)
+        meta.crawl_hubs = _dedupe_links([*_hub_links(site_url), *meta.crawl_hubs])
+        return _attach_crawl_articles(meta, site_url, limit=_CRAWL_ARTICLES)
 
     return None
 
@@ -646,19 +759,187 @@ def inject_seo_into_html(page_html: str, meta: SeoMeta) -> str:
     return updated
 
 
-def _render_crawl_nav(meta: SeoMeta) -> str:
-    """Render a visible catalog link block for crawlers (and users)."""
-    if not meta.crawl_links:
-        return ""
-    items = "\n".join(
+def _render_link_items(links: list[tuple[str, str]]) -> str:
+    return "\n".join(
         f'<li><a href="{html.escape(href)}">{html.escape(label)}</a></li>'
-        for label, href in meta.crawl_links
+        for label, href in links
     )
+
+
+def _origin_from_meta(meta: SeoMeta) -> str:
+    for _, href in (
+        *meta.crawl_hubs,
+        *meta.crawl_products,
+        *meta.crawl_categories,
+        *meta.crawl_articles,
+    ):
+        parsed = urlparse(href)
+        if parsed.scheme and parsed.netloc:
+            return f"{parsed.scheme}://{parsed.netloc}"
+    if meta.canonical_url:
+        parsed = urlparse(meta.canonical_url)
+        if parsed.scheme and parsed.netloc:
+            return f"{parsed.scheme}://{parsed.netloc}"
+    return ""
+
+
+def _hub_for_path(
+    hubs: list[tuple[str, str]],
+    path: str,
+    *,
+    default_label: str,
+    origin: str,
+) -> tuple[str, str]:
+    for label, href in hubs:
+        if (urlparse(href).path.rstrip("/") or "/") == path:
+            return label, href
+    return default_label, f"{origin}{path}" if origin else path
+
+
+def _render_hub_with_menu(
+    hub: tuple[str, str],
+    links: list[tuple[str, str]],
+    *,
+    menu_label: str,
+) -> str:
+    """One hub link with an optional caret ``<details>`` list beside it."""
+    label, href = hub
+    link_html = f'<a href="{html.escape(href)}">{html.escape(label)}</a>'
+    if not links:
+        return f'<div class="seo-catalog-nav__item">{link_html}</div>'
     return (
-        '<nav aria-label="Catalog" class="seo-catalog-nav">'
-        "<p>Browse</p>"
-        f"<ul>\n{items}\n</ul>"
+        '<div class="seo-catalog-nav__item">'
+        f"{link_html}"
+        '<details class="seo-catalog-nav__menu">'
+        f'<summary aria-label="{html.escape(menu_label)}">'
+        '<span aria-hidden="true">▾</span>'
+        "</summary>"
+        f"<ul>\n{_render_link_items(links)}\n</ul>"
+        "</details>"
+        "</div>"
+    )
+
+
+def _render_crawl_nav(meta: SeoMeta) -> str:
+    """Render a compact catalog strip: one hub link + caret menu per section.
+
+    Product/category/article ``<a href>`` lists stay in HTML inside ``<details>``
+    when collapsed (crawlable). Hub labels are not duplicated as menu titles.
+    """
+    if not (
+        meta.crawl_hubs
+        or meta.crawl_products
+        or meta.crawl_categories
+        or meta.crawl_articles
+    ):
+        return ""
+
+    origin = _origin_from_meta(meta)
+    products_hub = _hub_for_path(
+        meta.crawl_hubs, "/products", default_label="Products", origin=origin
+    )
+    categories_hub = _hub_for_path(
+        meta.crawl_hubs, "/categories", default_label="Categories", origin=origin
+    )
+    articles_hub = _hub_for_path(
+        meta.crawl_hubs, "/articles", default_label="Articles", origin=origin
+    )
+    reserved = {"/products", "/categories", "/articles"}
+    other_hubs = [
+        (label, href)
+        for label, href in meta.crawl_hubs
+        if (urlparse(href).path.rstrip("/") or "/") not in reserved
+    ]
+
+    items = [
+        _render_hub_with_menu(
+            products_hub, meta.crawl_products, menu_label="Show products"
+        ),
+        _render_hub_with_menu(
+            categories_hub, meta.crawl_categories, menu_label="Show categories"
+        ),
+    ]
+    if (
+        any(
+            (urlparse(href).path.rstrip("/") or "/") == "/articles"
+            for _, href in meta.crawl_hubs
+        )
+        or meta.crawl_articles
+    ):
+        items.append(
+            _render_hub_with_menu(
+                articles_hub, meta.crawl_articles, menu_label="Show articles"
+            )
+        )
+    for label, href in other_hubs:
+        items.append(
+            '<div class="seo-catalog-nav__item">'
+            f'<a href="{html.escape(href)}">{html.escape(label)}</a>'
+            "</div>"
+        )
+
+    return (
+        '<nav id="seo-catalog-nav" aria-label="Catalog" class="seo-catalog-nav">'
+        '<div class="seo-catalog-nav__inner">'
+        f'{"".join(items)}'
+        "</div>"
         "</nav>"
+        "<style>"
+        ".seo-catalog-nav{"
+        "background:transparent;"
+        "color:#64748b;"
+        "font:0.875rem/1.4 system-ui,sans-serif;"
+        "padding:0;"
+        "margin:0;"
+        "}"
+        ".seo-catalog-nav__inner{"
+        "display:flex;"
+        "flex-wrap:wrap;"
+        "align-items:center;"
+        "justify-content:flex-start;"
+        "gap:0.75rem 1.25rem;"
+        "}"
+        ".seo-catalog-nav__item{"
+        "display:inline-flex;"
+        "align-items:center;"
+        "gap:0.25rem;"
+        "position:relative;"
+        "}"
+        ".seo-catalog-nav__menu{position:relative}"
+        ".seo-catalog-nav__menu summary{"
+        "cursor:pointer;"
+        "list-style:none;"
+        "display:inline-flex;"
+        "align-items:center;"
+        "padding:0.1rem 0.2rem;"
+        "border-radius:4px;"
+        "user-select:none;"
+        "}"
+        ".seo-catalog-nav__menu summary::-webkit-details-marker{display:none}"
+        ".seo-catalog-nav__menu summary::marker{content:''}"
+        ".seo-catalog-nav__menu[open] summary{background:#e2e8f0}"
+        ".seo-catalog-nav__menu ul{"
+        "list-style:none;"
+        "margin:0;"
+        "padding:0.5rem 0.75rem;"
+        "position:absolute;"
+        "left:0;"
+        "bottom:calc(100% + 0.35rem);"
+        "z-index:20;"
+        "min-width:12rem;"
+        "max-width:min(90vw,22rem);"
+        "max-height:16rem;"
+        "overflow:auto;"
+        "background:#fff;"
+        "border:1px solid #e2e8f0;"
+        "border-radius:6px;"
+        "box-shadow:0 4px 14px rgba(15,23,42,0.08);"
+        "}"
+        ".seo-catalog-nav li{margin:0 0 0.35rem;break-inside:avoid}"
+        ".seo-catalog-nav li:last-child{margin-bottom:0}"
+        ".seo-catalog-nav a{color:inherit;text-decoration:none}"
+        ".seo-catalog-nav a:hover{text-decoration:underline}"
+        "</style>"
     )
 
 
@@ -764,10 +1045,12 @@ def render_sitemap_xml(
     categories: list[Category],
     privacy_policy: tuple[str, str | None] | None = None,
     about_page: tuple[str, str | None] | None = None,
+    extra_entries: list[tuple[str, str | None]] | None = None,
 ) -> str:
     """Render sitemap.xml for public catalog URLs.
 
     ``privacy_policy`` / ``about_page`` are optional ``(loc, lastmod)`` entries.
+    ``extra_entries`` appends tool-contributed locs (e.g. articles).
     """
     entries: list[tuple[str, str | None]] = [
         (f"{site_url}/", None),
@@ -785,6 +1068,8 @@ def render_sitemap_xml(
         entries.append(
             (f"{site_url}/categories/{category.slug}", _format_lastmod(category.updated_at))
         )
+    if extra_entries:
+        entries.extend(extra_entries)
 
     lines = [
         '<?xml version="1.0" encoding="UTF-8"?>',

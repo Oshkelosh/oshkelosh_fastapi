@@ -232,6 +232,9 @@ class ManualSupplierAddon(SupplierAddon):
             "is_active": row.is_active,
         }
 
+    def supports_gift_message(self) -> bool:
+        return True
+
     async def create_order(
         self,
         items: List[Dict[str, Any]],
@@ -241,8 +244,10 @@ class ManualSupplierAddon(SupplierAddon):
         supplier_ref: str | None = None,
         shipping_method: str | None = None,
         currency: str | None = None,
+        gift_message: str | None = None,
+        packing_slip: Dict[str, Any] | None = None,
     ) -> Dict[str, Any]:
-        del shipping_method, currency
+        del shipping_method, currency, packing_slip
         if not supplier_ref:
             return {"success": False, "error": "manual_supplier_slug is required"}
 
@@ -276,6 +281,8 @@ class ManualSupplierAddon(SupplierAddon):
             "shipping_address": shipping_address,
             "status": "pending_manual_fulfillment",
         }
+        if gift_message and gift_message.strip():
+            payload["gift_message"] = gift_message.strip()
         info("Manual", "Fulfillment task for order {} → {} ({} items)",
             external_id,
             supplier.slug,

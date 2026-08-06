@@ -175,7 +175,80 @@ async def admin_suppliers_list(request: Request, db=Depends(require_admin_sessio
         extra_context={
             "syncable_count": syncable_count,
             "active_sync_job": active_job,
+            **await _supplier_branding_context(db),
         },
+    )
+
+
+async def _supplier_branding_context(db) -> dict[str, Any]:
+    """Shared packing-slip / gift settings + which enabled addons support them."""
+    from app.addons.registry import addon_registry
+    from app.services.site_settings import get_site_settings
+
+    packing_supporters: list[str] = []
+    gift_supporters: list[str] = []
+    for addon in addon_registry.get_enabled("supplier"):
+        if getattr(addon, "supports_shared_packing_slip", lambda: False)():
+            packing_supporters.append(addon.addon_name)
+        if getattr(addon, "supports_gift_message", lambda: False)():
+            gift_supporters.append(addon.addon_name)
+
+    site = None
+    if db is not None:
+        try:
+            site = await get_site_settings(db)
+        except Exception:
+            site = None
+
+    return {
+        "supplier_branding": {
+            "packing_slip_message": getattr(site, "packing_slip_message", None) or "",
+            "packing_slip_phone": getattr(site, "packing_slip_phone", None) or "",
+            "gift_messages_enabled": bool(getattr(site, "gift_messages_enabled", False)),
+            "gift_message_max_length": int(getattr(site, "gift_message_max_length", 200) or 200),
+            "store_name": getattr(site, "store_name", "") or "",
+            "logo_url": getattr(site, "logo_url", None) or "",
+            "support_email": getattr(site, "support_email", None) or "",
+            "packing_supporters": packing_supporters,
+            "gift_supporters": gift_supporters,
+        }
+    }
+
+
+@router.post("/suppliers/branding/save")
+async def admin_suppliers_branding_save(
+    request: Request,
+    packing_slip_message: str = Form("", max_length=L.TEXT_LEN),
+    packing_slip_phone: str = Form("", max_length=64),
+    gift_messages_enabled: str = Form(""),
+    gift_message_max_length: str = Form("200", max_length=8),
+    csrf_token: str = Form(..., max_length=128),
+    db=Depends(require_admin_session),
+):
+    from app.services.site_settings import update_site_settings
+
+    _require_csrf(request, csrf_token)
+    if db is None:
+        return _render_error(request, "Database unavailable", status.HTTP_503_SERVICE_UNAVAILABLE)
+
+    try:
+        max_len = max(1, min(2000, int(gift_message_max_length or "200")))
+    except ValueError:
+        max_len = 200
+
+    await update_site_settings(
+        db,
+        {
+            "packing_slip_message": packing_slip_message.strip() or None,
+            "packing_slip_phone": packing_slip_phone.strip() or None,
+            "gift_messages_enabled": gift_messages_enabled,
+            "gift_message_max_length": max_len,
+        },
+    )
+    await db.commit()
+    return set_flash_cookie(
+        RedirectResponse(url=f"{settings.admin_prefix}/suppliers", status_code=303),
+        "Supplier branding settings saved",
     )
 
 

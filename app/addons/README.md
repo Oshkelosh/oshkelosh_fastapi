@@ -347,6 +347,8 @@ Or call `persist_addon_config()` directly from your own code paths.
 | Lifecycle marketing fan-out | `app/services/lifecycle_events.py` | `ToolAddon.on_lifecycle_event()` |
 | Commerce measurement (purchase) | `app/services/tool_discovery.py` | `ToolAddon.on_commerce_event()` |
 | Storefront tool scripts | `app/services/tool_discovery.py` | `ToolAddon.list_storefront_scripts()` → `storefront/config.tools` |
+| Storefront tool nav links | `app/services/tool_discovery.py` | `ToolAddon.list_storefront_nav_links()` → `storefront/config.tools.nav_links` |
+| Tool SEO / sitemap | `app/services/tool_discovery.py` | `ToolAddon.resolve_seo_meta()` / `list_sitemap_entries()` → core SEO |
 | Abandoned cart job | `app/services/abandoned_cart.py` | Core notification + lifecycle; CRM tools via `cart.abandoned` |
 | Product search | `app/services/product_search.py` | Core ILIKE; optional `ToolAddon.search_products()` |
 | Order status → paid (supplier-linked variants) | `app/services/fulfillment.py` | `SupplierAddon.create_order()` per variant assignment |

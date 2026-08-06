@@ -23,3 +23,7 @@ class StorageBackend(Protocol):
     async def get_url(self, key: str, expires_in: int = 3600) -> str:
         """Return a URL to access the object (presigned for R2, direct for local)."""
         ...
+
+    async def download(self, key: str) -> bytes:
+        """Return object bytes, or raise FileNotFoundError if missing."""
+        ...

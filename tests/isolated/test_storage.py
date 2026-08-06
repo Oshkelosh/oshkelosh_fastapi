@@ -73,6 +73,19 @@ async def test_local_storage_rejects_traversal_and_absolute_keys(local_storage):
 
 
 @pytest.mark.asyncio
+async def test_local_storage_download(local_storage):
+    backend, tmp_path = local_storage
+    key = "articles/hello/body.md"
+    await backend.upload(key, b"# Hello\n", "text/markdown")
+
+    data = await backend.download(key)
+    assert data == b"# Hello\n"
+
+    with pytest.raises(FileNotFoundError):
+        await backend.download("articles/missing/body.md")
+
+
+@pytest.mark.asyncio
 async def test_local_storage_delete(local_storage):
     backend, tmp_path = local_storage
     key = "products/remove-me.png"

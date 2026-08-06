@@ -78,3 +78,20 @@ class R2Service:
         except Exception as e:
             logger.error("Failed to delete %s: %s", key, e)
             return False
+
+    async def get_bytes(self, key: str) -> bytes:
+        """Download object bytes from R2 (boto3 call off-loop)."""
+        from botocore.exceptions import ClientError
+
+        def _get() -> bytes:
+            try:
+                response = self.client.get_object(Bucket=self.bucket, Key=key)
+            except ClientError as exc:
+                code = str(exc.response.get("Error", {}).get("Code", ""))
+                if code in {"404", "NoSuchKey", "NotFound"}:
+                    raise FileNotFoundError(f"Media not found: {key}") from exc
+                raise
+            body = response["Body"].read()
+            return body if isinstance(body, bytes) else bytes(body)
+
+        return await asyncio.to_thread(_get)

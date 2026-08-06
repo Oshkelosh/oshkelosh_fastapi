@@ -58,7 +58,14 @@ class LocalStorageBackend:
 
     async def get_url(self, key: str, expires_in: int = 3600) -> str:
         del expires_in
-        path = self._path_for_key(key)
-        if not path.exists():
+        path = self._dir / self._normalize_key(key)
+        if not path.is_file():
             raise FileNotFoundError(f"Media not found: {key}")
         return self._url_for_key(key)
+
+    async def download(self, key: str) -> bytes:
+        path = self._dir / self._normalize_key(key)
+        if not path.is_file():
+            raise FileNotFoundError(f"Media not found: {key}")
+        async with aiofiles.open(path, "rb") as f:
+            return await f.read()

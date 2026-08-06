@@ -121,6 +121,10 @@ async def update_site_settings(session: Any, data: dict) -> SiteSettings:
         "about_page_title",
         "about_page_body",
         "about_contact_body",
+        "packing_slip_message",
+        "packing_slip_phone",
+        "gift_messages_enabled",
+        "gift_message_max_length",
     }
     optional_fields = {
         "logo_url",
@@ -134,6 +138,8 @@ async def update_site_settings(session: Any, data: dict) -> SiteSettings:
         "privacy_policy_effective_date",
         "about_page_body",
         "about_contact_body",
+        "packing_slip_message",
+        "packing_slip_phone",
     }
     bool_fields = {
         "tax_enabled",
@@ -142,6 +148,7 @@ async def update_site_settings(session: Any, data: dict) -> SiteSettings:
         "gdpr_banner_enabled",
         "privacy_policy_enabled",
         "about_page_enabled",
+        "gift_messages_enabled",
     }
     json_list_fields = {"tax_zones_json", "shipping_zones_json"}
 
@@ -167,6 +174,8 @@ async def update_site_settings(session: Any, data: dict) -> SiteSettings:
                 setattr(row, key, max(0, int(value)))
         elif key in ("abandoned_cart_delay_hours", "abandoned_cart_max_reminders"):
             setattr(row, key, max(1, int(value)))
+        elif key == "gift_message_max_length":
+            setattr(row, key, max(1, min(2000, int(value))))
         elif key == "shop_currency":
             setattr(row, key, normalize_currency(str(value) if value is not None else None))
         elif key == "privacy_policy_title":
@@ -219,7 +228,27 @@ def site_settings_to_dict(row: SiteSettings) -> dict:
         "about_page_title": row.about_page_title,
         "about_page_body": row.about_page_body,
         "about_contact_body": row.about_contact_body,
+        "packing_slip_message": row.packing_slip_message,
+        "packing_slip_phone": row.packing_slip_phone,
+        "gift_messages_enabled": row.gift_messages_enabled,
+        "gift_message_max_length": row.gift_message_max_length,
     }
+
+
+def packing_slip_from_site_settings(row: SiteSettings) -> dict[str, str]:
+    """Build shared packing-slip fields for supplier create_order."""
+    slip: dict[str, str] = {}
+    if row.store_name and row.store_name.strip():
+        slip["store_name"] = row.store_name.strip()
+    if row.logo_url and row.logo_url.strip():
+        slip["logo_url"] = row.logo_url.strip()
+    if row.support_email and row.support_email.strip():
+        slip["email"] = row.support_email.strip()
+    if row.packing_slip_phone and row.packing_slip_phone.strip():
+        slip["phone"] = row.packing_slip_phone.strip()
+    if row.packing_slip_message and row.packing_slip_message.strip():
+        slip["message"] = row.packing_slip_message.strip()
+    return slip
 
 
 def site_settings_to_public_dict(

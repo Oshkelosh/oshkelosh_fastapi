@@ -73,12 +73,19 @@ The asymmetry is deliberate: API integrations need code and secrets; manual part
 | `list_products(**kwargs)` | Raw catalog passthrough for API routes |
 | `get_product(product_id)` | Single product |
 | `create_order(items, shipping_address, ...)` | Place fulfillment order |
+| `supports_shared_packing_slip()` | Whether shared packing-slip defaults apply |
+| `supports_gift_message()` | Whether customer gift notes are forwarded |
 | `supports_shipping_quotes()` | Whether this addon can quote shipping for checkout |
 | `quote_shipping(items, shipping_address)` | Return shipping cents for a fulfillment group, or `None` to defer to Site Settings |
 | `get_order_status(order_id)` | Track shipment |
 | `sync_inventory()` | Sync stock levels |
 
-`create_order` receives line items as `{supplier_product_id, supplier_variant_id?, quantity, product_name?}` plus optional `external_id` (Oshkelosh order id) and `supplier_ref` (manual supplier slug).
+`create_order` receives line items as `{supplier_product_id, supplier_variant_id?, quantity, product_name?}` plus optional `external_id` (Oshkelosh order id), `supplier_ref` (manual supplier slug), `gift_message`, and `packing_slip` (`store_name`, `logo_url`, `email`, `phone`, `message` from Site Settings / suppliers hub).
+
+## Fulfillment branding (two layers)
+
+1. **Shared** — Admin → Suppliers hub: packing-slip thank-you message, packing-slip phone, gift-message enable/max length. Store name / logo / support email come from Site Settings. Core passes these into `create_order` for every group; addons that return `supports_*` true map them to the provider API.
+2. **Per-supplier only** — each addon’s own config page (inside labels, branding asset URLs, insert product UIDs, neck tags, etc.). Never put these on the shared hub.
 
 ## Fulfillment flow
 
@@ -87,7 +94,7 @@ On `paid`, [`fulfillment.py`](../../services/fulfillment.py):
 1. Loads each order line's `ProductVariant`.
 2. Calls `supplier_assignment_from_variant()` in [`product_variants.py`](../../services/product_variants.py).
 3. Groups items by `fulfillment_key()`.
-4. Calls `create_order()` per group.
+4. Calls `create_order()` per group with shared `gift_message` / `packing_slip`.
 
 Lines without a variant supplier assignment skip supplier fulfillment (digital / self-fulfilled products).
 

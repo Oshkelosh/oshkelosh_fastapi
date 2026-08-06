@@ -59,6 +59,50 @@
 </div>
 
 <div class="card" style="margin-bottom:24px;">
+  <h3 style="margin-top:0;">Fulfillment branding</h3>
+  <p style="color:var(--clr-text-muted);margin-bottom:12px;font-size:14px;">
+    Shared packing-slip defaults and checkout gift messages. Store name, logo, and support email
+    come from <a href="{{ admin_prefix }}/settings">Site Settings</a>
+    {% if supplier_branding.store_name %}
+    (currently <strong>{{ supplier_branding.store_name }}</strong>{% if supplier_branding.support_email %}, {{ supplier_branding.support_email }}{% endif %}).
+    {% else %}
+    .
+    {% endif %}
+    Applied only to suppliers whose API accepts these fields.
+  </p>
+  {% if supplier_branding.packing_supporters %}
+  <p style="font-size:13px;margin:0 0 8px;">Packing slip: {{ supplier_branding.packing_supporters | join(', ') }}</p>
+  {% else %}
+  <p style="font-size:13px;color:var(--clr-text-muted);margin:0 0 8px;">No enabled suppliers support shared packing slips yet.</p>
+  {% endif %}
+  {% if supplier_branding.gift_supporters %}
+  <p style="font-size:13px;margin:0 0 16px;">Gift messages: {{ supplier_branding.gift_supporters | join(', ') }}</p>
+  {% else %}
+  <p style="font-size:13px;color:var(--clr-text-muted);margin:0 0 16px;">No enabled suppliers support gift messages yet.</p>
+  {% endif %}
+  <form method="POST" action="{{ admin_prefix }}/suppliers/branding/save" class="form" style="max-width:560px;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div class="form-group">
+      <label class="form-label" for="packing_slip_message">Packing slip thank-you message</label>
+      <textarea id="packing_slip_message" name="packing_slip_message" class="form-textarea" rows="3">{{ supplier_branding.packing_slip_message }}</textarea>
+    </div>
+    <div class="form-group">
+      <label class="form-label" for="packing_slip_phone">Packing slip phone</label>
+      <input type="text" id="packing_slip_phone" name="packing_slip_phone" class="form-input" value="{{ supplier_branding.packing_slip_phone }}" maxlength="64">
+    </div>
+    <label style="display:flex;align-items:center;gap:8px;margin-bottom:12px;font-size:14px;">
+      <input type="checkbox" name="gift_messages_enabled" value="on" {% if supplier_branding.gift_messages_enabled %}checked{% endif %}>
+      Enable gift messages at checkout
+    </label>
+    <div class="form-group">
+      <label class="form-label" for="gift_message_max_length">Gift message max length</label>
+      <input type="number" id="gift_message_max_length" name="gift_message_max_length" class="form-input" min="1" max="2000" value="{{ supplier_branding.gift_message_max_length }}">
+    </div>
+    <button type="submit" class="btn btn--primary btn--sm">Save branding</button>
+  </form>
+</div>
+
+<div class="card" style="margin-bottom:24px;">
   <h3 style="margin-top:0;">Manual suppliers</h3>
   <p style="color:var(--clr-text-muted);margin-bottom:12px;">
     Define suppliers you fulfill yourself without an external API.

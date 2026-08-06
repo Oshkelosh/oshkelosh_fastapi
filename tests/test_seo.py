@@ -153,9 +153,9 @@ async def test_product_page_html_injection(client, db_session, test_product: Pro
     assert '"@type": "Product"' in body
     assert '"@type": "Offer"' in body
     assert 'aria-label="Catalog"' in body
-    assert 'href="https://shop.example.com/products"' in body
-    assert 'href="https://shop.example.com/categories"' in body
     assert 'href="https://shop.example.com/categories/test-category"' in body
+    assert 'aria-label="Show categories"' in body
+    assert "<details" in body
     assert '"@type": "BreadcrumbList"' in body
     assert '"Categories"' in body
     assert '"category": "Test Category"' in body
@@ -182,6 +182,8 @@ async def test_products_list_injects_collection_and_crawl_links(client, db_sessi
     assert '"@type": "ItemList"' in body
     assert 'aria-label="Catalog"' in body
     assert 'href="https://shop.example.com/products/listed-product"' in body
+    assert "<details" in body
+    assert 'aria-label="Show products"' in body
 
 
 @pytest.mark.asyncio
@@ -431,9 +433,15 @@ def test_inject_seo_into_html_replaces_title_and_adds_meta():
         og_type="product",
         site_name="Test Shop",
         json_ld=[{"@type": "Product", "name": "Foo"}],
-        crawl_links=[
+        crawl_hubs=[
             ("Products", "https://shop.example.com/products"),
+            ("Categories", "https://shop.example.com/categories"),
+        ],
+        crawl_products=[
             ("Foo", "https://shop.example.com/products/foo"),
+        ],
+        crawl_categories=[
+            ("Apparel", "https://shop.example.com/categories/apparel"),
         ],
     )
     result = inject_seo_into_html(html, meta)
@@ -445,8 +453,34 @@ def test_inject_seo_into_html_replaces_title_and_adds_meta():
     assert 'name="twitter:title" content="New Title"' in result
     assert '"@type": "Product"' in result
     assert 'aria-label="Catalog"' in result
+    assert 'id="seo-catalog-nav"' in result
     assert 'href="https://shop.example.com/products/foo"' in result
+    assert "<details" in result
+    assert 'aria-label="Show products"' in result
+    assert 'aria-label="Show categories"' in result
     assert result.index('aria-label="Catalog"') < result.index("</body>")
+
+
+def test_render_crawl_nav_includes_articles_dropdown():
+    from app.storefront.seo import _render_crawl_nav
+
+    html = _render_crawl_nav(
+        SeoMeta(
+            title="Shop",
+            crawl_hubs=[
+                ("Products", "https://shop.example.com/products"),
+                ("Categories", "https://shop.example.com/categories"),
+                ("Articles", "https://shop.example.com/articles"),
+            ],
+            crawl_articles=[
+                ("Hello", "https://shop.example.com/articles/hello"),
+            ],
+        )
+    )
+    assert 'aria-label="Show articles"' in html
+    assert 'href="https://shop.example.com/articles/hello"' in html
+    # Articles appears once as hub, not also as a plain other-hub row without menu.
+    assert html.count('href="https://shop.example.com/articles"') == 1
 
 
 def test_build_item_list_json_ld_wraps_collection_page():

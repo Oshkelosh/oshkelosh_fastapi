@@ -90,6 +90,17 @@ async def fulfill_order_with_suppliers(session: Any, order: Any, items: list) ->
     shipping_address = order.shipping_address or {}
     selections = getattr(order, "shipping_selections", None) or {}
     external_id = str(getattr(order, "id", "")) or None
+    gift_message = (getattr(order, "gift_message", None) or "").strip() or None
+    packing_slip: dict[str, Any] | None = None
+    try:
+        from app.services.site_settings import get_site_settings, packing_slip_from_site_settings
+
+        site = await get_site_settings(session)
+        slip = packing_slip_from_site_settings(site)
+        packing_slip = slip or None
+    except Exception:
+        logger.debug("Could not load packing slip settings for order %s", order.id, exc_info=True)
+
     failures: list[str] = []
     supplier_orders: dict[str, Any] = dict(getattr(order, "supplier_orders", None) or {})
 
@@ -130,6 +141,8 @@ async def fulfill_order_with_suppliers(session: Any, order: Any, items: list) ->
                 supplier_ref=assignment.manual_slug,
                 shipping_method=str(method) if method else None,
                 currency=str(order.currency).upper() if order.currency else None,
+                gift_message=gift_message,
+                packing_slip=packing_slip,
             )
             supplier_orders[key] = {
                 "addon_id": assignment.addon_id,

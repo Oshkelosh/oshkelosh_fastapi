@@ -36,3 +36,6 @@ class R2StorageBackend:
 
     async def get_url(self, key: str, expires_in: int = 3600) -> str:
         return await self._service.generate_presigned_url(key, expires_in=expires_in)
+
+    async def download(self, key: str) -> bytes:
+        return await self._service.get_bytes(key)

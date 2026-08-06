@@ -120,6 +120,18 @@ async def create_order(
     billing_address = resolve_order_billing_address(user, payload.billing_address)
 
     site = await get_site_settings(session)
+    gift_message: str | None = None
+    raw_gift = (payload.gift_message or "").strip()
+    if raw_gift:
+        if not site.gift_messages_enabled:
+            raise ValidationError(message="Gift messages are not enabled")
+        max_len = int(site.gift_message_max_length or 200)
+        if len(raw_gift) > max_len:
+            raise ValidationError(
+                message=f"Gift message must be at most {max_len} characters"
+            )
+        gift_message = raw_gift
+
     shop_currency = shop_currency_from_settings(site)
     charges = await quote_order_charges(
         cart_items,
@@ -142,6 +154,7 @@ async def create_order(
         billing_address=billing_address,
         shipping_selections=payload.shipping_selections,
         notes=payload.notes,
+        gift_message=gift_message,
     )
     session.add(order)
     await session.flush()

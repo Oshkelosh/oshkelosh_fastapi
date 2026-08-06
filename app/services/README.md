@@ -92,6 +92,8 @@ Mirrors [app/addons/README.md](../addons/README.md#how-core-commerce-uses-addons
 | Lifecycle marketing fan-out | `lifecycle_events.py` | `ToolAddon.on_lifecycle_event()` |
 | Commerce measurement (purchase) | `tool_discovery.py` | `ToolAddon.on_commerce_event()` |
 | Storefront tool scripts | `tool_discovery.py` | `ToolAddon.list_storefront_scripts()` → `storefront/config.tools` |
+| Storefront tool nav links | `tool_discovery.py` | `ToolAddon.list_storefront_nav_links()` → `storefront/config.tools.nav_links` |
+| Tool SEO / sitemap | `tool_discovery.py` | `resolve_seo_meta` / `list_sitemap_entries` → core SEO |
 | Abandoned cart job | `abandoned_cart.py` | Core notification + lifecycle; CRM tools via `cart.abandoned` |
 | Product search | `product_search.py` | Core ILIKE; optional `ToolAddon.search_products()` |
 | Order status → paid (supplier-linked variants) | `fulfillment.py` | `SupplierAddon.create_order()` per variant assignment |

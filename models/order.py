@@ -97,6 +97,11 @@ class Order(ModelBase, table=True):
         default=None,
         sa_column=Column(Text, nullable=True),
     )
+    gift_message: Optional[str] = Field(
+        default=None,
+        description="Customer gift note forwarded to suppliers that support it.",
+        sa_column=Column(Text, nullable=True),
+    )
 
     tracking_number: Optional[str] = Field(
         default=None,

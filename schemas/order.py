@@ -33,6 +33,11 @@ class OrderCreateFromCart(BaseModel):
     shipping_address: Optional[Dict[str, Any]] = None
     billing_address: Optional[Dict[str, Any]] = None
     notes: Optional[str] = Field(default=None, max_length=10000)
+    gift_message: Optional[str] = Field(
+        default=None,
+        max_length=2000,
+        description="Optional gift note; rejected when gift messages are disabled in site settings.",
+    )
     shipping_selections: Optional[Dict[str, str]] = None
 
 
@@ -137,6 +142,7 @@ class OrderRead(BaseModel):
     billing_address: Optional[Dict[str, Any]]
     shipping_selections: Optional[Dict[str, Any]] = None
     notes: Optional[str]
+    gift_message: Optional[str] = None
     tracking_number: Optional[str] = None
     tracking_url: Optional[str] = None
     carrier: Optional[str] = None

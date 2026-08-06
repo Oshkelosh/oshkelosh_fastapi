@@ -116,12 +116,21 @@ async def sitemap_xml(request: Request, session=Depends(get_session)) -> Respons
     if site_settings.about_page_enabled and (site_settings.about_page_body or "").strip():
         about_page = (f"{site_url}/about", None)
 
+    from app.services.tool_discovery import list_tool_sitemap_entries
+
+    tool_entries = [
+        (row["loc"], row.get("lastmod"))
+        for row in list_tool_sitemap_entries(site_url)
+        if row.get("loc")
+    ]
+
     body = render_sitemap_xml(
         site_url,
         products=products,
         categories=categories,
         privacy_policy=privacy_policy,
         about_page=about_page,
+        extra_entries=tool_entries or None,
     )
     return Response(
         content=body,
@@ -188,6 +197,22 @@ async def storefront_privacy(request: Request, session=Depends(get_session)) -> 
 @router.get("/about", include_in_schema=False)
 async def storefront_about(request: Request, session=Depends(get_session)) -> Response:
     """Serve the SPA about page with injected SEO metadata."""
+    return await serve_spa_html(request, session)
+
+
+@router.get("/articles", include_in_schema=False)
+async def storefront_articles(request: Request, session=Depends(get_session)) -> Response:
+    """Serve the articles hub; SEO comes from enabled tool addons when present."""
+    return await serve_spa_html(request, session)
+
+
+@router.get("/articles/{slug}", include_in_schema=False)
+async def storefront_article_detail(
+    slug: str,
+    request: Request,
+    session=Depends(get_session),
+) -> Response:
+    """Serve an article page; unknown/draft slugs fall back to the plain SPA shell."""
     return await serve_spa_html(request, session)
 
 

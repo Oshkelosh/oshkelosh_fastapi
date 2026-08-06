@@ -117,6 +117,14 @@ class SiteSettingsPublic(BaseModel):
         default=DEFAULT_ABOUT_CONTACT_BODY,
         description="Plain-text Contact Us section body for /about.",
     )
+    gift_messages_enabled: bool = Field(
+        default=False,
+        description="When true, checkout may collect a gift message for supplier packing slips.",
+    )
+    gift_message_max_length: int = Field(
+        default=200,
+        description="Maximum gift message length accepted at checkout.",
+    )
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -191,6 +199,10 @@ class ToolsConfigPublic(BaseModel):
     scripts: list[dict[str, Any]] = Field(
         default_factory=list,
         description="Enabled tool script descriptors (analytics, chat, consent banner, etc.).",
+    )
+    nav_links: list[dict[str, str]] = Field(
+        default_factory=list,
+        description="Optional header/footer links contributed by enabled tools (label + href).",
     )
     consent_categories: list[str] = Field(
         default_factory=lambda: ["necessary", "analytics", "marketing"],

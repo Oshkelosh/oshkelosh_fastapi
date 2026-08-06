@@ -194,6 +194,14 @@ class SupplierAddon(BaseAddon):
         """Whether this supplier can quote shipping for checkout."""
         return False
 
+    def supports_shared_packing_slip(self) -> bool:
+        """Whether create_order accepts shared packing_slip defaults from Site Settings."""
+        return False
+
+    def supports_gift_message(self) -> bool:
+        """Whether create_order forwards a customer gift_message to the provider."""
+        return False
+
     async def quote_shipping(
         self,
         items: list[dict[str, Any]],
@@ -261,6 +269,8 @@ class SupplierAddon(BaseAddon):
         supplier_ref: str | None = None,
         shipping_method: str | None = None,
         currency: str | None = None,
+        gift_message: str | None = None,
+        packing_slip: Dict[str, Any] | None = None,
     ) -> Dict[str, Any]:
         """Create a fulfillment order for the given products.
 
@@ -277,6 +287,12 @@ class SupplierAddon(BaseAddon):
                                 supplier supports method selection.
             currency:           ISO currency of the order; ignore if the
                                 supplier bills in a fixed currency.
+            gift_message:       Optional customer gift note when
+                                ``supports_gift_message()`` is true.
+            packing_slip:       Optional shared slip fields when
+                                ``supports_shared_packing_slip()`` is true.
+                                Keys: ``store_name``, ``logo_url``, ``email``,
+                                ``phone``, ``message``.
 
         Implementations must accept all keyword arguments (ignore what they
         don't use) so core can call every supplier uniformly.

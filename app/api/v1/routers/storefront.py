@@ -9,7 +9,7 @@ from app.services.storefront_resolver import get_public_frontend_config, resolve
 from app.services.push_discovery import build_push_service_worker_js, get_public_push_config
 from app.services.site_settings import get_site_settings, site_settings_to_public_dict
 from app.services.sso_discovery import get_public_sso_providers
-from app.services.tool_discovery import list_storefront_scripts
+from app.services.tool_discovery import list_storefront_nav_links, list_storefront_scripts
 from schemas.storefront import (
     ActiveFrontendInfo,
     AuthConfigPublic,
@@ -87,7 +87,10 @@ async def get_storefront_config(
             email_verification_enabled=settings.require_email_verification,
         ),
         notifications=NotificationsConfigPublic(push=push_config),
-        tools=ToolsConfigPublic(scripts=list_storefront_scripts()),
+        tools=ToolsConfigPublic(
+            scripts=list_storefront_scripts(),
+            nav_links=list_storefront_nav_links(),
+        ),
     )
 
 
