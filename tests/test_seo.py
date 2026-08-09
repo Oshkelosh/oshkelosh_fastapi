@@ -362,6 +362,71 @@ async def test_about_page_noindex_when_unpublished(client, db_session):
 
 
 @pytest.mark.asyncio
+async def test_sitemap_includes_product_images(client, db_session, test_product: Product):
+    await update_site_settings(db_session, {"site_url": "https://shop.example.com"})
+    test_product.slug = "imaged-product"
+    test_product.status = "published"
+    db_session.add(test_product)
+    db_session.add(
+        ProductImage(
+            product_id=test_product.id,
+            url="https://cdn.example.com/products/img/full.webp",
+            alt_text="Hero shot",
+            sort_order=0,
+        )
+    )
+    await db_session.commit()
+
+    response = await client.get("/sitemap.xml")
+    assert response.status_code == 200
+    body = response.text
+    assert 'xmlns:image=' in body
+    assert "<image:loc>https://cdn.example.com/products/img/full.webp</image:loc>" in body
+    assert "<image:title>Hero shot</image:title>" in body
+
+
+@pytest.mark.asyncio
+async def test_product_page_injects_image_seo(
+    client, db_session, test_product: Product
+):
+    await update_site_settings(
+        db_session,
+        {"site_url": "https://shop.example.com", "store_name": "Test Shop"},
+    )
+    test_product.slug = "seo-image-product"
+    test_product.status = "published"
+    test_product.name = "Seo Tee"
+    db_session.add(test_product)
+    db_session.add(
+        ProductImage(
+            product_id=test_product.id,
+            url="https://cdn.example.com/seo-tee/full.webp",
+            alt_text="Seo Tee front view",
+            sort_order=0,
+        )
+    )
+    db_session.add(
+        ProductImage(
+            product_id=test_product.id,
+            url="https://cdn.example.com/seo-tee-back/full.webp",
+            alt_text="Seo Tee back view",
+            sort_order=1,
+        )
+    )
+    await db_session.commit()
+
+    response = await client.get("/products/seo-image-product")
+    assert response.status_code == 200
+    body = response.text
+    assert 'property="og:image" content="https://cdn.example.com/seo-tee/full.webp"' in body
+    assert 'property="og:image:alt" content="Seo Tee front view"' in body
+    assert 'name="twitter:image:alt" content="Seo Tee front view"' in body
+    assert '"@type": "ImageObject"' in body
+    assert '"contentUrl": "https://cdn.example.com/seo-tee/full.webp"' in body
+    assert '"contentUrl": "https://cdn.example.com/seo-tee-back/full.webp"' in body
+
+
+@pytest.mark.asyncio
 async def test_product_page_injects_aggregate_offer_for_multi_variant_product(
     client, db_session, test_product: Product, test_variant: ProductVariant
 ):
@@ -508,7 +573,77 @@ def test_render_sitemap_xml_escapes_urls():
     assert "<loc>https://shop.example.com/categories</loc>" in xml
 
 
-def test_build_product_offers_single_variant():
+def test_render_sitemap_xml_includes_image_extension():
+    product = Product(
+        id=7,
+        name="Canvas Print",
+        slug="canvas",
+        price_cents=100,
+        status="published",
+    )
+    xml = render_sitemap_xml(
+        "https://shop.example.com",
+        products=[product],
+        categories=[],
+        product_images={
+            7: [("https://cdn.example.com/full.webp", "Front view")],
+        },
+    )
+    assert 'xmlns:image="http://www.google.com/schemas/sitemap-image/1.1"' in xml
+    assert "<image:image>" in xml
+    assert "<image:loc>https://cdn.example.com/full.webp</image:loc>" in xml
+    assert "<image:title>Front view</image:title>" in xml
+    assert "<image:caption>Front view</image:caption>" in xml
+
+
+def test_inject_seo_includes_og_image_alt():
+    html = """<!DOCTYPE html>
+<html><head><title>Old</title></head><body></body></html>"""
+    meta = SeoMeta(
+        title="Product",
+        canonical_url="https://shop.example.com/products/foo",
+        og_type="product",
+        og_image="https://cdn.example.com/full.webp",
+        og_image_alt="Blue tee front",
+    )
+    result = inject_seo_into_html(html, meta)
+    assert 'property="og:image" content="https://cdn.example.com/full.webp"' in result
+    assert 'property="og:image:alt" content="Blue tee front"' in result
+    assert 'name="twitter:image:alt" content="Blue tee front"' in result
+
+
+def test_build_product_json_ld_image_objects():
+    product = Product(
+        name="Tee",
+        slug="tee",
+        price_cents=1500,
+        inventory_quantity=1,
+    )
+    payload = build_product_json_ld(
+        product,
+        "https://shop.example.com",
+        "https://cdn.example.com/full.webp",
+        images=[
+            ("https://cdn.example.com/full.webp", "Front"),
+            ("https://cdn.example.com/back.webp", "Back"),
+        ],
+    )
+    assert payload["image"] == [
+        {
+            "@type": "ImageObject",
+            "contentUrl": "https://cdn.example.com/full.webp",
+            "url": "https://cdn.example.com/full.webp",
+            "name": "Front",
+            "description": "Front",
+        },
+        {
+            "@type": "ImageObject",
+            "contentUrl": "https://cdn.example.com/back.webp",
+            "url": "https://cdn.example.com/back.webp",
+            "name": "Back",
+            "description": "Back",
+        },
+    ]
     product = Product(
         name="Tee",
         slug="tee",

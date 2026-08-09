@@ -423,6 +423,61 @@ async def test_admin_product_image_upload(client: AsyncClient, test_user, db_ses
 
 
 @pytest.mark.asyncio
+async def test_admin_product_image_update_alt(client: AsyncClient, test_user, db_session, test_product):
+    image = ProductImage(
+        product_id=test_product.id,
+        url="http://testserver/media/files/products/alt-group/full.webp",
+        alt_text="Old alt",
+        sort_order=0,
+    )
+    db_session.add(image)
+    await db_session.flush()
+
+    cookies, csrf = _admin_session(test_user.id)
+    response = await client.post(
+        f"/admin/products/{test_product.id}/images/{image.id}/alt",
+        cookies=cookies,
+        data={"csrf_token": csrf, "alt_text": "Updated alt"},
+    )
+    assert response.status_code == 302
+    assert response.headers["location"] == f"/admin/products/{test_product.id}"
+
+    await db_session.refresh(image)
+    assert image.alt_text == "Updated alt"
+
+    edit = await client.get(f"/admin/products/{test_product.id}", cookies=cookies)
+    assert edit.status_code == 200
+    assert 'name="alt_text"' in edit.text
+    assert "Updated alt" in edit.text
+    assert "Save alt" in edit.text
+
+
+@pytest.mark.asyncio
+async def test_api_patch_product_image_alt(client: AsyncClient, test_user, db_session, test_product):
+    from app.core.security import create_access_token
+
+    image = ProductImage(
+        product_id=test_product.id,
+        url="http://example.com/api-alt.jpg",
+        alt_text="Before",
+        sort_order=0,
+    )
+    db_session.add(image)
+    await db_session.flush()
+
+    headers = {"Authorization": f"Bearer {create_access_token(test_user.id)}"}
+    response = await client.patch(
+        f"/api/v1/products/{test_product.id}/images/{image.id}",
+        headers=headers,
+        json={"alt_text": "After patch"},
+    )
+    assert response.status_code == 200
+    assert response.json()["alt_text"] == "After patch"
+    await db_session.refresh(image)
+    assert image.alt_text == "After patch"
+
+
+@pytest.mark.asyncio
 async def test_admin_products_list_shows_thumbnail(client: AsyncClient, test_user, db_session, test_product):
     db_session.add(
         ProductImage(

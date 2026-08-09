@@ -699,6 +699,44 @@ async def admin_product_image_upload(
     return resp
 
 
+@router.post("/products/{product_id}/images/{image_id}/alt")
+async def admin_product_image_update_alt(
+    request: Request,
+    product_id: int,
+    image_id: int,
+    alt_text: str = Form("", max_length=500),
+    csrf_token: str = Form(..., max_length=128),
+    db=Depends(require_admin_session),
+):
+    """Update alt text for an existing product image."""
+    from models.product import Product
+    from models.product_image import ProductImage
+
+    _require_csrf(request, csrf_token)
+
+    if not db:
+        return _render_error(request, "Database unavailable")
+
+    product = await db.get(Product, product_id)
+    if product is None:
+        return _render_error(request, "Product not found", status_code=404)
+
+    image = await db.get(ProductImage, image_id)
+    if image is None or image.product_id != product_id:
+        return _render_error(request, "Image not found", status_code=404)
+
+    cleaned = alt_text.strip()
+    image.alt_text = cleaned or product.name
+    db.add(image)
+    await db.commit()
+
+    resp = RedirectResponse(
+        url=f"{settings.admin_prefix}/products/{product_id}", status_code=302
+    )
+    set_flash_cookie(resp, "Image alt text updated")
+    return resp
+
+
 @router.post("/products/{product_id}/images/{image_id}/delete")
 async def admin_product_image_delete(
     request: Request,

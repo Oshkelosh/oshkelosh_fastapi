@@ -70,6 +70,7 @@ class SeoMeta:
     canonical_url: str = ""
     og_type: str = "website"
     og_image: str | None = None
+    og_image_alt: str | None = None
     site_name: str | None = None
     robots: str = "index, follow"
     json_ld: list[dict[str, Any]] = field(default_factory=list)
@@ -211,6 +212,26 @@ def build_product_offers_json_ld(
     }
 
 
+def build_product_image_objects(
+    images: list[tuple[str, str | None]],
+) -> list[dict[str, Any]]:
+    """Build schema.org ImageObject entries from ``(url, alt)`` pairs."""
+    objects: list[dict[str, Any]] = []
+    for url, alt in images:
+        if not url:
+            continue
+        entry: dict[str, Any] = {
+            "@type": "ImageObject",
+            "contentUrl": url,
+            "url": url,
+        }
+        if alt:
+            entry["name"] = alt
+            entry["description"] = alt
+        objects.append(entry)
+    return objects
+
+
 def build_product_json_ld(
     product: Product,
     site_url: str,
@@ -219,6 +240,7 @@ def build_product_json_ld(
     *,
     currency: str = DEFAULT_CURRENCY,
     category_name: str | None = None,
+    images: list[tuple[str, str | None]] | None = None,
 ) -> dict[str, Any]:
     """Build schema.org Product JSON-LD."""
     active = get_active_variants(variants or [])
@@ -239,7 +261,10 @@ def build_product_json_ld(
     sku = active[0].sku if len(active) == 1 and active[0].sku else product.sku
     if sku:
         payload["sku"] = sku
-    if image_url:
+    image_objects = build_product_image_objects(images or [])
+    if image_objects:
+        payload["image"] = image_objects
+    elif image_url:
         payload["image"] = [image_url]
     if category_name:
         payload["category"] = category_name
@@ -302,6 +327,7 @@ def _seo_meta_from_tool_dict(raw: dict[str, Any]) -> SeoMeta:
         canonical_url=str(raw.get("canonical_url") or ""),
         og_type=str(raw.get("og_type") or "website"),
         og_image=raw.get("og_image"),
+        og_image_alt=raw.get("og_image_alt"),
         site_name=raw.get("site_name"),
         robots=str(raw.get("robots") or "index, follow"),
         json_ld=list(json_ld),
@@ -384,13 +410,18 @@ async def _load_categories(session: Any, *, limit: int | None = None) -> list[Ca
     return list(result.scalars().all())
 
 
-async def _product_primary_image(
+async def _product_seo_images(
     session: Any,
     product: Product,
     *,
     origin: str | None = None,
-) -> str | None:
-    """Return the best product image URL, preferring shared (non-variant) images."""
+) -> list[tuple[str, str | None]]:
+    """Return ordered ``(absolute_url, alt)`` for a product's images.
+
+    Shared (non-variant) images come first, then variant-scoped ones.
+    """
+    from app.services.product_images import absolutize_media_url
+
     result = await session.execute(
         select(ProductImage)
         .where(col(ProductImage.product_id) == product.id)
@@ -398,14 +429,26 @@ async def _product_primary_image(
             col(ProductImage.variant_id).is_not(None),
             ProductImage.sort_order.asc(),
         )
-        .limit(1)
     )
-    image = result.scalar_one_or_none()
-    if image is None:
-        return None
-    from app.services.product_images import absolutize_media_url
+    images: list[tuple[str, str | None]] = []
+    for image in result.scalars().all():
+        url = absolutize_media_url(image.url, origin=origin)
+        if not url:
+            continue
+        alt = (image.alt_text or "").strip() or None
+        images.append((url, alt))
+    return images
 
-    return absolutize_media_url(image.url, origin=origin)
+
+async def _product_primary_image(
+    session: Any,
+    product: Product,
+    *,
+    origin: str | None = None,
+) -> str | None:
+    """Return the best product image URL, preferring shared (non-variant) images."""
+    images = await _product_seo_images(session, product, origin=origin)
+    return images[0][0] if images else None
 
 
 async def resolve_meta_for_path(
@@ -577,7 +620,13 @@ async def resolve_meta_for_path(
             or truncate_text(product.description, _DESCRIPTION_MAX)
             or default_description
         )
-        image_url = await _product_primary_image(session, product, origin=origin)
+        seo_images = await _product_seo_images(session, product, origin=origin)
+        image_url = seo_images[0][0] if seo_images else None
+        image_alt = None
+        if seo_images:
+            image_alt = seo_images[0][1] or product.name
+        elif image_url or logo:
+            image_alt = product.name
         canonical = f"{site_url}/products/{product.slug}"
 
         if category is not None:
@@ -622,6 +671,7 @@ async def resolve_meta_for_path(
             canonical_url=canonical,
             og_type="product",
             og_image=image_url or logo,
+            og_image_alt=image_alt if (image_url or logo) else None,
             site_name=store_name,
             json_ld=[
                 build_product_json_ld(
@@ -631,6 +681,7 @@ async def resolve_meta_for_path(
                     variants,
                     currency=getattr(site_settings, "shop_currency", None) or DEFAULT_CURRENCY,
                     category_name=category.name if category is not None else None,
+                    images=[(url, alt or product.name) for url, alt in seo_images],
                 ),
                 build_breadcrumb_json_ld(breadcrumbs),
             ],
@@ -966,6 +1017,10 @@ def _render_head_tags(meta: SeoMeta) -> str:
         )
     if meta.og_image:
         parts.append(f'<meta property="og:image" content="{html.escape(meta.og_image)}">')
+        if meta.og_image_alt:
+            parts.append(
+                f'<meta property="og:image:alt" content="{html.escape(meta.og_image_alt)}">'
+            )
     parts.append('<meta name="twitter:card" content="summary_large_image">')
     parts.append(f'<meta name="twitter:title" content="{html.escape(meta.title)}">')
     if meta.description:
@@ -976,6 +1031,10 @@ def _render_head_tags(meta: SeoMeta) -> str:
         parts.append(
             f'<meta name="twitter:image" content="{html.escape(meta.og_image)}">'
         )
+        if meta.og_image_alt:
+            parts.append(
+                f'<meta name="twitter:image:alt" content="{html.escape(meta.og_image_alt)}">'
+            )
     parts.append(f'<meta name="robots" content="{html.escape(meta.robots)}">')
     for block in meta.json_ld:
         parts.append(
@@ -1046,40 +1105,81 @@ def render_sitemap_xml(
     privacy_policy: tuple[str, str | None] | None = None,
     about_page: tuple[str, str | None] | None = None,
     extra_entries: list[tuple[str, str | None]] | None = None,
+    product_images: dict[int, list[tuple[str, str | None]]] | None = None,
 ) -> str:
     """Render sitemap.xml for public catalog URLs.
 
     ``privacy_policy`` / ``about_page`` are optional ``(loc, lastmod)`` entries.
     ``extra_entries`` appends tool-contributed locs (e.g. articles).
+    ``product_images`` maps product id → ``[(image_url, caption), ...]`` for the
+    Google image sitemap extension.
     """
-    entries: list[tuple[str, str | None]] = [
-        (f"{site_url}/", None),
-        (f"{site_url}/products", None),
-        (f"{site_url}/categories", None),
-    ]
-    if about_page is not None:
-        entries.append(about_page)
-    if privacy_policy is not None:
-        entries.append(privacy_policy)
-    for product in products:
-        if product.slug:
-            entries.append((f"{site_url}/products/{product.slug}", _format_lastmod(product.updated_at)))
-    for category in categories:
-        entries.append(
-            (f"{site_url}/categories/{category.slug}", _format_lastmod(category.updated_at))
-        )
-    if extra_entries:
-        entries.extend(extra_entries)
+    images_by_product = product_images or {}
+    has_images = any(images_by_product.values())
 
     lines = [
         '<?xml version="1.0" encoding="UTF-8"?>',
-        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
     ]
-    for loc, lastmod in entries:
+    if has_images:
+        lines.append(
+            '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" '
+            'xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">'
+        )
+    else:
+        lines.append('<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">')
+
+    def _append_url(
+        loc: str,
+        lastmod: str | None = None,
+        *,
+        images: list[tuple[str, str | None]] | None = None,
+    ) -> None:
         lines.append("  <url>")
         lines.append(f"    <loc>{xml_escape(loc)}</loc>")
         if lastmod:
             lines.append(f"    <lastmod>{xml_escape(lastmod)}</lastmod>")
+        for image_url, caption in images or []:
+            if not image_url:
+                continue
+            lines.append("    <image:image>")
+            lines.append(f"      <image:loc>{xml_escape(image_url)}</image:loc>")
+            if caption:
+                lines.append(f"      <image:title>{xml_escape(caption)}</image:title>")
+                lines.append(
+                    f"      <image:caption>{xml_escape(caption)}</image:caption>"
+                )
+            lines.append("    </image:image>")
         lines.append("  </url>")
+
+    _append_url(f"{site_url}/")
+    _append_url(f"{site_url}/products")
+    _append_url(f"{site_url}/categories")
+    if about_page is not None:
+        _append_url(about_page[0], about_page[1])
+    if privacy_policy is not None:
+        _append_url(privacy_policy[0], privacy_policy[1])
+    for product in products:
+        if not product.slug or product.id is None:
+            continue
+        caption_fallback = product.name
+        images = [
+            (url, (alt or caption_fallback))
+            for url, alt in images_by_product.get(product.id, [])
+            if url
+        ]
+        _append_url(
+            f"{site_url}/products/{product.slug}",
+            _format_lastmod(product.updated_at),
+            images=images,
+        )
+    for category in categories:
+        _append_url(
+            f"{site_url}/categories/{category.slug}",
+            _format_lastmod(category.updated_at),
+        )
+    if extra_entries:
+        for loc, lastmod in extra_entries:
+            _append_url(loc, lastmod)
+
     lines.append("</urlset>")
     return "\n".join(lines)

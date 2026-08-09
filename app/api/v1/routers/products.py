@@ -11,15 +11,20 @@ from typing import Optional
 from fastapi import APIRouter, Depends, Query, Response
 from sqlmodel import col, func, select
 
+from app.core.dependencies import CurrentUser, get_admin_user
 from app.core.exceptions import NotFound, ValidationError
 from app.db.connection import get_session
 from models.category import Category
 from models.product import Product
 from models.product_image import ProductImage
-from app.services.product_images import build_product_detail_read, build_product_reads
+from app.services.product_images import (
+    build_product_detail_read,
+    build_product_reads,
+    product_image_to_dict,
+)
 from app.services.product_popularity import popularity_order_clause
 from app.services.product_search import apply_core_search_filter, search_products as delegate_product_search
-from schemas.product import ProductDetailRead
+from schemas.product import ProductDetailRead, ProductImageUpdate
 
 router = APIRouter(prefix="/products", tags=["products"])
 
@@ -239,4 +244,34 @@ async def list_product_images(
     )
     return result.scalars().all()
 
+
+@router.patch(
+    "/{product_id}/images/{image_id}",
+    response_model=dict,
+    summary="Update product image",
+    description="Update alt text on an existing product image (admin only).",
+)
+async def update_product_image(
+    product_id: int,
+    image_id: int,
+    body: ProductImageUpdate,
+    current_user: CurrentUser = Depends(get_admin_user),
+    session=Depends(get_session),
+) -> dict:
+    """Update alt text for a product image."""
+    product = await session.get(Product, product_id)
+    if product is None:
+        raise NotFound(resource_name="Product", resource_id=product_id)
+
+    image = await session.get(ProductImage, image_id)
+    if image is None or image.product_id != product_id:
+        raise NotFound(resource_name="ProductImage", resource_id=image_id)
+
+    if body.alt_text is not None:
+        cleaned = body.alt_text.strip()
+        image.alt_text = cleaned or product.name
+    session.add(image)
+    await session.commit()
+    await session.refresh(image)
+    return product_image_to_dict(image)
 

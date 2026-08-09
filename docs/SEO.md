@@ -31,7 +31,7 @@ Header keeps a Categories nav entry; the footer catalog strip owns Products/Cate
 
 - Home: `Organization` JSON-LD + crawl nav
 - Products list / category detail: `CollectionPage` → `ItemList` (same capped product URLs as crawl links) + crawl nav
-- Product: `Product` + `Offer` or `AggregateOffer` + `BreadcrumbList` (+ `category` name when set)
+- Product: `Product` + `Offer` or `AggregateOffer` + `BreadcrumbList` (+ `category` name when set); product `image` is a list of `ImageObject` entries when images exist
 - Breadcrumbs:
   - Product with category: `Home → Categories → {Category} → {Product}`
   - Product without category: `Home → Products → {Product}`
@@ -41,3 +41,24 @@ Header keeps a Categories nav entry; the footer catalog strip owns Products/Cate
 Product API reads expose `category` / `category_slug` and `category_name` when `category_id` is set.
 
 Admin edits `meta_title` / `meta_description` on products and categories; empty values fall back to name + store / truncated description. See also [DATABASE.md](DATABASE.md).
+
+## Image SEO
+
+Page SEO already ships `og:image` / `twitter:image`. Image-specific signals:
+
+| Signal | Owner |
+|--------|--------|
+| Google image sitemap (`xmlns:image` on product URLs) | Core [`render_sitemap_xml`](../app/storefront/seo.py) |
+| `og:image:alt` / `twitter:image:alt` | Core injection + default SPA `SeoHead.svelte` |
+| Product JSON-LD `ImageObject` gallery (`contentUrl` + alt as `name`/`description`) | Core + SPA `seo.ts` mirror |
+| Visible `<img alt>` / `srcset` / LCP eager hero | Default SPA (`ProductCard`, `ProductGallery`, `product.ts`) |
+| Edit alt after upload | Admin product form + `PATCH /api/v1/products/{id}/images/{image_id}` |
+
+Default SPA lives under [`app/addons/frontends/default/`](../app/addons/frontends/default/) (nested git; host ignores the package). Edit `source/`, then `npm run build` in `source/` to refresh `dist/`; commit inside the addon repo.
+
+### Ops checklist (production)
+
+- Fill meaningful `alt_text` on product images (Admin → Products → edit → Save alt). Prefer subject + product name over empty or filename-like text.
+- Confirm image URLs are publicly crawlable (local media mount or R2/CDN public base), not only admin `GET /api/v1/media/{key}`.
+- Submit `/sitemap.xml` in Search Console; after deploy, spot-check a product URL (view-source for `og:image:alt` and `<image:image>` in the sitemap).
+- Ensure products used in social shares have a primary image so OG does not fall back to the store logo only.

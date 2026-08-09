@@ -50,6 +50,17 @@
           <dd>{% if image.created_at %}{{ image.created_at.strftime('%Y-%m-%d %H:%M') }}{% else %}—{% endif %}</dd>
         </div>
       </dl>
+      <form method="POST" action="{{ admin_prefix }}/products/{{ product.id }}/images/{{ image.id }}/alt"
+            class="product-image-card__alt-form" style="margin:0 0 8px;">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <label class="form-label" for="alt-{{ image.id }}">Edit alt text</label>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <input type="text" id="alt-{{ image.id }}" name="alt_text" class="form-input"
+                 maxlength="500" value="{{ image.alt_text or '' }}"
+                 placeholder="{{ product.name }}" style="flex:1;">
+          <button type="submit" class="btn btn--secondary btn--sm">Save alt</button>
+        </div>
+      </form>
       <div class="product-image-card__actions">
         <a href="{{ image.url }}" target="_blank" rel="noopener noreferrer" class="btn btn--ghost btn--sm">Open</a>
         <form method="POST" action="{{ admin_prefix }}/products/{{ product.id }}/images/{{ image.id }}/delete">

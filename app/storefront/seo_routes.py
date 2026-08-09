@@ -88,12 +88,15 @@ async def serve_spa_html(
 @router.get("/sitemap.xml", include_in_schema=False)
 async def sitemap_xml(request: Request, session=Depends(get_session)) -> Response:
     """Dynamic XML sitemap for public catalog URLs."""
+    from app.services.product_images import absolutize_media_url, images_by_product_id
+
     site_settings = await get_site_settings(session)
     site_url = resolve_site_url(request, site_settings)
+    origin = site_url.rstrip("/")
 
     products_result = await session.execute(
         select(Product)
-        .options(load_only(Product.slug, Product.updated_at))
+        .options(load_only(Product.id, Product.name, Product.slug, Product.updated_at))
         .where(col(Product.status) == "published", col(Product.slug).is_not(None))
         .order_by(Product.updated_at.desc())
     )
@@ -102,8 +105,22 @@ async def sitemap_xml(request: Request, session=Depends(get_session)) -> Respons
         .options(load_only(Category.slug, Category.updated_at))
         .order_by(Category.updated_at.desc())
     )
-    products = products_result.scalars().all()
+    products = list(products_result.scalars().all())
     categories = categories_result.scalars().all()
+
+    product_ids = [p.id for p in products if p.id is not None]
+    images_map = await images_by_product_id(session, product_ids)
+    product_images: dict[int, list[tuple[str, str | None]]] = {}
+    for product_id, rows in images_map.items():
+        ordered = sorted(rows, key=lambda img: (img.variant_id is not None, img.sort_order))
+        product_images[product_id] = [
+            (
+                absolutize_media_url(img.url, origin=origin) or img.url,
+                (img.alt_text or "").strip() or None,
+            )
+            for img in ordered
+            if img.url
+        ]
 
     privacy_policy = None
     if site_settings.privacy_policy_enabled and (site_settings.privacy_policy_body or "").strip():
@@ -131,6 +148,7 @@ async def sitemap_xml(request: Request, session=Depends(get_session)) -> Respons
         privacy_policy=privacy_policy,
         about_page=about_page,
         extra_entries=tool_entries or None,
+        product_images=product_images or None,
     )
     return Response(
         content=body,

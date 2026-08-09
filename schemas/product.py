@@ -55,6 +55,12 @@ class ProductImageCreate(BaseModel):
     sort_order: int = Field(default=0)
 
 
+class ProductImageUpdate(BaseModel):
+    """Partial update for an existing product image (alt text)."""
+
+    alt_text: Optional[str] = Field(default=None, max_length=500)
+
+
 # ── Update ──────────────────────────────────────────────────────────
 
 
