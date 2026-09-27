@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from fastapi import APIRouter, Depends, Form, Request, status
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
@@ -27,6 +28,10 @@ def build_supplier_routers(
     page_title: str,
     secret_keys: tuple[str, ...] = ("api_key",),
     parse_config_form: Callable[[Any], tuple[dict[str, Any], bool]],
+    extra_page_context: Callable[[Request], dict[str, Any]] | None = None,
+    on_config_saved: (
+        Callable[[Any, Request, dict[str, Any], bool], Awaitable[None]] | None
+    ) = None,
 ) -> tuple[APIRouter, APIRouter, Any]:
     """Return (admin_router, api_router, jinja_env) for a supplier addon."""
     templates_dir = Path(__file__).resolve().parent / addon_id / "templates"
@@ -41,6 +46,11 @@ def build_supplier_routers(
             return redact_secret_values(dict(addon._config), *secret_keys)
         return {}
 
+    def _page_extra(request: Request) -> dict[str, Any]:
+        if extra_page_context is None:
+            return {}
+        return dict(extra_page_context(request) or {})
+
     @admin_router.get("")
     async def config_page(request: Request, db=Depends(require_admin_session)):
         from app.addons.registry import addon_registry
@@ -54,6 +64,7 @@ def build_supplier_routers(
                 page_title,
                 addon=addon,
                 config=_masked_config(addon),
+                **_page_extra(request),
             ),
         )
 
@@ -70,7 +81,7 @@ def build_supplier_routers(
             form = await request.form()
             require_addon_csrf(request, str(form.get("csrf_token", "")))
             config, enabled = parse_config_form(form)
-            return await save_addon_from_form(
+            response = await save_addon_from_form(
                 db,
                 addon_id,
                 config,
@@ -78,6 +89,14 @@ def build_supplier_routers(
                 redirect_url=configure_url,
                 flash_message=f"{page_title} saved",
             )
+            if on_config_saved is not None:
+                addon = addon_registry.get(addon_id)
+                saved_config = dict(getattr(addon, "_config", None) or {})
+                try:
+                    await on_config_saved(db, request, saved_config, bool(enabled))
+                except Exception as exc:
+                    exception(page_title, "on_config_saved failed: {}", exc)
+            return response
         except Exception as exc:
             addon = addon_registry.get(addon_id)
             return HTMLResponse(
@@ -90,6 +109,7 @@ def build_supplier_routers(
                     flash_type="error",
                     addon=addon,
                     config=_masked_config(addon),
+                    **_page_extra(request),
                 ),
             )
 

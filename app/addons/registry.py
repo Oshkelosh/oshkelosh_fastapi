@@ -221,6 +221,9 @@ class AddonRegistry:
         """Discover, load DB config, and initialize every enabled addon."""
         self.register_all()
         await self.load_from_db(session)
+        from app.services.addons import enforce_notification_channel_exclusivity
+
+        await enforce_notification_channel_exclusivity(session)
         for addon_id, addon in self._registry.items():
             if addon.is_enabled:
                 config = self.get_config(addon_id)

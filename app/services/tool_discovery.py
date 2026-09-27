@@ -92,7 +92,7 @@ def resolve_tool_seo_meta(
         except Exception:
             logger.exception("Tool '%s' resolve_seo_meta failed", tool.addon_id)
             continue
-        if isinstance(meta, dict) and meta.get("title"):
+        if isinstance(meta, dict) and (meta.get("title") or meta.get("title")):
             return meta
     return None
 

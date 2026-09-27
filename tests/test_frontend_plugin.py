@@ -42,6 +42,37 @@ class TestSiteSettings:
         assert site.tax_rate_bps == 800
         assert site.shipping_flat_cents == 500
         assert site.shipping_mode == "flat"
+        assert site.cookie_consent_mode == "off"
+        assert site.gdpr_banner_enabled is False
+
+    async def test_cookie_consent_mode_notice_enables_banner_alias(self, db_session):
+        site = await update_site_settings(
+            db_session, {"cookie_consent_mode": "notice"}
+        )
+        assert site.cookie_consent_mode == "notice"
+        assert site.gdpr_banner_enabled is True
+
+    async def test_cookie_consent_mode_zaraz_clears_banner_alias(self, db_session):
+        site = await update_site_settings(
+            db_session, {"cookie_consent_mode": "zaraz"}
+        )
+        assert site.cookie_consent_mode == "zaraz"
+        assert site.gdpr_banner_enabled is False
+
+    async def test_cookie_consent_mode_invalid_falls_back_to_off(self, db_session):
+        await update_site_settings(db_session, {"cookie_consent_mode": "notice"})
+        site = await update_site_settings(
+            db_session, {"cookie_consent_mode": "cookiebot"}
+        )
+        assert site.cookie_consent_mode == "off"
+        assert site.gdpr_banner_enabled is False
+
+    async def test_gdpr_banner_enabled_maps_to_notice_mode(self, db_session):
+        site = await update_site_settings(
+            db_session, {"gdpr_banner_enabled": True}
+        )
+        assert site.cookie_consent_mode == "notice"
+        assert site.gdpr_banner_enabled is True
 
     async def test_update_site_settings(self, db_session):
         await update_site_settings(
@@ -174,6 +205,7 @@ class TestStorefrontAPI:
         resp = await client.get("/api/v1/storefront/config")
         assert resp.status_code == 200
         site = resp.json()["site"]
+        assert site["cookie_consent_mode"] == "notice"
         assert site["gdpr_banner_enabled"] is True
         assert site["gdpr_banner_text"] == "We care about your privacy."
         assert site["privacy_policy_enabled"] is True
@@ -185,6 +217,30 @@ class TestStorefrontAPI:
         assert site["about_page_body"] == "We sell great things."
         assert site["about_contact_body"] == "Email us anytime."
         assert "gdpr_privacy_url" not in site
+
+    async def test_config_zaraz_mode_hides_banner_alias(self, client: AsyncClient, db_session):
+        from app.addons.registry import addon_registry
+
+        addon = addon_registry.get("default")
+        if addon is None:
+            addon_registry.register(DefaultFrontendAddon())
+
+        await persist_addon_config(db_session, "default", {}, enabled=True)
+        await update_site_settings(
+            db_session,
+            {
+                "cookie_consent_mode": "zaraz",
+                "gdpr_banner_text": "Fallback if Zaraz is missing.",
+            },
+        )
+        await db_session.commit()
+
+        resp = await client.get("/api/v1/storefront/config")
+        assert resp.status_code == 200
+        site = resp.json()["site"]
+        assert site["cookie_consent_mode"] == "zaraz"
+        assert site["gdpr_banner_enabled"] is False
+        assert site["gdpr_banner_text"] == "Fallback if Zaraz is missing."
 
     async def test_theme_css_returns_variables(self, client: AsyncClient, db_session):
         await update_site_settings(db_session, {"primary_color": "#aabbcc"})

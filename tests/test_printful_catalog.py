@@ -176,7 +176,10 @@ def test_printful_variant_image_alt_texts_preview_then_product_name():
         _variant_with_images(),
         product_name="Amaryllis Solandraeflora",
     )
-    assert alts == ["Amaryllis Solandraeflora / 12″×16″", "Thin Canvas (12″×16″)"]
+    assert alts == [
+        "Amaryllis Solandraeflora / Thin Canvas (12″×16″)",
+        "Thin Canvas (12″×16″)",
+    ]
 
 
 def test_printful_variant_image_alt_texts_product_only_uses_catalog_product_name():
@@ -192,7 +195,7 @@ def test_printful_variant_image_alt_texts_deduped_url_uses_preview_alt():
         _variant_with_images(preview_url=PRODUCT_IMAGE_URL, product_image=PRODUCT_IMAGE_URL),
         product_name="Amaryllis Solandraeflora",
     )
-    assert alts == ["Amaryllis Solandraeflora / 12″×16″"]
+    assert alts == ["Amaryllis Solandraeflora / Thin Canvas (12″×16″)"]
 
 
 def test_printful_variant_image_url_primary_order():
@@ -288,7 +291,7 @@ def test_build_printful_catalog_row_uses_merged_preview_and_product_image():
         AMARYLLIS_PRODUCT_IMAGE,
     ]
     assert row["image_alt_texts"] == [
-        "Amaryllis Solandraeflora / 12″×16″",
+        "Amaryllis Solandraeflora / Thin Canvas (12″×16″)",
         "Thin Canvas (12″×16″)",
     ]
     assert row["thumbnail_url"] == AMARYLLIS_PREVIEW_FILE["preview_url"]

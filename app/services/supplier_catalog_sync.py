@@ -64,6 +64,7 @@ class SupplierCatalogSyncResult:
     errors: list[str] = field(default_factory=list)
     catalog_total: int = 0
     catalog_importable: int = 0
+    touched_product_keys: list[str] = field(default_factory=list)
 
     def summary_message(self, *, addon_id: str | None = None) -> str:
         if self.errors and not (self.created or self.updated or self.archived):
@@ -111,6 +112,7 @@ class SupplierCatalogSyncResult:
             "errors": list(self.errors),
             "catalog_total": self.catalog_total,
             "catalog_importable": self.catalog_importable,
+            "touched_product_keys": list(self.touched_product_keys),
             "message": self.summary_message(),
         }
 
@@ -301,6 +303,7 @@ async def _upsert_catalog_product(
         await apply_product_creation_defaults(session, product, store_name=store_name)
         await assign_product_category_from_type(session, product, catalog_product.product_type)
         result.created += 1
+        result.touched_product_keys.append(catalog_product.external_product_key)
     else:
         product.name = catalog_product.name
         product.description = catalog_product.description
@@ -312,6 +315,7 @@ async def _upsert_catalog_product(
         if product.status == "archived":
             product.status = options.import_status
         result.updated += 1
+        result.touched_product_keys.append(catalog_product.external_product_key)
 
     if catalog_product.image_urls:
         await import_images_from_urls(
@@ -457,4 +461,15 @@ async def sync_supplier_catalog(
         detail=result.summary_message(addon_id=addon_id),
     )
     await session.commit()
+
+    try:
+        import inspect
+
+        outcome = addon.after_catalog_sync(session, result)
+        if inspect.isawaitable(outcome):
+            await outcome
+    except Exception as exc:
+        logger.exception("[%s] after_catalog_sync failed", addon_id)
+        result.errors.append(f"after_catalog_sync: {exc}")
+
     return result

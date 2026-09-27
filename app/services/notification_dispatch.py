@@ -18,6 +18,14 @@ def _notification_succeeded(result: Any) -> bool:
     return isinstance(result, dict) and result.get("success") is True
 
 
+def _push_data(event_key: str, ctx: dict[str, Any]) -> dict[str, Any]:
+    data: dict[str, Any] = {"event": event_key}
+    order_id = ctx.get("order_id")
+    if order_id is not None:
+        data["order_id"] = order_id
+    return data
+
+
 async def dispatch_notification(
     session: Any,
     event_key: str,
@@ -26,8 +34,11 @@ async def dispatch_notification(
     phone: str | None = None,
     push_token: str | None = None,
     context: dict[str, Any] | None = None,
-) -> None:
-    """Send notification on all applicable enabled channels."""
+) -> bool:
+    """Send notification on all applicable enabled channels.
+
+    Returns True when at least one channel reports explicit success.
+    """
     ctx = dict(context or {})
     site = await get_site_settings(session)
     if site.store_name and "store_name" not in ctx:
@@ -40,6 +51,7 @@ async def dispatch_notification(
         ("push", push_token),
     ]
 
+    any_success = False
     for channel, recipient in channels:
         if not recipient or not event_supports_channel(event_key, channel):
             continue
@@ -69,22 +81,23 @@ async def dispatch_notification(
                     recipient,
                     rendered.subject,
                     rendered.body,
-                    data={"event": event_key, **ctx},
+                    data=_push_data(event_key, ctx),
                 )
             if not _notification_succeeded(result):
                 logger.warning(
-                    "Notification %s/%s to %s failed: %s",
+                    "Notification %s/%s failed: %s",
                     event_key,
                     channel,
-                    recipient,
                     result.get("error", "missing explicit success flag")
                     if isinstance(result, dict)
                     else "invalid addon response",
                 )
+            else:
+                any_success = True
         except Exception:
             logger.exception(
-                "Notification addon error for %s/%s to %s",
+                "Notification addon error for %s/%s",
                 event_key,
                 channel,
-                recipient,
             )
+    return any_success

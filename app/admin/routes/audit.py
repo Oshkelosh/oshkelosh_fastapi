@@ -41,6 +41,7 @@ _AUDIT_RESOURCE_TYPE_OPTIONS = (
     "notification_template",
     "supplier",
     "addon",
+    "outbound_webhook",
 )
 
 

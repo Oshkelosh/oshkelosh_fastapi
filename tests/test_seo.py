@@ -2,20 +2,21 @@
 
 from __future__ import annotations
 
-import models.site_settings  # noqa: F401
 import pytest
 
+import models.site_settings  # noqa: F401
 from app.config import settings
 from app.services.product_variants import refresh_product_listing_cache
 from app.services.site_settings import update_site_settings
 from app.storefront.seo import (
+    SeoMeta,
+    _product_primary_image,
+    _seo_meta_from_tool_dict,
     build_item_list_json_ld,
     build_product_json_ld,
     build_product_offers_json_ld,
     inject_seo_into_html,
     render_sitemap_xml,
-    SeoMeta,
-    _product_primary_image,
 )
 from models.category import Category
 from models.product import Product
@@ -159,6 +160,11 @@ async def test_product_page_html_injection(client, db_session, test_product: Pro
     assert '"@type": "BreadcrumbList"' in body
     assert '"Categories"' in body
     assert '"category": "Test Category"' in body
+    assert 'id="seo-intro"' in body
+    assert "<h1>Test Product</h1>" in body
+    assert "<p>A test product for SEO</p>" in body
+    intro = body[body.index('id="seo-intro"') : body.index('id="seo-intro"') + 600]
+    assert "display:none" not in intro
 
 
 @pytest.mark.asyncio
@@ -225,6 +231,7 @@ async def test_home_page_injects_crawl_catalog_nav(client, db_session, test_prod
         {
             "site_url": "https://shop.example.com",
             "store_name": "Test Shop",
+            "meta_description": "Historical botanical canvas prints.",
         },
     )
     test_product.slug = "home-product"
@@ -235,6 +242,10 @@ async def test_home_page_injects_crawl_catalog_nav(client, db_session, test_prod
     response = await client.get("/")
     assert response.status_code == 200
     body = response.text
+    assert 'id="seo-intro"' in body
+    assert "<h1>Test Shop</h1>" in body
+    assert "<p>Historical botanical canvas prints.</p>" in body
+    assert "display:none" not in body[body.index('id="seo-intro"') : body.index("</header>") + 10]
     assert 'aria-label="Catalog"' in body
     assert 'href="https://shop.example.com/products"' in body
     assert 'href="https://shop.example.com/categories"' in body
@@ -254,6 +265,7 @@ async def test_private_paths_inject_noindex(client, db_session):
         assert response.status_code == 200, path
         body = response.text
         assert 'meta name="robots" content="noindex, nofollow"' in body, path
+        assert 'id="seo-intro"' not in body, path
         assert response.headers.get("cache-control") == "private, no-store", path
 
 
@@ -524,6 +536,45 @@ def test_inject_seo_into_html_replaces_title_and_adds_meta():
     assert 'aria-label="Show products"' in result
     assert 'aria-label="Show categories"' in result
     assert result.index('aria-label="Catalog"') < result.index("</body>")
+    assert 'id="seo-intro"' not in result
+
+
+def test_inject_seo_into_html_adds_visible_intro_after_body():
+    page = """<!DOCTYPE html>
+<html><head><title>Old</title></head><body><div id="app"></div></body></html>"""
+    result = inject_seo_into_html(
+        page,
+        SeoMeta(
+            title="Shop",
+            h1="Shop",
+            intro_text='Prints & <script>alert("x")</script>',
+        ),
+    )
+    assert result.index("<body>") < result.index('id="seo-intro"') < result.index('id="app"')
+    assert "<h1>Shop</h1>" in result
+    assert "&amp;" in result or "&lt;script&gt;" in result
+    assert "<script>alert" not in result.split('id="seo-intro"')[1].split("</header>")[0]
+    assert "display:none" not in result.split('id="seo-intro"')[1].split("</header>")[0]
+
+
+def test_tool_dict_maps_title_aliases_and_intro():
+    meta = _seo_meta_from_tool_dict(
+        {
+            "title": "Lindley | Shop",
+            "description": "An essay about Lindley.",
+            "canonical_url": "https://shop.example.com/articles/lindley",
+            "og_type": "article",
+            "json_ld": [{"@type": "Article"}],
+            "crawl_articles": [("Lindley", "https://shop.example.com/articles/lindley")],
+        }
+    )
+    assert meta.title == "Lindley | Shop"
+    assert meta.h1 == "Lindley"
+    assert meta.intro_text == "An essay about Lindley."
+    assert meta.canonical_url.endswith("/lindley")
+    assert meta.og_type == "article"
+    assert meta.json_ld[0]["@type"] == "Article"
+    assert meta.crawl_articles[0][0] == "Lindley"
 
 
 def test_render_crawl_nav_includes_articles_dropdown():

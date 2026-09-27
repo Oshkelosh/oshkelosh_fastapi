@@ -10,7 +10,7 @@ Oshkelosh exposes three admin surfaces that share domain models and services but
 | **REST admin API** | `/api/v1/admin/*` | Bearer JWT (`Authorization` header); user must have `is_admin=true` | Headless clients, scripts, SPA tooling |
 | **Resource admin endpoints** | `/api/v1/products/*`, `/api/v1/categories/*`, `/api/v1/media/*` | Bearer JWT (`Authorization` header); user must have `is_admin=true` | Product/category/media CRUD colocated with public resource routers |
 
-Route modules live under [`routes/`](routes/): `auth`, `dashboard`, `products`, `categories`, `users`, `orders`, `settings`, `addons`, `audit`, `misc`. They are composed in [`routes/__init__.py`](routes/__init__.py).
+Route modules live under [`routes/`](routes/): `auth`, `dashboard`, `products`, `categories`, `users`, `orders`, `settings`, `webhooks`, `addons`, `audit`, `misc`. They are composed in [`routes/__init__.py`](routes/__init__.py).
 
 The REST counterpart is [`app/api/v1/routers/admin.py`](../api/v1/routers/admin.py) — JSON CRUD for products, categories, users, orders, addons, dashboard stats, and supplier catalog sync.
 

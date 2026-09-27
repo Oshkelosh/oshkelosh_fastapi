@@ -196,8 +196,10 @@ async def create_order(
     await session.flush()
 
     from app.services.notifications import notify_order_placed
+    from app.services.outbound_webhooks import EVENT_ORDER_PLACED, build_order_webhook_payload, emit_outbound_webhook
 
     await notify_order_placed(session, order)
+    await emit_outbound_webhook(session, EVENT_ORDER_PLACED, build_order_webhook_payload(order))
 
     response.status_code = status.HTTP_201_CREATED
     return await serialize_order(session, order)

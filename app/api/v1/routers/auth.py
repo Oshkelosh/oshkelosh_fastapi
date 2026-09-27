@@ -39,9 +39,6 @@ from app.services.user_accounts import (
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
-_ALLOWED_PUSH_PROVIDERS = frozenset({"fcm", "onesignal", "pusher_beams"})
-
-
 def _as_user_read(user: User) -> UserRead:
     return UserRead.from_user(user)
 
@@ -65,8 +62,6 @@ def _apply_push_subscription(user: User, body: UserProfileUpdate) -> None:
         raise ValidationError(
             message="push_token and push_provider must both be set or cleared together"
         )
-    if provider not in _ALLOWED_PUSH_PROVIDERS:
-        raise ValidationError(message=f"Unsupported push provider: {provider}")
 
     addon = get_notification_addon_for_channel("push")
     if addon is None or addon.addon_id != provider:
@@ -158,6 +153,10 @@ async def register(
         EVENT_USER_REGISTERED,
         build_user_registered_payload(user),
     )
+    from app.services.outbound_webhooks import EVENT_USER_REGISTERED as WEBHOOK_USER_REGISTERED
+    from app.services.outbound_webhooks import emit_outbound_webhook
+
+    await emit_outbound_webhook(session, WEBHOOK_USER_REGISTERED, build_user_registered_payload(user))
 
     tokens = _build_token_response(user)
     return RegisterResponse(user=_as_user_read(user), **tokens)

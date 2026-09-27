@@ -31,6 +31,7 @@ How we use your information
 
 Cookies and similar technologies
 We use necessary cookies and similar technologies to run the store (for example session and security features). If we use optional analytics or marketing tools, we will describe them here and, where required, ask for your consent.
+If this store is delivered through a content delivery or security provider such as Cloudflare, that provider may set strictly necessary cookies (for example to protect the site). When cookie consent is enabled, a preference cookie may store your choices.
 
 Sharing your information
 We share personal data only as needed with service providers that help us run the store (such as hosting, payment, shipping, and email providers), or when required by law. We do not sell your personal data.
@@ -153,7 +154,12 @@ class SiteSettings(ModelBase, table=True):
         sa_column=Column(Integer, nullable=False, server_default="1"),
     )
 
-    # Simple GDPR / cookie notice (dismissible; no consent gating)
+    # Cookie consent: off | notice (dismissible, no gating) | zaraz (Cloudflare CMP)
+    cookie_consent_mode: str = Field(
+        default="off",
+        sa_column=Column(String(16), nullable=False, server_default="off"),
+    )
+    # Derived alias: true iff cookie_consent_mode == "notice" (kept for older SPAs)
     gdpr_banner_enabled: bool = Field(
         default=False,
         sa_column=Column(Boolean, nullable=False, server_default="0"),

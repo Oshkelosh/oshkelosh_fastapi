@@ -46,7 +46,7 @@
     <h3 style="margin-top:0;">Placeholders</h3>
     <ul style="margin:0;padding-left:18px;font-size:14px;">
       {% for key in event.placeholders %}
-      <li><code>{ {{ key }} }</code></li>
+      <li><code>{{ '{' }}{{ key }}{{ '}' }}</code></li>
       {% endfor %}
     </ul>
     <p style="font-size:13px;color:var(--clr-text-muted);margin-top:12px;">

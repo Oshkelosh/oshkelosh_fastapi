@@ -8,6 +8,7 @@ import pytest
 
 from app.services.site_settings import (
     is_dev_fallback_site_url,
+    normalize_cookie_consent_mode,
     resolve_public_site_url,
     site_settings_to_public_dict,
 )
@@ -80,7 +81,31 @@ class TestPrivacyPolicyDefaults:
         assert site.privacy_policy_title == DEFAULT_PRIVACY_POLICY_TITLE
         assert site.privacy_policy_body == DEFAULT_PRIVACY_POLICY_BODY
         assert "Information we collect" in (site.privacy_policy_body or "")
+        assert "Cloudflare" in (site.privacy_policy_body or "")
         assert site.privacy_policy_enabled is False
+        assert site.cookie_consent_mode == "off"
+        assert site.gdpr_banner_enabled is False
+
+
+class TestCookieConsentMode:
+    def test_normalize_unknown_mode_is_off(self):
+        assert normalize_cookie_consent_mode(None) == "off"
+        assert normalize_cookie_consent_mode("nope") == "off"
+        assert normalize_cookie_consent_mode("ZARAZ") == "zaraz"
+        assert normalize_cookie_consent_mode("notice") == "notice"
+
+    def test_public_dict_derives_banner_flag_from_mode(self):
+        site = SiteSettings(
+            store_name="Shop",
+            cookie_consent_mode="zaraz",
+            gdpr_banner_enabled=True,
+        )
+        with patch("app.services.site_settings.settings") as mock_settings:
+            mock_settings.public_app_url = "https://shop.example.com"
+            mock_settings.cors_origins = []
+            data = site_settings_to_public_dict(site)
+        assert data["cookie_consent_mode"] == "zaraz"
+        assert data["gdpr_banner_enabled"] is False
 
 
 class TestAboutPageDefaults:

@@ -76,6 +76,10 @@ The supplemental SQL is security-critical on D1 deployments. Unique indexes such
 
 Only one admin is created; the loser sees an error message and must sign in normally.
 
+## Outbound webhooks
+
+Admin → Webhooks configures one HTTPS receiver. Core generates the HMAC secret and shows it once. Each delivery is `POST` JSON with `X-Webhook-Id`, `X-Webhook-Timestamp`, `X-Webhook-Event`, and `X-Webhook-Signature` (`t=<unix>,v1=<hex>` of `{timestamp}.{raw_body}`). Failures are logged and never fail checkout. The secret is stored on `outbound_webhook_endpoints`, not `site_settings`. See [WEBHOOKS.md](WEBHOOKS.md).
+
 ## Payment webhook idempotency
 
 Payment webhooks are processed by [`app/services/payment_webhooks.py`](../app/services/payment_webhooks.py). Core first asks the addon to parse and validate the delivery, then records a `processed_webhook_events` row keyed by `event_id` (unique) before applying side effects. A duplicate delivery hits the unique constraint and returns `{"handled": true, "duplicate": true}` without re-marking the order paid. Addon `parse_webhook()` methods must not write to the database — core owns idempotency and order transitions.

@@ -254,6 +254,16 @@ class SupplierAddon(BaseAddon):
             f"Supplier addon '{self.addon_id}' does not implement catalog import"
         )
 
+    async def after_catalog_sync(self, session: Any, result: Any) -> None:
+        """Optional post-sync side effects after a successful catalog commit.
+
+        ``result`` is a ``SupplierCatalogSyncResult``. Default is a no-op.
+        Failures should raise; core logs and records them without rolling back
+        the sync.
+        """
+        del session, result
+        return None
+
     @abstractmethod
     async def get_product(self, product_id: str) -> Dict[str, Any]:
         """Fetch a single product by its supplier ID."""

@@ -18,6 +18,7 @@ Developer documentation for the Oshkelosh modular e-commerce backend.
 | Explore HTTP endpoints and schemas | [docs/api/OPENAPI.md](api/OPENAPI.md) |
 | Understand API/admin surfaces | [app/api/README.md](../app/api/README.md) |
 | Review security assumptions | [SECURITY.md](SECURITY.md) |
+| Receive outbound shop events | [WEBHOOKS.md](WEBHOOKS.md) |
 | Understand database backends | [DATABASE.md](DATABASE.md) |
 | Understand storefront SEO / structured data | [SEO.md](SEO.md) |
 | Run the project locally | [README.md](../README.md) (repository root) |

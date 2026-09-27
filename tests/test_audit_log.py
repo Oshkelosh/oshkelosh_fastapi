@@ -56,6 +56,8 @@ class TestAuditHelpers:
             == "/admin/notifications/messages/order_paid/email"
         )
         assert resource_admin_url("site_settings", "1") == "/admin/settings"
+        assert resource_admin_url("outbound_webhook", "1") == "/admin/webhooks"
+        assert resource_admin_url("outbound_webhook", None) == "/admin/webhooks"
 
 
 @pytest.mark.asyncio

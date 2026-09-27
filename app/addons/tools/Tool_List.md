@@ -88,17 +88,17 @@ Document new seams in this file and in [../README.md](../README.md#how-core-comm
 3. Native abandoned cart (`abandoned_cart.py`, Site Settings toggles)
 4. Measurement hooks (`tool_discovery.py`, `on_commerce_event`)
 5. Search strategy hook (`product_search.py`; optional FTS later)
+6. Cookie consent modes in Site Settings (`off` / `notice` / Cloudflare Zaraz CMP)
 
 ### Tools after
 
-1. **Cookie consent** — prerequisite for analytics and ad pixels
-2. **Analytics** (Plausible, PostHog, Fathom) — visibility with low integration cost
-3. **Tax provider tool** (TaxJar, Avalara) — when built-in Site Settings tax is insufficient
-4. **CRM sync** (Klaviyo, Brevo) — lifecycle event sync; ESP may run its own abandoned flows
-5. **Tracking automation** (AfterShip, 17track) — polling/webhooks on top of core tracking fields
-6. **Conversion pixels** (Meta CAPI, Google Ads, TikTok) — server-side `purchase` via `on_commerce_event`
-7. **Site search engine** (Meilisearch, Typesense, Algolia) — when `search_products` delegates
-8. **A/B testing** — uses `storefront_resolver` extension point
+1. **Analytics** (Plausible, PostHog, Fathom) — visibility with low integration cost; enable core cookie consent (Site Settings) first when required
+2. **Tax provider tool** (TaxJar, Avalara) — when built-in Site Settings tax is insufficient
+3. **CRM sync** (Klaviyo, Brevo) — lifecycle event sync; ESP may run its own abandoned flows
+4. **Tracking automation** (AfterShip, 17track) — polling/webhooks on top of core tracking fields
+5. **Conversion pixels** (Meta CAPI, Google Ads, TikTok) — server-side `purchase` via `on_commerce_event`
+6. **Site search engine** (Meilisearch, Typesense, Algolia) — when `search_products` delegates
+7. **A/B testing** — uses `storefront_resolver` extension point
 
 ---
 
@@ -146,7 +146,7 @@ Analytics and conversion pixels are **sibling tool families** under shared hooks
 - Prefer **server-side** events for reliability; client pixel optional, gated by consent.
 - Never log raw email/phone in addon debug output.
 
-**Shared implementation:** [`tool_discovery.py`](../../services/tool_discovery.py) — `list_storefront_scripts()`, `dispatch_commerce_event()`, `storefront/config.tools.consent_categories` placeholder until consent tool ships.
+**Shared implementation:** [`tool_discovery.py`](../../services/tool_discovery.py) — `list_storefront_scripts()`, `dispatch_commerce_event()`, `storefront/config.tools.consent_categories`. Host cookie consent is **core** (`site.cookie_consent_mode`); do not ship a `tools/consent` addon.
 
 ---
 
@@ -156,16 +156,9 @@ Each entry lists **value**, **integration type**, and **implementation notes** f
 
 ### Tier 1 — High merchant value, strong fit
 
-#### Cookie consent (`consent`)
+#### Cookie consent — **core**, not a tool
 
-**Value:** Legal prerequisite for analytics, ad pixels, and third-party chat in the EU and similar jurisdictions.
-
-| Layer | Responsibility |
-|-------|----------------|
-| Core | `tools.consent_categories` in storefront config; filter scripts by category |
-| Addon | Banner copy, policy URLs, category definitions (necessary / analytics / marketing) |
-
-- Should be enabled **before** analytics and pixel tools in production.
+Cookie consent lives in **Site Settings** (`cookie_consent_mode`: `off` / `notice` / `zaraz`). Do **not** ship `tools/consent`. Optional Zaraz CMP requires the shop hostname to be Cloudflare-proxied. See [`models/site_settings.py`](../../../models/site_settings.py) and the frontend SPA contract in [`../frontends/README.md`](../frontends/README.md).
 
 ---
 
@@ -274,6 +267,7 @@ Configured at **Admin → Site Settings** ([`/admin/settings`](../../admin/route
 | Built-in shipping rules | Flat, free, free-over-threshold, country zones |
 | Supplier shipping quotes | [`SupplierAddon.quote_shipping()`](../suppliers/base.py) |
 | Abandoned cart toggles | `abandoned_cart_enabled`, delay, max reminders |
+| Cookie consent | `cookie_consent_mode` (`off` / `notice` / `zaraz`); `gdpr_banner_text` |
 
 Carrier APIs (EasyPost, Shippo) are **not** planned for core or tools — live shipping quotes belong on **supplier addons** where the provider supports them.
 

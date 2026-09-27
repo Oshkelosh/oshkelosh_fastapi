@@ -31,14 +31,6 @@ def _is_expired(expires_at: Optional[datetime]) -> bool:
     return _as_utc(expires_at) < utc_now()
 
 
-def _public_app_url() -> str:
-    if settings.public_app_url:
-        return settings.public_app_url.rstrip("/")
-    if settings.cors_origins:
-        return settings.cors_origins[0].rstrip("/")
-    return "http://localhost:8000"
-
-
 def generate_account_token() -> str:
     return secrets.token_urlsafe(32)
 
@@ -79,10 +71,12 @@ def mark_user_verified(user: User) -> None:
 
 async def send_verification_email(session: Any, user: User) -> None:
     from app.services.notification_dispatch import dispatch_notification
+    from app.services.site_settings import get_site_settings, resolve_public_site_url
 
     token = issue_email_verification(user)
-    verify_url = f"{_public_app_url()}/verify-email?token={token}"
     try:
+        site = await get_site_settings(session)
+        verify_url = f"{resolve_public_site_url(site_settings=site)}/verify-email?token={token}"
         await dispatch_notification(
             session,
             "email_verification",
@@ -98,10 +92,12 @@ async def send_verification_email(session: Any, user: User) -> None:
 
 async def send_password_reset_email(session: Any, user: User) -> None:
     from app.services.notification_dispatch import dispatch_notification
+    from app.services.site_settings import get_site_settings, resolve_public_site_url
 
     token = issue_password_reset(user)
-    reset_url = f"{_public_app_url()}/reset-password?token={token}"
     try:
+        site = await get_site_settings(session)
+        reset_url = f"{resolve_public_site_url(site_settings=site)}/reset-password?token={token}"
         await dispatch_notification(
             session,
             "password_reset",

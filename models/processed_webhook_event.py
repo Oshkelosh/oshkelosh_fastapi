@@ -9,7 +9,7 @@ from app.db.base import ModelBase, utc_now
 
 
 class ProcessedWebhookEvent(ModelBase, table=True):
-    """Payment-provider webhook events already handled (dedupe/replay guard)."""
+    """External webhook events already handled (dedupe/replay guard)."""
 
     __tablename__ = "processed_webhook_events"
 

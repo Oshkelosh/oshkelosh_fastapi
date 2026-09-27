@@ -70,6 +70,8 @@ def resource_admin_url(resource_type: str, resource_id: str | None) -> str | Non
     if not resource_id:
         if resource_type == "site_settings":
             return f"{admin_prefix}/settings"
+        if resource_type == "outbound_webhook":
+            return f"{admin_prefix}/webhooks"
         return None
 
     if resource_type == "product":
@@ -82,6 +84,8 @@ def resource_admin_url(resource_type: str, resource_id: str | None) -> str | Non
         return f"{admin_prefix}/addons/{resource_id}/configure"
     if resource_type == "site_settings":
         return f"{admin_prefix}/settings"
+    if resource_type == "outbound_webhook":
+        return f"{admin_prefix}/webhooks"
     if resource_type == "notification_template" and "/" in resource_id:
         event_key, channel = resource_id.split("/", 1)
         return f"{admin_prefix}/notifications/messages/{event_key}/{channel}"

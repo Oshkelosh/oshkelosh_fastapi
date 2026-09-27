@@ -88,6 +88,18 @@ document.body.classList.add(`layout-${cfg.layout ?? "grid"}`);
 
 Reference implementation: [`default/dist/assets/app.js`](default/dist/assets/app.js).
 
+### Cookie consent (`site.cookie_consent_mode`)
+
+Core Site Settings expose `cookie_consent_mode`: `off` | `notice` | `zaraz`. `gdpr_banner_enabled` is `true` only in `notice` mode (alias for older SPAs). `gdpr_banner_text` is the notice copy and the Zaraz-missing fallback.
+
+| Mode | Storefront behavior |
+|------|---------------------|
+| `off` | No host banner. |
+| `notice` | Show the existing dismissible banner. Do not block scripts. |
+| `zaraz` | Do **not** show the host banner if `zaraz.consent` is ready. After `zarazConsentAPIReady`, a Cookie settings control should set `zaraz.consent.modal = true`. If `window.zaraz` is still absent after a short wait, show the notice using `gdpr_banner_text`. |
+
+Zaraz auto-injects at the Cloudflare edge. The host does not load `zaraz.js`. Tools pasted in **Tools → Scripts** are **not** gated by Zaraz; put analytics/pixels in the Zaraz dashboard when using this mode.
+
 ## CSS variables
 
 ### Base (from site settings)

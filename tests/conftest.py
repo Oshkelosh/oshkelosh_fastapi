@@ -28,6 +28,7 @@ from app.services.product_variants import create_default_variant, refresh_produc
 import models.manual_supplier  # noqa: F401 — register table for tests
 import models.notification_template  # noqa: F401 — register table for tests
 import models.audit_log  # noqa: F401 — register table for tests
+import models.outbound_webhook_endpoint  # noqa: F401 — register table for tests
 import models.order_idempotency_key  # noqa: F401 — register table for tests
 import models.product_variant  # noqa: F401 — register table for tests
 

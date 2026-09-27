@@ -9,7 +9,7 @@ Notification addons deliver email, SMS, or push messages. **Core** owns event de
 | [`app/services/notification_events.py`](../../services/notification_events.py) | Event catalog, default copy, placeholders |
 | [`app/services/notification_templates.py`](../../services/notification_templates.py) | DB template load/save/render |
 | [`app/services/notification_dispatch.py`](../../services/notification_dispatch.py) | Pick addon per channel, call transport |
-| [`app/services/notifications.py`](../../services/notifications.py) | Order status → dispatch |
+| [`app/services/notifications.py`](../../services/notifications.py) | Order placed + status → dispatch |
 | [`app/services/user_accounts.py`](../../services/user_accounts.py) | Verification/reset → dispatch |
 | Admin → Messages | `/admin/notifications/messages` — edit copy per event/channel |
 
@@ -26,11 +26,13 @@ Notification addons deliver email, SMS, or push messages. **Core** owns event de
 
 | Event key | Trigger | Channels |
 |-----------|---------|----------|
+| `order_placed` | Order created (pending) | email, sms, push |
 | `order_confirmation` | `pending` → `paid` | email, sms, push |
 | `order_shipped` | `paid` → `shipped` | email, sms, push |
 | `order_delivered` | `shipped` → `delivered` | email, sms, push |
 | `email_verification` | registration / resend | email |
 | `password_reset` | forgot password | email |
+| `cart_abandoned` | Abandoned-cart admin job | email, sms, push |
 
 Edit templates at **Admin → Notifications → Edit message templates**.
 

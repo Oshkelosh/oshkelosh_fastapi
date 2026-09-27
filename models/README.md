@@ -11,7 +11,8 @@ be imported in `models/__init__.py` so `SQLModel.metadata.create_all` sees them.
 | `Cart` / `CartItem` | cart | One cart per user; `(cart_id, variant_id)` unique |
 | `Order` / `OrderItem` | orders | Integer-cent money; frozen line prices; `shipping_selections` + `supplier_orders` JSON |
 | `OrderIdempotencyKey` | order dedupe | Unique `(user_id, key_hash)` |
-| `ProcessedWebhookEvent` | webhook replay guard | Unique `event_id` per provider event |
+| `ProcessedWebhookEvent` | inbound webhook replay guard | Unique `event_id` per provider event |
+| `OutboundWebhookEndpoint` | outbound HMAC receiver | Singleton URL + secret + selected events |
 | `SiteSettings` | singleton | Shop currency, tax/shipping defaults, branding |
 | `AddonConfig` | addon state | Per-addon config JSON + enabled flag |
 | `ManualSupplier` | manual fulfillment | Queried via `app/services/manual_suppliers.py` |

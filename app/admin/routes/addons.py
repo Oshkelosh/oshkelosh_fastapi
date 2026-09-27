@@ -370,6 +370,7 @@ async def admin_notifications_list(request: Request, db=Depends(require_admin_se
 async def admin_notification_messages_list(request: Request, db=Depends(require_admin_session)):
     from app.services.notification_events import (
         EVENT_GROUP_ACCOUNT,
+        EVENT_GROUP_MARKETING,
         EVENT_GROUP_ORDERS,
         list_events,
     )
@@ -401,6 +402,7 @@ async def admin_notification_messages_list(request: Request, db=Depends(require_
         nav_section="notifications",
         order_events=[r for r in rows if r["event"].group == EVENT_GROUP_ORDERS],
         account_events=[r for r in rows if r["event"].group == EVENT_GROUP_ACCOUNT],
+        marketing_events=[r for r in rows if r["event"].group == EVENT_GROUP_MARKETING],
     )
 
 

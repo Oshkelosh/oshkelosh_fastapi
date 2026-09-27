@@ -116,7 +116,7 @@ async def process_abandoned_carts(session: Any) -> AbandonedCartRunResult:
             continue
 
         customer_name = user.full_name or user.email
-        await dispatch_notification(
+        sent = await dispatch_notification(
             session,
             "cart_abandoned",
             email=user.email,
@@ -128,15 +128,21 @@ async def process_abandoned_carts(session: Any) -> AbandonedCartRunResult:
                 "subtotal_cents": subtotal_cents,
             },
         )
-        await dispatch_lifecycle_event(
-            EVENT_CART_ABANDONED,
-            build_cart_abandoned_payload(
-                user=user,
-                cart_id=cart.id,
-                subtotal_cents=subtotal_cents,
-                cart_url=cart_url,
-            ),
+        if not sent:
+            result.skipped += 1
+            continue
+
+        cart_payload = build_cart_abandoned_payload(
+            user=user,
+            cart_id=cart.id,
+            subtotal_cents=subtotal_cents,
+            cart_url=cart_url,
         )
+        await dispatch_lifecycle_event(EVENT_CART_ABANDONED, cart_payload)
+        from app.services.outbound_webhooks import EVENT_CART_ABANDONED as WEBHOOK_CART_ABANDONED
+        from app.services.outbound_webhooks import emit_outbound_webhook
+
+        await emit_outbound_webhook(session, WEBHOOK_CART_ABANDONED, cart_payload)
 
         cart.abandoned_reminded_at = utc_now()
         cart.abandoned_reminder_count += 1

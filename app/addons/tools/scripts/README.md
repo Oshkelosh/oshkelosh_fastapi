@@ -19,6 +19,8 @@ Paste a complete external script tag — for example Umami:
 
 Core aggregates descriptors via `list_storefront_scripts()` into `GET /api/v1/storefront/config` → `tools.scripts`. The default storefront injects matching tags into `<head>`.
 
+These tags are **not** gated by cookie consent. If Site Settings cookie consent is **Zaraz**, put analytics and pixels in the Cloudflare Zaraz dashboard (with purposes assigned) instead of duplicating them here.
+
 ## Enable and configure
 
 1. Open **Admin → Tools → Scripts** at `/admin/tools/scripts`

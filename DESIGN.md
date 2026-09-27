@@ -20,6 +20,7 @@ Oshkelosh is a modular FastAPI e-commerce host: **core orchestrates** commerce l
 - Webhook idempotency owned by core; addon `parse_webhook()` must not write the DB
 - Provider credentials in `addon_configs`; host/backends/JWT/CORS in `.env`
 - Site branding / tax / shipping in `site_settings`; frontend-specific options in addon config
+- Outbound HMAC-signed webhooks configured in Admin (one receiver, core-generated secret)
 
 ## Planned (not implemented)
 

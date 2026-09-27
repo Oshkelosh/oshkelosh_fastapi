@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+
+{% block title %}Webhooks{% endblock %}
+
+{% block content %}
+<h2 style="margin-bottom:20px;">Webhooks</h2>
+
+<p style="color:var(--clr-text-muted);margin-bottom:24px;">
+  Push signed JSON events to one HTTPS receiver. Core generates the HMAC secret;
+  copy it once into your receiver. Deliveries are attempted once and never block checkout.
+</p>
+
+{% if revealed_secret %}
+<div class="card" style="margin-bottom:16px;border-color:var(--clr-warning);">
+  <h3 style="margin-top:0;">Signing secret — copy now</h3>
+  <p style="color:var(--clr-text-muted);font-size:14px;">
+    This value is shown once. Store it on the receiver. Reloading this page hides it.
+  </p>
+  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+    <code id="webhook-secret-once" style="font-size:13px;word-break:break-all;">{{ revealed_secret }}</code>
+    <button type="button" class="btn btn--secondary btn--sm" id="copy-webhook-secret">Copy</button>
+  </div>
+</div>
+{% endif %}
+
+<form method="POST" action="{{ admin_prefix }}/webhooks">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+
+  <div class="card" style="margin-bottom:16px;">
+    <div class="form-group">
+      <label class="form-label">
+        <input type="checkbox" name="enabled" value="1"
+               {% if endpoint.enabled %}checked{% endif %} />
+        Enable outbound webhooks
+      </label>
+    </div>
+    <div class="form-group">
+      <label class="form-label" for="url">Receiver URL</label>
+      <input type="url" id="url" name="url" class="form-input"
+             value="{{ endpoint.url or '' }}" maxlength="2048"
+             placeholder="https://example.com/webhooks/oshkelosh" />
+    </div>
+    <div class="form-group">
+      <label class="form-label">Signing secret</label>
+      {% if secret_mask %}
+      <p style="margin:0 0 8px;"><code>{{ secret_mask }}</code></p>
+      {% else %}
+      <p style="color:var(--clr-text-muted);margin:0 0 8px;">Generated on first save.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:16px;">
+    <h3 style="margin-top:0;">Events</h3>
+    {% for key, label in event_catalog %}
+    <div class="form-group">
+      <label class="form-label">
+        <input type="checkbox" name="events" value="{{ key }}"
+               {% if key in selected_events %}checked{% endif %} />
+        {{ label }} <code style="font-weight:normal;">{{ key }}</code>
+      </label>
+    </div>
+    {% endfor %}
+  </div>
+
+  <button type="submit" class="btn btn--primary">Save webhook</button>
+</form>
+
+<div class="card" style="margin-top:16px;">
+  <h3 style="margin-top:0;">Secret rotation</h3>
+  <p style="color:var(--clr-text-muted);font-size:14px;">
+    Invalidates the current secret immediately. Update the receiver before enabling traffic again.
+  </p>
+  <form method="POST" action="{{ admin_prefix }}/webhooks/rotate"
+        onsubmit="return confirm('Rotate the signing secret? Existing receivers will fail until they use the new value.');">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <button type="submit" class="btn btn--secondary">Rotate secret</button>
+  </form>
+</div>
+
+<div class="card" style="margin-top:16px;">
+  <h3 style="margin-top:0;">Send test</h3>
+  <p style="color:var(--clr-text-muted);font-size:14px;">
+    POSTs a signed <code>webhook.test</code> event so the receiver can verify
+    <code>X-Webhook-*</code> headers. Does not require the event checkboxes.
+  </p>
+  <form method="POST" action="{{ admin_prefix }}/webhooks/test">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <button type="submit" class="btn btn--secondary" {% if not can_test %}disabled{% endif %}>Send test event</button>
+  </form>
+  {% if endpoint.last_sent_at %}
+  <p style="margin-top:12px;font-size:14px;color:var(--clr-text-muted);">
+    Last delivery:
+    {% if endpoint.last_status %}HTTP {{ endpoint.last_status }}{% else %}failed{% endif %}
+    at {{ endpoint.last_sent_at }}
+    {% if endpoint.last_error %} — {{ endpoint.last_error }}{% endif %}
+  </p>
+  {% endif %}
+</div>
+
+<div class="card" style="margin-top:16px;">
+  <h3 style="margin-top:0;">Verify a delivery</h3>
+  <p style="color:var(--clr-text-muted);font-size:14px;margin-bottom:8px;">
+    HMAC-SHA256 of <code>{timestamp}.{raw_body}</code> using the signing secret.
+    Header <code>X-Webhook-Signature</code> is <code>t=&lt;timestamp&gt;,v1=&lt;hex&gt;</code>.
+    Also sent: <code>X-Webhook-Id</code>, <code>X-Webhook-Timestamp</code>, <code>X-Webhook-Event</code>.
+  </p>
+  <pre style="overflow:auto;font-size:12px;">{% raw %}import hashlib, hmac
+
+def verify(secret, timestamp, body: bytes, header: str) -> bool:
+    expected = "t=" + timestamp + ",v1=" + hmac.new(
+        secret.encode(), f"{timestamp}.".encode() + body, hashlib.sha256
+    ).hexdigest()
+    return hmac.compare_digest(expected, header.strip()){% endraw %}</pre>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  var btn = document.getElementById("copy-webhook-secret");
+  var el = document.getElementById("webhook-secret-once");
+  if (!btn || !el) return;
+  btn.addEventListener("click", function () {
+    navigator.clipboard.writeText(el.textContent).then(function () {
+      btn.textContent = "Copied";
+    });
+  });
+})();
+</script>
+{% endblock %}

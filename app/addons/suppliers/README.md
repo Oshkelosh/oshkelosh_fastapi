@@ -123,7 +123,7 @@ API supplier addons implement **`fetch_catalog_for_import()`**, returning normal
 | `Product.name` / `description` | Provider **product** fields — never derive parent name from a single variant title |
 | `ProductVariant.title` | Include the product/design name when the provider’s raw variant label is options-only. Printful: `{name} / {size} / {color}`. Printify: `{shop title} / {variant.title}` |
 | `ProductVariant.attributes` | Purchasable picker axes for VariantPicker (Size, Color, …). Printful: sync `size`/`color` → `Size`/`Color`. Printify: resolve shop product `options` value IDs from each variant’s `options` ID list → same labels (other keys Title-Cased). Never leave empty when the provider exposes purchasable axes — titles alone yield a flat option list |
-| Images | Put mockups on **variants** (`SupplierCatalogVariant.image_urls`). Leave `SupplierCatalogProduct.image_urls` empty unless there is a true product-only gallery |
+| Images | Put mockups on **variants** (`SupplierCatalogVariant.image_urls`). Leave `SupplierCatalogProduct.image_urls` empty unless there is a true product-only gallery. Fill `image_alt_texts` aligned 1:1 with `image_urls`: blank/catalog product photos → base product name only; design mockups → combined design (listing) + base product/options (e.g. Printful preview `"{design} / {base}"`, Printify `printify_variant_display_name`) |
 | `product_type` | Set when the provider has a type/blueprint label; also set `options["Product type"]`. Core `assign_product_category_from_type` runs on **create** only |
 | Shop / store IDs | Discover via provider API when possible (e.g. Printify `GET /shops.json`); do not require humans to invent IDs the dashboard does not show |
 

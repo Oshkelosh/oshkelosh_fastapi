@@ -74,6 +74,8 @@ class SeoMeta:
     site_name: str | None = None
     robots: str = "index, follow"
     json_ld: list[dict[str, Any]] = field(default_factory=list)
+    h1: str | None = None
+    intro_text: str | None = None
     crawl_hubs: list[tuple[str, str]] = field(default_factory=list)
     crawl_products: list[tuple[str, str]] = field(default_factory=list)
     crawl_categories: list[tuple[str, str]] = field(default_factory=list)
@@ -291,6 +293,20 @@ def _hub_links(site_url: str) -> list[tuple[str, str]]:
     return links
 
 
+def _first_text(*values: Any) -> str:
+    for value in values:
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return ""
+
+
+def _h1_from_title(title: str) -> str:
+    """Use the heading part of a document title (strip trailing `` | Store``)."""
+    if " | " in title:
+        return title.split(" | ", 1)[0].strip()
+    return title.strip()
+
+
 def _seo_meta_from_tool_dict(raw: dict[str, Any]) -> SeoMeta:
     def _parse_links(value: Any) -> list[tuple[str, str]]:
         links: list[tuple[str, str]] = []
@@ -301,13 +317,13 @@ def _seo_meta_from_tool_dict(raw: dict[str, Any]) -> SeoMeta:
                 links.append((str(item["label"]), str(item["href"])))
         return links
 
-    hubs = _parse_links(raw.get("crawl_hubs"))
-    products = _parse_links(raw.get("crawl_products"))
-    categories = _parse_links(raw.get("crawl_categories"))
-    articles = _parse_links(raw.get("crawl_articles"))
+    hubs = _parse_links(raw.get("crawl_hubs") or raw.get("crawl_hubs"))
+    products = _parse_links(raw.get("crawl_products") or raw.get("crawl_products"))
+    categories = _parse_links(raw.get("crawl_categories") or raw.get("crawl_categories"))
+    articles = _parse_links(raw.get("crawl_articles") or raw.get("crawl_articles"))
     # Legacy flat crawl_links: classify by path.
     if not hubs and not products and not categories and not articles:
-        for label, href in _parse_links(raw.get("crawl_links")):
+        for label, href in _parse_links(raw.get("crawl_links") or raw.get("crawl_links")):
             path = urlparse(href).path.rstrip("/") or "/"
             if path.startswith("/products/") and path != "/products":
                 products.append((label, href))
@@ -318,19 +334,26 @@ def _seo_meta_from_tool_dict(raw: dict[str, Any]) -> SeoMeta:
             else:
                 hubs.append((label, href))
 
-    json_ld = raw.get("json_ld") or []
+    json_ld = raw.get("json_ld") or raw.get("json_ld") or []
     if not isinstance(json_ld, list):
         json_ld = []
+    title = _first_text(raw.get("title"), raw.get("title"))
+    description = raw.get("description")
+    description = description if isinstance(description, str) else None
+    h1 = _first_text(raw.get("h1")) or (_h1_from_title(title) if title else "")
+    intro = _first_text(raw.get("intro_text"), description)
     return SeoMeta(
-        title=str(raw.get("title") or ""),
-        description=raw.get("description"),
-        canonical_url=str(raw.get("canonical_url") or ""),
-        og_type=str(raw.get("og_type") or "website"),
-        og_image=raw.get("og_image"),
+        title=title,
+        description=description,
+        canonical_url=_first_text(raw.get("canonical_url"), raw.get("canonical_url")),
+        og_type=_first_text(raw.get("og_type"), raw.get("og_type")) or "website",
+        og_image=raw.get("og_image") or raw.get("og_image"),
         og_image_alt=raw.get("og_image_alt"),
-        site_name=raw.get("site_name"),
-        robots=str(raw.get("robots") or "index, follow"),
+        site_name=raw.get("site_name") or raw.get("site_name"),
+        robots=_first_text(raw.get("robots"), raw.get("robots")) or "index, follow",
         json_ld=list(json_ld),
+        h1=h1 or None,
+        intro_text=intro or None,
         crawl_hubs=hubs,
         crawl_products=products,
         crawl_categories=categories,
@@ -477,6 +500,8 @@ async def resolve_meta_for_path(
             description=default_description,
             canonical_url=f"{site_url}/",
             site_name=store_name,
+            h1=store_name,
+            intro_text=default_description,
             og_image=logo,
             json_ld=[build_organization_json_ld(site_settings, site_url)],
             crawl_hubs=_dedupe_links(_hub_links(site_url)),
@@ -513,6 +538,8 @@ async def resolve_meta_for_path(
             description=default_description or f"Browse products at {store_name}",
             canonical_url=canonical,
             site_name=store_name,
+            h1="Products",
+            intro_text=default_description or f"Browse products at {store_name}",
             og_image=logo,
             json_ld=[
                 build_item_list_json_ld(
@@ -539,6 +566,8 @@ async def resolve_meta_for_path(
             description=default_description or f"Browse categories at {store_name}",
             canonical_url=f"{site_url}/categories",
             site_name=store_name,
+            h1="Categories",
+            intro_text=default_description or f"Browse categories at {store_name}",
             og_image=logo,
             crawl_hubs=_dedupe_links(_hub_links(site_url)),
             crawl_categories=category_links,
@@ -566,6 +595,12 @@ async def resolve_meta_for_path(
             site_name=store_name,
             og_image=logo,
             robots="index, follow" if published else "noindex, nofollow",
+            h1=title if published else None,
+            intro_text=(
+                truncate_text(site_settings.privacy_policy_body, _DESCRIPTION_MAX)
+                if published
+                else None
+            ),
         )
 
     if normalized == "/about":
@@ -586,6 +621,12 @@ async def resolve_meta_for_path(
             site_name=store_name,
             og_image=logo,
             robots="index, follow" if published else "noindex, nofollow",
+            h1=title if published else None,
+            intro_text=(
+                truncate_text(site_settings.about_page_body, _DESCRIPTION_MAX)
+                if published
+                else None
+            ),
         )
 
     if normalized.startswith("/products/"):
@@ -670,6 +711,8 @@ async def resolve_meta_for_path(
             description=description,
             canonical_url=canonical,
             og_type="product",
+            h1=product.name,
+            intro_text=description,
             og_image=image_url or logo,
             og_image_alt=image_alt if (image_url or logo) else None,
             site_name=store_name,
@@ -750,6 +793,8 @@ async def resolve_meta_for_path(
             canonical_url=canonical,
             og_image=logo,
             site_name=store_name,
+            h1=category.name,
+            intro_text=description,
             json_ld=[
                 build_breadcrumb_json_ld(breadcrumbs),
                 build_item_list_json_ld(
@@ -792,14 +837,58 @@ async def resolve_meta_for_path(
     return None
 
 
+_BODY_OPEN_RE = re.compile(r"<body([^>]*)>", re.IGNORECASE)
+
+
+def _render_seo_intro(meta: SeoMeta) -> str:
+    """Visible H1 + lede for crawlers; SPA adopts ``#seo-intro`` like catalog nav."""
+    if not meta.h1 or meta.robots.startswith("noindex"):
+        return ""
+    parts = [
+        '<header id="seo-intro" class="seo-intro">',
+        f"<h1>{html.escape(meta.h1)}</h1>",
+    ]
+    if meta.intro_text:
+        parts.append(f"<p>{html.escape(meta.intro_text)}</p>")
+    parts.append("</header>")
+    parts.append(
+        "<style>"
+        ".seo-intro{"
+        "width:min(100% - 2rem,1200px);"
+        "margin:2rem auto 0;"
+        "padding:0;"
+        "font:inherit;"
+        "color:inherit;"
+        "}"
+        ".seo-intro h1{margin:0 0 0.5rem;font-size:1.75rem}"
+        ".seo-intro p{margin:0;color:#64748b}"
+        "</style>"
+    )
+    return "\n".join(parts)
+
+
+def _inject_after_body_open(page_html: str, snippet: str) -> str:
+    if not snippet:
+        return page_html
+    match = _BODY_OPEN_RE.search(page_html)
+    if match:
+        idx = match.end()
+        return f"{page_html[:idx]}\n{snippet}{page_html[idx:]}"
+    if "</body>" in page_html:
+        return page_html.replace("</body>", f"{snippet}\n</body>", 1)
+    return f"{snippet}\n{page_html}"
+
+
 def inject_seo_into_html(page_html: str, meta: SeoMeta) -> str:
-    """Insert SEO head tags and crawler catalog nav into the SPA shell."""
+    """Insert SEO head tags, visible intro, and crawler catalog nav into the SPA shell."""
     tags = _render_head_tags(meta)
     updated = re.sub(r"<title>.*?</title>", "", page_html, count=1, flags=re.IGNORECASE | re.DOTALL)
     if "</head>" in updated:
         updated = updated.replace("</head>", f"{tags}\n</head>", 1)
     else:
         updated = f"{tags}\n{updated}"
+
+    updated = _inject_after_body_open(updated, _render_seo_intro(meta))
 
     body_nav = _render_crawl_nav(meta)
     if body_nav:

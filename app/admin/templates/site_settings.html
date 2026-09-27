@@ -158,21 +158,48 @@ changing it does not convert existing prices.
   <div class="card" style="margin-bottom:16px;">
     <h3 style="margin-top:0;">Privacy / GDPR</h3>
     <p style="color:var(--clr-text-muted);font-size:0.875rem;margin-bottom:16px;">
-      Simple dismissible cookie notice on the storefront. Does not block cookies or scripts.
-      Publishing a privacy policy page does not itself guarantee regulatory compliance —
-      you supply the legal text.
+      Cookie consent is a core site setting. Publishing a privacy policy page does not
+      itself guarantee regulatory compliance — you supply the legal text.
     </p>
-    <div class="form-group">
-      <label class="form-label">
-        <input type="checkbox" name="gdpr_banner_enabled" value="1"
-               {% if site.gdpr_banner_enabled %}checked{% endif %} />
-        Show GDPR banner
+    {% set consent_mode = site.cookie_consent_mode or ('notice' if site.gdpr_banner_enabled else 'off') %}
+    <fieldset class="form-group" style="border:none;padding:0;margin:0 0 16px;">
+      <legend class="form-label">Cookie consent</legend>
+      <label class="form-label" style="display:block;font-weight:normal;margin-top:8px;">
+        <input type="radio" name="cookie_consent_mode" value="off"
+               {% if consent_mode == 'off' %}checked{% endif %} />
+        Off — no banner
       </label>
-    </div>
+      <label class="form-label" style="display:block;font-weight:normal;margin-top:8px;">
+        <input type="radio" name="cookie_consent_mode" value="notice"
+               {% if consent_mode == 'notice' %}checked{% endif %} />
+        Notice — dismissible host banner. Does not block cookies or scripts.
+      </label>
+      <label class="form-label" style="display:block;font-weight:normal;margin-top:8px;">
+        <input type="radio" name="cookie_consent_mode" value="zaraz"
+               {% if consent_mode == 'zaraz' %}checked{% endif %} />
+        Cloudflare Zaraz CMP
+      </label>
+      <p style="color:var(--clr-text-muted);font-size:0.875rem;margin:12px 0 0;padding:12px;border:1px solid var(--clr-border);">
+        <strong>Zaraz requires a Cloudflare proxy.</strong>
+        The shop hostname must be orange-cloud proxied on Cloudflare, with Zaraz and
+        Consent Management enabled. If Zaraz never loads, the storefront falls back to
+        the notice below. Zaraz only gates tools you add in the Zaraz dashboard —
+        do not also paste the same pixels in Tools → Scripts.
+      </p>
+      <ul style="color:var(--clr-text-muted);font-size:0.875rem;margin:8px 0 0;padding-left:1.25rem;">
+        <li>Enable Zaraz and the Consent Management platform</li>
+        <li>Create purposes and assign <em>every</em> Zaraz tool a purpose (unassigned tools skip consent)</li>
+        <li>Turn on SPA support and auto-inject</li>
+        <li>Add a Cookie settings control in the storefront that calls <code>zaraz.consent.modal = true</code></li>
+      </ul>
+    </fieldset>
     <div class="form-group">
-      <label class="form-label" for="gdpr_banner_text">Banner message</label>
+      <label class="form-label" for="gdpr_banner_text">Notice / fallback message</label>
       <textarea id="gdpr_banner_text" name="gdpr_banner_text" class="form-textarea" rows="3"
                 placeholder="Leave blank for the default notice.">{{ site.gdpr_banner_text or '' }}</textarea>
+      <small style="color:var(--clr-text-muted);display:block;margin-top:4px;">
+        Used for notice mode, and as fallback copy if Zaraz does not load.
+      </small>
     </div>
     <hr style="border:none;border-top:1px solid var(--clr-border);margin:16px 0;" />
     <div class="form-group">

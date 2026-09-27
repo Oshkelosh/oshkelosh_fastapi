@@ -6,8 +6,8 @@ Crawler-facing SEO is **server-injected HTML**. The default SPA mirrors the same
 
 | Layer | Role | Source of truth for crawlers? |
 |-------|------|-------------------------------|
-| [`app/storefront/seo.py`](../app/storefront/seo.py) + [`seo_routes.py`](../app/storefront/seo_routes.py) | Inject title, description, canonical, OG/Twitter, robots, JSON-LD, and catalog `<a>` nav into `dist/index.html` | **Yes** |
-| Default frontend `SeoHead.svelte` + `lib/utils/seo.ts` | Update `<svelte:head>` after client navigation; header/footer hubs + breadcrumbs | No — keep in sync with Python |
+| [`app/storefront/seo.py`](../app/storefront/seo.py) + [`seo_routes.py`](../app/storefront/seo_routes.py) | Inject title, description, canonical, OG/Twitter, robots, JSON-LD, visible `#seo-intro` (H1 + lede), and catalog `<a>` nav into `dist/index.html` | **Yes** |
+| Default frontend `SeoHead.svelte` + `lib/utils/seo.ts` | Update `<svelte:head>` after client navigation; header/footer hubs + breadcrumbs; adopt `#seo-intro` and catalog nav | No — keep in sync with Python |
 
 Routes registered before the static SPA mount: `/`, `/products`, `/products/{slug}`, `/categories`, `/categories/{slug}`, `/articles`, `/articles/{slug}`, private noindex paths (`/cart`, `/checkout`, `/account`, `/orders`, …), plus `/sitemap.xml` and `/robots.txt`.
 
@@ -20,6 +20,12 @@ Routes registered before the static SPA mount: `/`, `/products`, `/products/{slu
 ## Tool SEO discovery
 
 Enabled tools may contribute storefront pages through `ToolAddon.resolve_seo_meta()` and `list_sitemap_entries()`, aggregated by `app/services/tool_discovery.py`. Core still owns injection and `/sitemap.xml`; tools return SeoMeta-shaped dicts (no provider branches in core). Nav hubs also merge `list_storefront_nav_links()` into crawl `_hub_links`.
+
+## Visible H1 + intro
+
+Indexed responses also inject a **visible** `<header id="seo-intro">` immediately after `<body>`: one `<h1>` and one intro `<p>` (escaped text, not the full product/article body). It is not `display:none`. The default SPA **adopts** that node into a slot between the site header and `<main>` (same `appendChild` pattern as catalog nav). On client-side navigation the node is from the first HTML document, so the layout removes it and pages render their own H1.
+
+`#seo-intro` is H1 + lede only. Full article/product copy stays in the SPA.
 
 ## Crawlable internal links
 

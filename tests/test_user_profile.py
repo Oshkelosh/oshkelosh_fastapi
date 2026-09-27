@@ -289,7 +289,7 @@ class TestUserProfile:
         class _PushAddon:
             addon_id = "onesignal"
             addon_category = "notification"
-            supported_channels = ["push"]
+            supported_channels = ("push",)
 
             def list_public_push_config(self):
                 return {"provider": "onesignal", "config": {"appId": "test-app"}}
@@ -322,6 +322,36 @@ class TestUserProfile:
         assert clear.json()["push_enabled"] is False
 
         addon_registry._registry.pop("onesignal", None)
+
+    async def test_patch_me_accepts_enabled_push_addon_id(self, client: AsyncClient, test_user):
+        from app.addons.registry import addon_registry
+
+        class _PushAddon:
+            addon_id = "custom_push"
+            addon_category = "notification"
+            supported_channels = ("push",)
+
+            def list_public_push_config(self):
+                return {"provider": "custom_push", "config": {}}
+
+        addon = _PushAddon()
+        addon.is_enabled = True
+        addon_registry._registry["custom_push"] = addon  # type: ignore[assignment]
+        try:
+            login = await client.post(
+                "/api/v1/auth/login",
+                json={"email": test_user.email, "password": "SecurePass123!"},
+            )
+            headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
+            response = await client.patch(
+                "/api/v1/auth/me",
+                headers=headers,
+                json={"push_token": "tok-1", "push_provider": "custom_push"},
+            )
+            assert response.status_code == 200
+            assert response.json()["push_enabled"] is True
+        finally:
+            addon_registry._registry.pop("custom_push", None)
 
 
 class TestAuthFlags:

@@ -36,6 +36,7 @@ def _mock_addon(catalog_products: list) -> MagicMock:
     addon.is_enabled = True
     addon.supports_catalog_sync = MagicMock(return_value=True)
     addon.fetch_catalog_for_import = AsyncMock(return_value=catalog_products)
+    addon.after_catalog_sync = AsyncMock(return_value=None)
     return addon
 
 
@@ -393,5 +394,39 @@ async def test_manual_supplier_sync_rejected(db_session):
                 "manual",
                 SupplierCatalogSyncOptions(),
             )
+
+
+@pytest.mark.asyncio
+async def test_sync_records_touched_product_keys_and_calls_after_catalog_sync(
+    db_session, test_user
+):
+    catalog = normalize_printful_catalog_products(
+        [
+            {
+                "id": "4752058849",
+                "sync_product_id": "100",
+                "sync_product_name": "Cool Tee",
+                "name": "Cool Tee / M",
+                "retail_price": "24.50",
+                "sku": "TEE-M",
+                "synced": True,
+                "size": "M",
+            }
+        ]
+    )
+    mock_addon = _mock_addon(catalog)
+
+    with patch("app.services.supplier_catalog_sync.get_supplier_addon", return_value=mock_addon):
+        result = await sync_supplier_catalog(
+            db_session,
+            "printful",
+            SupplierCatalogSyncOptions(import_status="draft"),
+            actor_user_id=test_user.id,
+        )
+
+    assert result.touched_product_keys == ["printful:product:100"]
+    mock_addon.after_catalog_sync.assert_awaited_once()
+    args = mock_addon.after_catalog_sync.await_args.args
+    assert args[1] is result
 
 

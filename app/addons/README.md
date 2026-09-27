@@ -342,7 +342,7 @@ Or call `persist_addon_config()` directly from your own code paths.
 | Order creation (tax & shipping) | `app/services/checkout_pricing.py` | Site Settings rules; optional `ToolAddon.quote_tax()`; optional `SupplierAddon.quote_shipping()` |
 | Checkout | `POST /api/v1/orders/{id}/checkout` | First enabled `PaymentAddon` |
 | Payment webhook | Addon route (e.g. Stripe) | Marks order `paid` |
-| Order status → paid/shipped/delivered | `app/services/notifications.py` | First enabled `NotificationAddon` |
+| Order placed + status → paid/shipped/delivered | `app/services/notifications.py` | Enabled `NotificationAddon` per channel |
 | Order tracking on shipped emails | `app/services/notifications.py` | Core `Order.tracking_*` fields (manual admin entry) |
 | Lifecycle marketing fan-out | `app/services/lifecycle_events.py` | `ToolAddon.on_lifecycle_event()` |
 | Commerce measurement (purchase) | `app/services/tool_discovery.py` | `ToolAddon.on_commerce_event()` |

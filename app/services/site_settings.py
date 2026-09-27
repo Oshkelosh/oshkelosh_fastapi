@@ -22,6 +22,13 @@ _SINGLETON_ID = 1
 _DEV_FALLBACK_BASE_URL = "http://localhost:8000"
 
 _VALID_SHIPPING_MODES = frozenset({"flat", "free", "free_over_threshold"})
+_VALID_COOKIE_CONSENT_MODES = frozenset({"off", "notice", "zaraz"})
+
+
+def normalize_cookie_consent_mode(value: Any) -> str:
+    """Return a valid cookie_consent_mode, or ``off`` when the value is unknown."""
+    mode = str(value).strip().lower() if value is not None else "off"
+    return mode if mode in _VALID_COOKIE_CONSENT_MODES else "off"
 
 
 def resolve_public_site_url(
@@ -111,6 +118,7 @@ async def update_site_settings(session: Any, data: dict) -> SiteSettings:
         "abandoned_cart_enabled",
         "abandoned_cart_delay_hours",
         "abandoned_cart_max_reminders",
+        "cookie_consent_mode",
         "gdpr_banner_enabled",
         "gdpr_banner_text",
         "privacy_policy_enabled",
@@ -167,6 +175,8 @@ async def update_site_settings(session: Any, data: dict) -> SiteSettings:
         elif key == "shipping_mode":
             mode = str(value).strip() if value is not None else "flat"
             setattr(row, key, mode if mode in _VALID_SHIPPING_MODES else "flat")
+        elif key == "cookie_consent_mode":
+            setattr(row, key, normalize_cookie_consent_mode(value))
         elif key in ("tax_rate_bps", "shipping_flat_cents", "shipping_free_threshold_cents"):
             if value in ("", None) and key == "shipping_free_threshold_cents":
                 setattr(row, key, None)
@@ -186,6 +196,14 @@ async def update_site_settings(session: Any, data: dict) -> SiteSettings:
             setattr(row, key, title or DEFAULT_ABOUT_PAGE_TITLE)
         else:
             setattr(row, key, value)
+
+    if "cookie_consent_mode" in data:
+        row.gdpr_banner_enabled = row.cookie_consent_mode == "notice"
+    elif "gdpr_banner_enabled" in data:
+        if row.gdpr_banner_enabled:
+            row.cookie_consent_mode = "notice"
+        elif getattr(row, "cookie_consent_mode", "off") != "zaraz":
+            row.cookie_consent_mode = "off"
 
     if hasattr(session, "mark_dirty"):
         session.mark_dirty(row)
@@ -218,7 +236,13 @@ def site_settings_to_dict(row: SiteSettings) -> dict:
         "abandoned_cart_enabled": row.abandoned_cart_enabled,
         "abandoned_cart_delay_hours": row.abandoned_cart_delay_hours,
         "abandoned_cart_max_reminders": row.abandoned_cart_max_reminders,
-        "gdpr_banner_enabled": row.gdpr_banner_enabled,
+        "cookie_consent_mode": normalize_cookie_consent_mode(
+            getattr(row, "cookie_consent_mode", "off")
+        ),
+        "gdpr_banner_enabled": normalize_cookie_consent_mode(
+            getattr(row, "cookie_consent_mode", "off")
+        )
+        == "notice",
         "gdpr_banner_text": row.gdpr_banner_text,
         "privacy_policy_enabled": row.privacy_policy_enabled,
         "privacy_policy_title": row.privacy_policy_title,

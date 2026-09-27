@@ -77,13 +77,22 @@ class SiteSettingsPublic(BaseModel):
         default=None,
         description="Subtotal in cents above which shipping is free (free_over_threshold mode).",
     )
+    cookie_consent_mode: str = Field(
+        default="off",
+        description=(
+            "Cookie consent: off (none), notice (dismissible host banner, no gating), "
+            "or zaraz (Cloudflare Zaraz CMP; requires the shop hostname to be proxied)."
+        ),
+    )
     gdpr_banner_enabled: bool = Field(
         default=False,
-        description="When true, storefront shows a dismissible cookie / GDPR notice.",
+        description="True when cookie_consent_mode is notice. Kept for older storefronts.",
     )
     gdpr_banner_text: str | None = Field(
         default=None,
-        description="Custom banner message; SPA uses a default when empty.",
+        description=(
+            "Notice copy for notice mode, and fallback copy when Zaraz does not load."
+        ),
     )
     privacy_policy_enabled: bool = Field(
         default=False,
@@ -206,7 +215,10 @@ class ToolsConfigPublic(BaseModel):
     )
     consent_categories: list[str] = Field(
         default_factory=lambda: ["necessary", "analytics", "marketing"],
-        description="Consent categories tools may register under (placeholder until consent tool ships).",
+        description=(
+            "Consent categories tools may register under. Host cookie consent is core "
+            "(site.cookie_consent_mode); Zaraz purposes are configured in Cloudflare."
+        ),
     )
 
 

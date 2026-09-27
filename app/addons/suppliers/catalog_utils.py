@@ -74,11 +74,34 @@ def variant_title_from_attributes(
     *,
     fallback: str = "",
 ) -> str:
-    """Build variant display title from attribute values."""
+    """Build variant display title from product/design name + attribute values.
+
+    When attributes are present, options are joined and prefixed with ``base_name``
+    so storefront titles are never options-only. Without attributes, use
+    ``fallback`` or ``base_name``.
+    """
+    base = (base_name or "").strip()
     if attributes:
         ordered = [attributes[k] for k in sorted(attributes.keys())]
-        return " / ".join(ordered)
-    return fallback or base_name
+        options = " / ".join(part for part in ordered if part)
+        if not options:
+            return (fallback or base).strip() or base
+        if not base:
+            return options
+        if base.lower() in options.lower():
+            return options
+        return f"{base} / {options}"
+    return (fallback or base).strip() or base
+
+
+def image_alts_aligned(urls: list[str], alt: str) -> list[str]:
+    """Return one alt string per image URL (empty when there are no URLs)."""
+    if not urls:
+        return []
+    label = (alt or "").strip()
+    if not label:
+        return []
+    return [label] * len(urls)
 
 
 def flat_catalog_item_to_product(item: SupplierCatalogItem) -> SupplierCatalogProduct:
@@ -87,6 +110,8 @@ def flat_catalog_item_to_product(item: SupplierCatalogItem) -> SupplierCatalogPr
     if item.image_url and item.image_url not in image_urls:
         image_urls.insert(0, item.image_url)
     alts = list(item.image_alt_texts) if item.image_alt_texts else []
+    if image_urls and not alts:
+        alts = image_alts_aligned(image_urls, item.name)
     variant = SupplierCatalogVariant(
         external_key=item.external_key,
         title=item.name,

@@ -14,6 +14,7 @@ Core business logic lives in `app/services/`. Routers and admin routes stay thin
 | [`checkout_pricing.py`](checkout_pricing.py) | Tax and shipping at order creation | Seam |
 | [`payment_checkout.py`](payment_checkout.py) | Start checkout via enabled `PaymentAddon` | Seam |
 | [`payment_webhooks.py`](payment_webhooks.py) | Idempotent webhook handling | Seam |
+| [`webhook_idempotency.py`](webhook_idempotency.py) | Claim `processed_webhook_events` rows | Utility |
 | [`payments.py`](payments.py) | `complete_order_payment` side effects | Utility |
 | [`fulfillment.py`](fulfillment.py) | Supplier order creation on `paid` | Seam |
 | [`order_idempotency.py`](order_idempotency.py) | Order-creation idempotency keys | Utility |
@@ -39,6 +40,7 @@ Core business logic lives in `app/services/`. Routers and admin routes stay thin
 | [`notification_templates.py`](notification_templates.py) | Load and render templates | Utility |
 | [`abandoned_cart.py`](abandoned_cart.py) | Stale-cart recovery job | Seam |
 | [`lifecycle_events.py`](lifecycle_events.py) | CRM/marketing tool fan-out | Seam |
+| [`outbound_webhooks.py`](outbound_webhooks.py) | HMAC-signed outbound event POST | Utility |
 
 ### Storefront and catalog
 
@@ -87,7 +89,7 @@ Mirrors [app/addons/README.md](../addons/README.md#how-core-commerce-uses-addons
 | Order creation (tax & shipping) | `checkout_pricing.py` | Site Settings rules; optional `ToolAddon.quote_tax()`; optional `SupplierAddon.quote_shipping()` |
 | Checkout | `POST /api/v1/orders/{id}/checkout` → `payment_checkout.py` | First enabled `PaymentAddon` |
 | Payment webhook | Addon route → `payment_webhooks.py` | Marks order `paid` |
-| Order status → paid/shipped/delivered | `notifications.py` | First enabled `NotificationAddon` |
+| Order placed + status → paid/shipped/delivered | `notifications.py` | Enabled `NotificationAddon` per channel |
 | Order tracking on shipped emails | `notifications.py` | Core `Order.tracking_*` fields (manual admin entry) |
 | Lifecycle marketing fan-out | `lifecycle_events.py` | `ToolAddon.on_lifecycle_event()` |
 | Commerce measurement (purchase) | `tool_discovery.py` | `ToolAddon.on_commerce_event()` |

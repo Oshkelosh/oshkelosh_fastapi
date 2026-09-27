@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any, Optional
 
 from sqlmodel import col, select
@@ -19,8 +20,8 @@ from app.config import settings
 from app.core.exceptions import ValidationError
 from models.addon_config import AddonConfig
 
-
 _frontend_addon_id: str | None = None
+logger = logging.getLogger(__name__)
 
 
 def invalidate_frontend_cache() -> None:
@@ -80,6 +81,33 @@ async def _disable_conflicting_notification_addons(
             row.is_enabled = False
             if hasattr(session, "mark_dirty"):
                 session.mark_dirty(row)
+
+
+async def enforce_notification_channel_exclusivity(session: Any) -> None:
+    """Keep one enabled notification addon per channel (startup repair)."""
+    claimed: dict[str, str] = {}
+    for addon in list(addon_registry.get_enabled("notification")):
+        channels = list(getattr(addon, "supported_channels", None) or ["email"])
+        conflict = [ch for ch in channels if ch in claimed]
+        if not conflict:
+            for ch in channels:
+                claimed[ch] = addon.addon_id
+            continue
+        addon.is_enabled = False
+        result = await session.execute(
+            select(AddonConfig).where(col(AddonConfig.addon_id) == addon.addon_id)
+        )
+        row = result.scalar_one_or_none()
+        if row:
+            row.is_enabled = False
+            if hasattr(session, "mark_dirty"):
+                session.mark_dirty(row)
+        logger.warning(
+            "Disabled notification addon '%s' at startup; channel %s already served by '%s'",
+            addon.addon_id,
+            conflict[0],
+            claimed[conflict[0]],
+        )
 
 
 def get_frontend_addon() -> FrontendAddon | None:

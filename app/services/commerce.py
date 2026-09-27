@@ -315,8 +315,10 @@ async def apply_order_status_change(
             logger.exception("Fulfillment failed for paid order %s", order.id)
 
     from app.services.notifications import notify_order_status_change
+    from app.services.outbound_webhooks import emit_order_status_webhook
 
     await notify_order_status_change(session, order, old_status, new_status)
+    await emit_order_status_webhook(session, order, old_status, new_status)
 
 
 async def cancel_order_as_admin(session: Any, order: Order) -> None:

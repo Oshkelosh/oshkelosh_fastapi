@@ -17,6 +17,7 @@ from models.addon_config import AddonConfig
 from models.site_settings import SiteSettings
 from models.audit_log import AuditLog
 from models.processed_webhook_event import ProcessedWebhookEvent
+from models.outbound_webhook_endpoint import OutboundWebhookEndpoint
 from models.manual_supplier import ManualSupplier
 from models.notification_template import NotificationTemplate
 from models.order_idempotency_key import OrderIdempotencyKey
@@ -36,6 +37,7 @@ __all__ = [
     "SiteSettings",
     "AuditLog",
     "ProcessedWebhookEvent",
+    "OutboundWebhookEndpoint",
     "ManualSupplier",
     "NotificationTemplate",
     "OrderIdempotencyKey",

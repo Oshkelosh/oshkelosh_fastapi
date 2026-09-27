@@ -84,3 +84,47 @@ class TestAbandonedCart:
         event = get_event("cart_abandoned")
         assert event is not None
         assert "cart_url" in event.placeholders
+
+    @pytest.mark.asyncio
+    async def test_failed_send_does_not_increment_reminder(
+        self, db_session, test_user, test_product, test_variant
+    ):
+        await update_site_settings(
+            db_session,
+            {
+                "abandoned_cart_enabled": True,
+                "abandoned_cart_delay_hours": 1,
+                "site_url": "https://shop.example.com",
+            },
+        )
+
+        cart = Cart(
+            user_id=test_user.id,
+            updated_at=datetime.now(timezone.utc) - timedelta(hours=2),
+        )
+        db_session.add(cart)
+        await db_session.flush()
+        db_session.add(
+            CartItem(
+                cart_id=cart.id,
+                product_id=test_product.id,
+                variant_id=test_variant.id,
+                quantity=1,
+            )
+        )
+        await db_session.flush()
+
+        mock_email = AsyncMock()
+        mock_email.send_email = AsyncMock(return_value={"success": False})
+
+        with patch(
+            "app.services.notification_dispatch.get_notification_addon_for_channel",
+            return_value=mock_email,
+        ):
+            result = await process_abandoned_carts(db_session)
+
+        assert result.sent == 0
+        assert result.skipped == 1
+        await db_session.refresh(cart)
+        assert cart.abandoned_reminder_count == 0
+        assert cart.abandoned_reminded_at is None
