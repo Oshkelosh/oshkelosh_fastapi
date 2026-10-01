@@ -837,66 +837,43 @@ async def resolve_meta_for_path(
     return None
 
 
-_BODY_OPEN_RE = re.compile(r"<body([^>]*)>", re.IGNORECASE)
-
-
 def _render_seo_intro(meta: SeoMeta) -> str:
-    """Visible H1 + lede for crawlers; SPA adopts ``#seo-intro`` like catalog nav."""
+    """Visible H1 + lede; SPA moves ``#seo-intro`` to the top of ``<main>``."""
     if not meta.h1 or meta.robots.startswith("noindex"):
         return ""
     parts = [
-        '<header id="seo-intro" class="seo-intro">',
+        '<div id="seo-intro" class="page-header">',
         f"<h1>{html.escape(meta.h1)}</h1>",
     ]
     if meta.intro_text:
         parts.append(f"<p>{html.escape(meta.intro_text)}</p>")
-    parts.append("</header>")
-    parts.append(
-        "<style>"
-        ".seo-intro{"
-        "width:min(100% - 2rem,1200px);"
-        "margin:2rem auto 0;"
-        "padding:0;"
-        "font:inherit;"
-        "color:inherit;"
-        "}"
-        ".seo-intro h1{margin:0 0 0.5rem;font-size:1.75rem}"
-        ".seo-intro p{margin:0;color:#64748b}"
-        "</style>"
-    )
+    parts.append("</div>")
     return "\n".join(parts)
 
 
-def _inject_after_body_open(page_html: str, snippet: str) -> str:
+def _append_before_body_close(page_html: str, snippet: str) -> str:
     if not snippet:
         return page_html
-    match = _BODY_OPEN_RE.search(page_html)
-    if match:
-        idx = match.end()
-        return f"{page_html[:idx]}\n{snippet}{page_html[idx:]}"
     if "</body>" in page_html:
         return page_html.replace("</body>", f"{snippet}\n</body>", 1)
-    return f"{snippet}\n{page_html}"
+    return f"{page_html}\n{snippet}"
 
 
 def inject_seo_into_html(page_html: str, meta: SeoMeta) -> str:
     """Insert SEO head tags, visible intro, and crawler catalog nav into the SPA shell."""
     tags = _render_head_tags(meta)
     updated = re.sub(r"<title>.*?</title>", "", page_html, count=1, flags=re.IGNORECASE | re.DOTALL)
-    if "</head>" in updated:
-        updated = updated.replace("</head>", f"{tags}\n</head>", 1)
-    else:
-        updated = f"{tags}\n{updated}"
+    updated = (
+        updated.replace("</head>", f"{tags}\n</head>", 1)
+        if "</head>" in updated
+        else f"{tags}\n{updated}"
+    )
 
-    updated = _inject_after_body_open(updated, _render_seo_intro(meta))
-
-    body_nav = _render_crawl_nav(meta)
-    if body_nav:
-        if "</body>" in updated:
-            updated = updated.replace("</body>", f"{body_nav}\n</body>", 1)
-        else:
-            updated = f"{updated}\n{body_nav}"
-    return updated
+    # Intro first, then catalog nav, both before </body> (SPA adopts each).
+    tail = "\n".join(
+        part for part in (_render_seo_intro(meta), _render_crawl_nav(meta)) if part
+    )
+    return _append_before_body_close(updated, tail)
 
 
 def _render_link_items(links: list[tuple[str, str]]) -> str:

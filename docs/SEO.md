@@ -23,7 +23,7 @@ Enabled tools may contribute storefront pages through `ToolAddon.resolve_seo_met
 
 ## Visible H1 + intro
 
-Indexed responses also inject a **visible** `<header id="seo-intro">` immediately after `<body>`: one `<h1>` and one intro `<p>` (escaped text, not the full product/article body). It is not `display:none`. The default SPA **adopts** that node into a slot between the site header and `<main>` (same `appendChild` pattern as catalog nav). On client-side navigation the node is from the first HTML document, so the layout removes it and pages render their own H1.
+Indexed responses inject a visible `<div id="seo-intro" class="page-header">` before `</body>`: one `<h1>` and one intro `<p>` (escaped text, not the full product/article body). It uses the storefront `.page-header` styles and is not `display:none`. The default SPA moves that node to the top of `<main>`, under the shop header. On client-side navigation the node is from the first HTML document, so the layout removes it and pages render their own H1.
 
 `#seo-intro` is H1 + lede only. Full article/product copy stays in the SPA.
 

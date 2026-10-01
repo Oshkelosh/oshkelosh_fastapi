@@ -161,10 +161,12 @@ async def test_product_page_html_injection(client, db_session, test_product: Pro
     assert '"Categories"' in body
     assert '"category": "Test Category"' in body
     assert 'id="seo-intro"' in body
+    assert 'class="page-header"' in body
     assert "<h1>Test Product</h1>" in body
     assert "<p>A test product for SEO</p>" in body
-    intro = body[body.index('id="seo-intro"') : body.index('id="seo-intro"') + 600]
+    intro = body.split('id="seo-intro"', 1)[1].split("</div>", 1)[0]
     assert "display:none" not in intro
+    assert body.index('id="seo-intro"') < body.index('id="seo-catalog-nav"') < body.index("</body>")
 
 
 @pytest.mark.asyncio
@@ -243,9 +245,14 @@ async def test_home_page_injects_crawl_catalog_nav(client, db_session, test_prod
     assert response.status_code == 200
     body = response.text
     assert 'id="seo-intro"' in body
+    assert 'class="page-header"' in body
     assert "<h1>Test Shop</h1>" in body
     assert "<p>Historical botanical canvas prints.</p>" in body
-    assert "display:none" not in body[body.index('id="seo-intro"') : body.index("</header>") + 10]
+    intro = body.split('id="seo-intro"', 1)[1].split("</div>", 1)[0]
+    assert "display:none" not in intro
+    body_open_end = body.find(">", body.lower().find("<body"))
+    assert body[body_open_end + 1 : body.index('id="seo-intro"')].strip() != ""
+    assert body.index('id="seo-intro"') < body.index("</body>")
     assert 'aria-label="Catalog"' in body
     assert 'href="https://shop.example.com/products"' in body
     assert 'href="https://shop.example.com/categories"' in body
@@ -539,7 +546,7 @@ def test_inject_seo_into_html_replaces_title_and_adds_meta():
     assert 'id="seo-intro"' not in result
 
 
-def test_inject_seo_into_html_adds_visible_intro_after_body():
+def test_inject_seo_into_html_adds_visible_intro_before_body_close():
     page = """<!DOCTYPE html>
 <html><head><title>Old</title></head><body><div id="app"></div></body></html>"""
     result = inject_seo_into_html(
@@ -550,11 +557,14 @@ def test_inject_seo_into_html_adds_visible_intro_after_body():
             intro_text='Prints & <script>alert("x")</script>',
         ),
     )
-    assert result.index("<body>") < result.index('id="seo-intro"') < result.index('id="app"')
+    assert result.index('id="app"') < result.index('id="seo-intro"') < result.index("</body>")
+    assert 'class="page-header"' in result
     assert "<h1>Shop</h1>" in result
-    assert "&amp;" in result or "&lt;script&gt;" in result
-    assert "<script>alert" not in result.split('id="seo-intro"')[1].split("</header>")[0]
-    assert "display:none" not in result.split('id="seo-intro"')[1].split("</header>")[0]
+    intro = result.split('id="seo-intro"', 1)[1].split("</div>", 1)[0]
+    assert "&lt;script&gt;" in intro
+    assert "<script>alert" not in intro
+    assert "display:none" not in intro
+    assert "<style>" not in intro
 
 
 def test_tool_dict_maps_title_aliases_and_intro():
