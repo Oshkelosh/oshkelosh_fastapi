@@ -5,14 +5,16 @@ from fastapi.responses import JSONResponse, Response
 
 from app.config import settings
 from app.db.connection import get_session
-from app.services.storefront_resolver import get_public_frontend_config, resolve_frontend_addon
+from app.services.bot_challenge import public_bot_challenge
 from app.services.push_discovery import build_push_service_worker_js, get_public_push_config
 from app.services.site_settings import get_site_settings, site_settings_to_public_dict
 from app.services.sso_discovery import get_public_sso_providers
+from app.services.storefront_resolver import get_public_frontend_config, resolve_frontend_addon
 from app.services.tool_discovery import list_storefront_nav_links, list_storefront_scripts
 from schemas.storefront import (
     ActiveFrontendInfo,
     AuthConfigPublic,
+    BotChallengePublic,
     NotificationsConfigPublic,
     PushConfigPublic,
     SiteSettingsPublic,
@@ -74,6 +76,8 @@ async def get_storefront_config(
     ]
     push_raw = get_public_push_config()
     push_config = PushConfigPublic.model_validate(push_raw) if push_raw else None
+    challenge_raw = public_bot_challenge()
+    challenge = BotChallengePublic.model_validate(challenge_raw) if challenge_raw else None
     return StorefrontConfigResponse(
         site=SiteSettingsPublic.model_validate(site_public),
         frontend=ActiveFrontendInfo(
@@ -84,6 +88,7 @@ async def get_storefront_config(
         ),
         auth=AuthConfigPublic(
             sso_providers=sso_providers,
+            challenge=challenge,
             email_verification_enabled=settings.require_email_verification,
         ),
         notifications=NotificationsConfigPublic(push=push_config),

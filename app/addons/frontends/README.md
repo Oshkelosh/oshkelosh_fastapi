@@ -100,6 +100,18 @@ Core Site Settings expose `cookie_consent_mode`: `off` | `notice` | `zaraz`. `gd
 
 Zaraz auto-injects at the Cloudflare edge. The host does not load `zaraz.js`. Tools pasted in **Tools → Scripts** are **not** gated by Zaraz; put analytics/pixels in the Zaraz dashboard when using this mode.
 
+### Bot challenge (`auth.challenge`)
+
+`auth.challenge` is `null` unless an installed tool addon is actively protecting anonymous auth. When it is an object:
+
+| Field | Use |
+|-------|-----|
+| `site_key` | Public widget key |
+| `script_url` | HTTPS script to load |
+| `actions` | `register`, `login`, and/or `forgot_password` |
+
+On each listed form, render the provider widget with `site_key` and send the resulting token on that `POST` as the `X-Bot-Challenge` header. The host rejects the request when the token is missing or fails. When `auth.challenge` is `null`, omit the header.
+
 ## CSS variables
 
 ### Base (from site settings)

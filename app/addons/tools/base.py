@@ -34,6 +34,27 @@ class ToolAddon(BaseAddon):
         """Return public auth provider metadata for storefront bootstrapping."""
         return []
 
+    def protects_challenge(self, action: str) -> bool:
+        """Whether this tool must verify a bot-challenge token for ``action``."""
+        return False
+
+    def challenge_public_config(self) -> dict[str, Any] | None:
+        """Public widget config (site key, script URL, storefront actions). No secrets."""
+        return None
+
+    def admin_challenge_widget_html(self) -> str:
+        """HTML snippet for the admin login form, or an empty string."""
+        return ""
+
+    async def verify_bot_challenge(
+        self,
+        token: str | None,
+        remote_ip: str | None,
+        action: str,
+    ) -> None:
+        """Raise ``ValidationError`` when ``token`` does not pass for ``action``."""
+        return None
+
     def supports_tax_quotes(self) -> bool:
         """Whether this tool provides third-party tax calculation at checkout."""
         return False

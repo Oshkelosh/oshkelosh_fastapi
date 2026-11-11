@@ -117,7 +117,8 @@ oshkelosh/
 ### 1. Clone and install
 
 ```bash
-cd ~/programming/oshkelosh/oshkelosh_fastapi
+git clone https://github.com/Oshkelosh/oshkelosh_fastapi.git
+cd oshkelosh_fastapi
 python -m venv .venv
 source .venv/bin/activate
 pip install -e ".[dev]"   # runtime + dev deps from pyproject.toml

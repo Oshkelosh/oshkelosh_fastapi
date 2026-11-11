@@ -164,12 +164,31 @@ class SsoProviderPublic(BaseModel):
     )
 
 
+class BotChallengePublic(BaseModel):
+    """Public bot-challenge widget config. Present only when a challenge tool is active."""
+
+    site_key: str = Field(description="Widget site key. Safe to expose to the browser.")
+    script_url: str = Field(description="HTTPS URL of the challenge provider script.")
+    actions: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Storefront auth actions that require a token: "
+            "register, login, forgot_password. Send the token as the "
+            "X-Bot-Challenge header."
+        ),
+    )
+
+
 class AuthConfigPublic(BaseModel):
     """Authentication options for the storefront."""
 
     sso_providers: list[SsoProviderPublic] = Field(
         default_factory=list,
         description="Enabled social sign-in providers (empty when SSO addon is off).",
+    )
+    challenge: BotChallengePublic | None = Field(
+        default=None,
+        description="Bot-challenge widget config, or null when no challenge tool is active.",
     )
     email_verification_enabled: bool = Field(
         default=True,

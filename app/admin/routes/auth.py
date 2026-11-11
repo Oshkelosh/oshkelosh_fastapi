@@ -2,7 +2,6 @@ from fastapi import APIRouter
 import secrets
 
 from app.admin import limits as L
-from app.admin.session import cookie_secure
 from app.admin.routes._deps import (
     Depends,
     Form,
@@ -23,6 +22,9 @@ from app.admin.routes._deps import (
     settings,
     verify_password_async,
 )
+from app.admin.session import cookie_secure
+from app.core.exceptions import ValidationError
+from app.services.bot_challenge import admin_challenge_widget_html, enforce_bot_challenge
 
 router = APIRouter()
 _LOGIN_CSRF_COOKIE = "_oshkelosh_admin_login_csrf"
@@ -45,6 +47,7 @@ def _render_login(request: Request, *, error: str = "", csrf_token: str | None =
             **ctx,
             redirect_to=f"{settings.admin_prefix}/dashboard",
             error=error,
+            challenge_widget_html=admin_challenge_widget_html(),
         )
     )
     if csrf_token is None:
@@ -82,12 +85,21 @@ async def admin_login_submit(
     email: str = Form(..., max_length=L.EMAIL_LEN),
     password: str = Form(..., max_length=L.PASSWORD_LEN),
     csrf_token: str = Form("", max_length=128),
+    bot_challenge: str = Form("", max_length=4096),
     session=Depends(get_session),
 ):
     """Authenticate the admin and create a session cookie."""
     from models.user import User
 
     _verify_login_csrf(request, csrf_token)
+    try:
+        await enforce_bot_challenge(request, "admin_login", token=bot_challenge)
+    except ValidationError as exc:
+        return _render_login(
+            request,
+            error=exc.message,
+            csrf_token=request.cookies.get(_LOGIN_CSRF_COOKIE),
+        )
 
     result = await session.execute(select(User).where(User.email == email))
     user = result.scalar_one_or_none()

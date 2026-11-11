@@ -356,6 +356,7 @@ Or call `persist_addon_config()` directly from your own code paths.
 | Catalog sync | `app/services/supplier_catalog_sync.py` | `SupplierAddon.fetch_catalog_for_import()` → `SupplierCatalogProduct[]` |
 | Storefront SSO metadata | `app/services/sso_discovery.py` | `ToolAddon.list_public_providers()` |
 | Third-party tax at checkout | `app/services/tax_discovery.py` | `ToolAddon.quote_tax()` (falls back to Site Settings) |
+| Anonymous auth bot challenge | `app/services/bot_challenge.py` | First enabled `ToolAddon` with `protects_challenge()`; `verify_bot_challenge()` on register, login, forgot-password, and admin login |
 
 You do **not** need to patch core routers if you hook through these flows or expose provider-specific routes.
 

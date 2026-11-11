@@ -47,6 +47,12 @@
                     required
                 />
             </div>
+            {% if challenge_widget_html %}
+            <div class="form-group">
+                {{ challenge_widget_html | safe }}
+            </div>
+            {% endif %}
+            <input type="hidden" name="bot_challenge" value="" />
             <input type="hidden" name="redirect_to" value="{{ admin_prefix }}/dashboard" />
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}" />
             <button type="submit" class="btn btn--primary btn--block">Sign in</button>

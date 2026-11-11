@@ -17,6 +17,13 @@ from app.core.security import (
     verify_password_async,
 )
 from app.db.connection import get_session, mark_instance_dirty
+from app.services.bot_challenge import enforce_bot_challenge
+from app.services.user_accounts import (
+    reset_password_with_token,
+    send_password_reset_email,
+    send_verification_email,
+    verify_email_with_token,
+)
 from models.user import User
 from schemas.base import MessageResponse
 from schemas.user import (
@@ -29,12 +36,6 @@ from schemas.user import (
     UserProfileUpdate,
     UserRead,
     UserRegister,
-)
-from app.services.user_accounts import (
-    reset_password_with_token,
-    send_password_reset_email,
-    send_verification_email,
-    verify_email_with_token,
 )
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -107,6 +108,7 @@ async def register(
     session=Depends(get_session),
 ) -> RegisterResponse:
     """Register a new user account and return tokens."""
+    await enforce_bot_challenge(request, "register")
     email = str(body.email).strip().lower()
     existing = await session.execute(
         select(User).where(col(User.email) == email)
@@ -175,6 +177,7 @@ async def login(
     session=Depends(get_session),
 ) -> dict:
     """Authenticate a user and return JWT tokens."""
+    await enforce_bot_challenge(request, "login")
     result = await session.execute(
         select(User).where(col(User.email) == body.email)
     )
@@ -330,6 +333,7 @@ async def forgot_password(
     body: ForgotPasswordRequest,
     session=Depends(get_session),
 ) -> MessageResponse:
+    await enforce_bot_challenge(request, "forgot_password")
     result = await session.execute(
         select(User).where(col(User.email) == body.email)
     )

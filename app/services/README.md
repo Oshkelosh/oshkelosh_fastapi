@@ -56,6 +56,7 @@ Core business logic lives in `app/services/`. Routers and admin routes stay thin
 | [`tool_discovery.py`](tool_discovery.py) | Storefront scripts, commerce events | Seam |
 | [`tax_discovery.py`](tax_discovery.py) | Third-party tax tool resolution | Seam |
 | [`sso_discovery.py`](sso_discovery.py) | Public SSO provider metadata | Seam |
+| [`bot_challenge.py`](bot_challenge.py) | Optional bot-challenge token check | Seam |
 | [`push_discovery.py`](push_discovery.py) | Public push subscription config | Seam |
 | [`sso_accounts.py`](sso_accounts.py) | OAuth identity linking | Utility |
 
@@ -102,6 +103,7 @@ Mirrors [app/addons/README.md](../addons/README.md#how-core-commerce-uses-addons
 | Variant supplier linkage | `product_variants.py`, `suppliers.py` | `supplier_assignment_from_variant()`; addon hooks |
 | Catalog sync | `supplier_catalog_sync.py` | `SupplierAddon.fetch_catalog_for_import()` |
 | Storefront SSO metadata | `sso_discovery.py` | `ToolAddon.list_public_providers()` |
+| Anonymous auth bot challenge | `bot_challenge.py` | First `ToolAddon.protects_challenge()` / `verify_bot_challenge()` |
 | Third-party tax at checkout | `tax_discovery.py` | `ToolAddon.quote_tax()` (falls back to Site Settings) |
 
 ## Related docs
