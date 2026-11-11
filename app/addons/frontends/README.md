@@ -86,7 +86,7 @@ const cfg = frontend.config;
 document.body.classList.add(`layout-${cfg.layout ?? "grid"}`);
 ```
 
-Reference implementation: [`default/dist/assets/app.js`](default/dist/assets/app.js).
+Reference implementation: [default_frontend](https://github.com/Oshkelosh/default_frontend) — config bootstrap in `source/src/lib/api/storefront.ts` and `source/src/routes/+layout.svelte` (clone into `app/addons/frontends/default` for local dev).
 
 ### Cookie consent (`site.cookie_consent_mode`)
 
@@ -246,4 +246,4 @@ Browse Swagger at `/docs` when `DEBUG=true`.
 
 ## Reference addon
 
-See [`default/README.md`](default/README.md) — SvelteKit storefront with catalog, auth, cart, checkout, orders, and SSO callback. Includes full bootstrap example and admin layout options.
+See [default_frontend](https://github.com/Oshkelosh/default_frontend) — SvelteKit storefront with catalog, auth, cart, checkout, orders, and SSO callback. Package README and bootstrap examples live in that repo (not in the host tree).
