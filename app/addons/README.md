@@ -459,7 +459,7 @@ Each addon package includes its own `README.md` with provider-specific config, r
 
 | ID | Category | Package | Docs |
 |----|----------|---------|------|
-| `default` | frontend | `frontends/default/` | [README](frontends/default/README.md) |
+| `default` | frontend | `frontends/default/` | [default_frontend](https://github.com/Oshkelosh/default_frontend) (separate repo; README when installed) |
 | `postmark`, `smtp`, `resend`, `sendgrid`, `mailgun`, `ses` | notification | `notifications/<id>/` | `<id>/README.md` when installed |
 | `twilio`, `vonage`, `messagebird` | notification | `notifications/<id>/` | `<id>/README.md` when installed |
 | `fcm`, `onesignal`, `pusher_beams` | notification | `notifications/<id>/` | `<id>/README.md` when installed |
